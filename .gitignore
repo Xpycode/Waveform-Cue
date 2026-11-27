@@ -1,0 +1,9 @@
+.DS_Store
+04_Exports/
+xcuserdata/
+*.xcuserstate
+.build/
+.swiftpm/
+DerivedData/
+*.sync-conflict-*
+.claude/settings.local.json

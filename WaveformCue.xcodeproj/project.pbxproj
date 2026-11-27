@@ -1,0 +1,374 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0E16F3289A4E1221712EAB60 /* AudioTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDF56F1EB5AAA34DD2D14F6 /* AudioTrack.swift */; };
+		11B067079930671BC6612814 /* PreparedAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD4FA59AB328AFD3F16A328B /* PreparedAudio.swift */; };
+		34272279A1CB88514D5960AF /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F59E9DE791B4F659455F4C21 /* MonitorView.swift */; };
+		84E91D974D057CE2E22F31E7 /* CueAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E44042E0728B516DC06B13 /* CueAppearance.swift */; };
+		913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */ = {isa = PBXBuildFile; fileRef = DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */; };
+		A26818F8855135B636B108FD /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2D62F5F702C22D9FA0AC16 /* main.swift */; };
+		A9B717438D137F5B68D55548 /* CueAppearanceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5D7FB0144B6BB7AE1C5A867 /* CueAppearanceSidebar.swift */; };
+		C9EE99D7D5CF4FA32DE6D7DA /* MXFExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7439B2597A5C3BFCB2766FE2 /* MXFExport.swift */; };
+		F0E0B0519D035E6FAEC25919 /* CuePicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E71A9EB3A3D5D9736D442B0 /* CuePicture.swift */; };
+		F237F25431FF90D82959D575 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DA05A1555994F8F0D43E59 /* AppController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		2BDF56F1EB5AAA34DD2D14F6 /* AudioTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrack.swift; sourceTree = "<group>"; };
+		44DA05A1555994F8F0D43E59 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
+		5E2D62F5F702C22D9FA0AC16 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		7439B2597A5C3BFCB2766FE2 /* MXFExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MXFExport.swift; sourceTree = "<group>"; };
+		7E71A9EB3A3D5D9736D442B0 /* CuePicture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CuePicture.swift; sourceTree = "<group>"; };
+		88E44042E0728B516DC06B13 /* CueAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearance.swift; sourceTree = "<group>"; };
+		B5D7FB0144B6BB7AE1C5A867 /* CueAppearanceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearanceSidebar.swift; sourceTree = "<group>"; };
+		DD4FA59AB328AFD3F16A328B /* PreparedAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparedAudio.swift; sourceTree = "<group>"; };
+		DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = WaveformCue.icns; sourceTree = "<group>"; };
+		F19F0C4416F740B942425864 /* WaveformCue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WaveformCue.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F59E9DE791B4F659455F4C21 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		60D5AB550A55F0DE23FACC13 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B2C53258EF17F58F999F26E1 = {
+			isa = PBXGroup;
+			children = (
+				60D5AB550A55F0DE23FACC13 /* Resources */,
+				FC52918E1B150EE1774BDA82 /* Sources */,
+				FA30E6898F74CF5B3B69E9DA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FA30E6898F74CF5B3B69E9DA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F19F0C4416F740B942425864 /* WaveformCue.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FC52918E1B150EE1774BDA82 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				44DA05A1555994F8F0D43E59 /* AppController.swift */,
+				2BDF56F1EB5AAA34DD2D14F6 /* AudioTrack.swift */,
+				88E44042E0728B516DC06B13 /* CueAppearance.swift */,
+				B5D7FB0144B6BB7AE1C5A867 /* CueAppearanceSidebar.swift */,
+				7E71A9EB3A3D5D9736D442B0 /* CuePicture.swift */,
+				5E2D62F5F702C22D9FA0AC16 /* main.swift */,
+				F59E9DE791B4F659455F4C21 /* MonitorView.swift */,
+				7439B2597A5C3BFCB2766FE2 /* MXFExport.swift */,
+				DD4FA59AB328AFD3F16A328B /* PreparedAudio.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AF449662FB9773AF00D7977A /* WaveformCue */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5B09E77FE782DC6E01224914 /* Build configuration list for PBXNativeTarget "WaveformCue" */;
+			buildPhases = (
+				0F3BA22D65780061BD66EE89 /* Sources */,
+				FAE49184556D8E6676F88E93 /* Resources */,
+				F0941086719114F76094157D /* Bundle FFmpeg */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WaveformCue;
+			packageProductDependencies = (
+			);
+			productName = WaveformCue;
+			productReference = F19F0C4416F740B942425864 /* WaveformCue.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C8DF28029DEFE8794EC3A212 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					AF449662FB9773AF00D7977A = {
+						DevelopmentTeam = FDMSRXXN73;
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 5F2EEE5CB51607117EF256C2 /* Build configuration list for PBXProject "WaveformCue" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B2C53258EF17F58F999F26E1;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FA30E6898F74CF5B3B69E9DA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AF449662FB9773AF00D7977A /* WaveformCue */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FAE49184556D8E6676F88E93 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F0941086719114F76094157D /* Bundle FFmpeg */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle FFmpeg";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Scripts/bundle-ffmpeg.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0F3BA22D65780061BD66EE89 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F237F25431FF90D82959D575 /* AppController.swift in Sources */,
+				0E16F3289A4E1221712EAB60 /* AudioTrack.swift in Sources */,
+				84E91D974D057CE2E22F31E7 /* CueAppearance.swift in Sources */,
+				A9B717438D137F5B68D55548 /* CueAppearanceSidebar.swift in Sources */,
+				F0E0B0519D035E6FAEC25919 /* CuePicture.swift in Sources */,
+				C9EE99D7D5CF4FA32DE6D7DA /* MXFExport.swift in Sources */,
+				34272279A1CB88514D5960AF /* MonitorView.swift in Sources */,
+				11B067079930671BC6612814 /* PreparedAudio.swift in Sources */,
+				A26818F8855135B636B108FD /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		14A75E56B77216B92DFC7FA6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 10;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = FDMSRXXN73;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		18699F3CC9945DD4B8EBBC0E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 10;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = FDMSRXXN73;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		35E766170A09C2BD16B193BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lucesumbrarum.WaveformCue;
+				PRODUCT_NAME = "Waveform Cue";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		DA784FC8357D1065C5FD196D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lucesumbrarum.WaveformCue;
+				PRODUCT_NAME = "Waveform Cue";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5B09E77FE782DC6E01224914 /* Build configuration list for PBXNativeTarget "WaveformCue" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				35E766170A09C2BD16B193BB /* Debug */,
+				DA784FC8357D1065C5FD196D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5F2EEE5CB51607117EF256C2 /* Build configuration list for PBXProject "WaveformCue" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14A75E56B77216B92DFC7FA6 /* Debug */,
+				18699F3CC9945DD4B8EBBC0E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C8DF28029DEFE8794EC3A212 /* Project object */;
+}
