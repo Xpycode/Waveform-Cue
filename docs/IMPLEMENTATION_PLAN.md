@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 21/26; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 26/26; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27). Spec A3 (flat toolbar) not met on the macOS 27 SDK; see TASKS backlog.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -327,37 +327,42 @@ Dependency graph (no cycles):
 
 ### Wave 6 (verification and handoff)
 
-- [ ] **6.0**: Directions folder structure (operator request, 2026-11-27)
+- [x] **6.0**: Directions folder structure (operator request, 2026-11-27)
   - Depends on: 5.1, 5.2; runs before 6.1–6.4 so their evidence is on the final layout
   - Owns: the move itself, `project.yml`/`Package.swift` path checks, `CLAUDE.md`, `README.md`, `decisions.md`
   - Detail: Xcode project, `project.yml`, `Info.plist`, `Sources`, `Resources`, `Scripts`, `Packages/CueCore` → `01_Project/`; state, plan, tasks, decisions, sessions, specs → `docs/`. The original relative house-package paths already resolve correctly from the new depth.
   - Success: `xcodegen generate` changes nothing but the move; Debug build succeeds; the full suite with FFmpeg passes with the same count as before (239 tests, 3 opt-in skips).
   - Backpressure: `xcodebuild … build`, `FFMPEG_EXECUTABLE=… swift test --package-path 01_Project/Packages/CueCore`
+  - Evidence (2026-11-27, M1 Max): coordinator, serial (every later task runs on the new layout). Commit `0d49cd0`. `xcodegen generate` changed only `LastUpgradeCheck`, which was restored; Debug build succeeded. The suite then failed 46 assertions in 4 render-baseline tests: the hashes are pinned per OS and this Mac runs macOS 27.2. The task 0.2 code (`4e41e75`) gives the same 20 hashes here as the current code, so a macOS 27 table was added (`6a3c046`). After that the suite passed (see 6.1).
 
 
-- [ ] **6.1**: Full integration run and performance record
+- [x] **6.1**: Full integration run and performance record
   - Depends on: 5.1, 5.2, 6.0
   - Owns: evidence in the Execution Log; `PerformanceTests.swift`
   - Success: the whole suite passes with FFmpeg present (no skipped integration tests); a 3-minute AVC-I 100 1080p25 and 1080i50 export each finish in under 3 minutes, times recorded; the 50-job CAF cap test passes.
   - Backpressure: `FFMPEG_EXECUTABLE=… CUE_BENCH=1 swift test --package-path 01_Project/Packages/CueCore` with zero failures and zero skips
+  - Evidence (2026-11-28, M1 Max, debug): coordinator, serial (the full suite and benchmarks need the machine to themselves). New `PerformanceTests` (`caec91a`); the 30 s export benchmark also runs under `CUE_BENCH=1`. Final run after the 6.3 fixes, with `CUE_BENCH=1` and `CUE_SLATE_PNG`: 244 tests, 0 failures, 0 skips. 3-minute exports: 1080p25 33.9 s, 1080i50 52.3 s (limit 180 s). Render 157.5 frames/s; 30 s clips 1080i50 3.4×, 1080p25 5.2× real time. 50-job CAF cap test passed.
 
-- [ ] **6.2**: Acceptance pass in the Atlas helper
+- [x] **6.2**: Acceptance pass in the Atlas helper
   - Depends on: 5.1
   - Owns: screenshots and notes linked from the Execution Log
   - Success: every spec criterion in A–F, the edge cases and the error states is marked verified, not verified, or externally gated, each with a screenshot or a decoded-file measurement. Fixtures are copied into the helper; no live project or operator file is used.
   - Backpressure: the criterion checklist in the session log, with no unexplained gaps
+  - Evidence (2026-11-28): coordinator (Atlas helper is single-owner), Debug build of `aaa9411`. Checklist: [sessions/2026-11-28-acceptance.md](sessions/2026-11-28-acceptance.md). 31 criteria verified this pass, the rest by tests or a named earlier pass. A3 not met on the macOS 27 SDK, F7 not checked on screen, C3/C7/F1 partly gated on X1/X2. Three new inbox observations. Helper cleaned up (copies rolled back, exports and app data deleted).
 
-- [ ] **6.3**: Review
+- [x] **6.3**: Review
   - Depends on: 5.1
   - Owns: review report; findings return to the owning task
   - Success: `/shell-check` reports no violations; a code review of the diff since 0.1 has its confirmed findings fixed and the affected tests re-run.
   - Backpressure: shell-check output and the re-run test results
+  - Evidence (2026-11-28): `/shell-check` 10/10 (note: the macOS 27 SDK ignores `UIDesignRequiresCompatibility`). Two fresh read-only reviewers (core package, app layer) diffed against `b51eee8`: 6 + 10 findings. Two fresh fix agents with disjoint files confirmed and fixed 13 (core `e5e08e2`: stale analysis, unknown free space, music end before In, huge stored values, stale CAF folders, plus the coordinator's `willStartJob` hook; app `aaa9411`: edits committed before export and when the queue reaches the job, playback and colour panel stop on lock, folder refusal, menu state, honest status, Space for focused controls, aliases, launch sweep). Deferred: loudness of the trimmed clip (inbox), monitor drops and hidden temporaries after a crash (backlog). Re-run: 244 tests, 0 failures; Debug build clean apart from the existing `@preconcurrency` warning.
 
-- [ ] **6.4**: Build 11 handoff and documentation
+- [x] **6.4**: Build 11 handoff and documentation
   - Depends on: 6.1, 6.2, 6.3
   - Owns: `README.md`, `decisions.md`, `PROJECT_STATE.md`, `TASKS.md`, `04_Exports/0.1-11/`
   - Success: Release build in `04_Exports/0.1-11` with digest and signature check per `reference/log/app-handoff.md`; README describes the queue, presets, markers, loudness, trim, pre-roll and safe zones; test files for X2 are prepared for the operator.
   - Backpressure: `xcodebuild -configuration Release … build`, `codesign --verify --deep --strict`
+  - Evidence (2026-11-28 00:03 CET, M1 Max): Release build of `aaa9411` (log `04_Exports/0.1-11/build.log`), copied to `04_Exports/0.1-11/Waveform Cue.app`, version 0.1 (11), ad hoc signature, `codesign --verify --deep --strict` valid. Executable SHA-256 `747f96ae600f129a760853ec757ea1bab99da564c5035c2e541c3c5ed60977aa`, bundled ffmpeg `3a194bd5…107a`. Launched on the desktop under the standing handoff; running executable verified as that bundle (pid 25335). README rewritten for the queue round. X2 samples: eight files in `04_Exports/0.1-11/X2 EVS samples/` with a README, written by the new opt-in `EVSSampleExportTests` (`CUE_X2_DIR`), formats checked with FFmpeg. Built with the macOS 27.2 SDK, so the toolbar shows system capsules (A3).
 
 ## External checks
 
@@ -425,6 +430,11 @@ Dependency graph (no cycles):
 | 4.2, 4.3 | Worktree agents (4.2 after 3.2; 4.3 after 3.1) | 227 tests; Atlas pass for 4.2 (safe zones, guides, too-little-room disables export, Music end) | worktree merges, "Record task 4.3" (`366d513`) | 4.1 running at session close |
 | 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3); coordinator merged and ran the Atlas pass | 229 tests with FFmpeg; `xcodebuild build` clean; Atlas pass (see task evidence); stale-field bug found and fixed | `84ac328`, `ef78828` | Next: 5.1 |
 | 5.1, 5.2 | Parallel worktree agents; `EditorModel.swift` split by function (5.2: `exportSelected`, `exportSelectedToFolder`, `canExportSelected`; 5.1: the rest and `QueueManager.blockingReason`) | 5.2: 234 tests, Atlas pass; 5.1 after merge: 239 tests, build clean, Atlas pass | `70d8afc`, `98c9923` | Next: Wave 6 |
+| 6.0 | Coordinator, serial (operator request; layout for every later task) | Debug build ok; render baselines re-pinned for macOS 27 | `0d49cd0`, `6a3c046` | Next: 6.1 and 6.3 together |
+| 6.1 | Coordinator, serial (benchmarks need the machine alone) | 244 tests, 0 failures, 0 skips; 3-minute exports 33.9 s / 52.3 s | `caec91a` | — |
+| 6.3 | Two fresh read-only reviewers in parallel, then two fresh fix agents in the main checkout with disjoint files (core / app); coordinator added the `willStartJob` hook first and the launch sweep after | shell-check 10/10; 13 findings fixed; 244 tests; build clean | `e5e08e2`, `aaa9411` | Next: 6.2 on the fixed build |
+| 6.2 | Coordinator in the Atlas helper (single owner) | [checklist](sessions/2026-11-28-acceptance.md) | none (evidence only) | A3 not met on SDK 27 |
+| 6.4 | Coordinator | Release 0.1 (11) verified and launched; README; X2 samples | this session's docs commit | Plan open on X1–X4; next: operator runs X2 on EVS |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
