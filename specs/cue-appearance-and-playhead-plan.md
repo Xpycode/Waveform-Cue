@@ -3,8 +3,8 @@
 > Execute with the shared `commands/execute.md` procedure when this plan is selected explicitly.
 > Task state and evidence are authoritative here. [TASKS.md](../TASKS.md) links here and holds backlog and inbox.
 
-**Progress:** 7/9. E1 and E2 remain open. D1, U2 and helper readiness passed 2026-11-27.
-**Status:** Wave 3 is complete on `feature/cue-appearance-playhead`. Wave 4 task 4.1 is ready.
+**Progress:** 8/9. E1 and E2 remain open. D1, U2 and helper readiness passed 2026-11-27.
+**Status:** Wave 4 is complete on `feature/cue-appearance-playhead`. Wave 5 task 5.1 is ready for five-song acceptance and the build 12 Release candidate.
 **Task states:** unchecked = pending, implemented-unverified or blocked (name the gate); checked = complete with the required evidence.
 
 ## Goal
@@ -19,11 +19,11 @@ Build 11 keeps its own [acceptance and handoff plan](../IMPLEMENTATION_PLAN.md) 
 
 - [ ] Batch appearance: 1.1, 2.1 (copy scope), 5.1
 - [ ] Defaults and overrides: 1.1 (Save as Default), 2.1 (differences and reset), 4.1 (markers and Reset controls), 5.1
-- [ ] Fonts and visibility: 1.3, 2.1, 3.1, 4.1
-- [ ] Feature switches: 2.1, 3.2, 4.1
+- [x] Fonts and visibility: 1.3, 2.1, 3.1, 4.1
+- [x] Feature switches: 2.1, 3.2, 4.1
 - [x] Centred close-up: 1.2, 2.1 (edge-held stays the default), 3.1
 - [x] Zoom near end: 1.2, 3.1
-- [ ] Close-up shading (added 2026-11-27 at the operator's request): 2.1, 3.1, 4.1; upcoming brighter by default (D1)
+- [x] Close-up shading (added 2026-11-27 at the operator's request): 2.1, 3.1, 4.1; upcoming brighter by default (D1)
 - [ ] EVS layout: 2.2; clearance on the real output is external check E1
 - [x] Compatibility: 2.1 (older settings and a build 11 queue), 3.1 (reference frames), 2.2 (the intentional safe-zone change)
 
@@ -79,7 +79,7 @@ U2 is approved, so no task waits on it. A control that turns out not to fit as t
 
 ## Execution schedule and ownership
 
-- **Scope and limits.** The operator selected Waves 1, 2 and 3 in separate requests on 2026-11-27. Work on branch `feature/cue-appearance-playhead` until build 11's task 6.4 is closed, because 6.4 builds Release from the checkout. The coordinator sets `CURRENT_PROJECT_VERSION: "12"` in `project.yml` before 5.1; the Release build goes to `04_Exports/0.1-12-rc`. Pushes and app control keep their own authorization.
+- **Scope and limits.** The operator selected Waves 1 through 4 in separate requests on 2026-11-27. Work on branch `feature/cue-appearance-playhead` until build 11's task 6.4 is closed, because 6.4 builds Release from the checkout. The coordinator sets `CURRENT_PROJECT_VERSION: "12"` in `project.yml` before 5.1; the Release build goes to `04_Exports/0.1-12-rc`. Pushes and app control keep their own authorization.
 - **Coordinator-owned:** `project.yml`, `WaveformCue.xcodeproj` (run `xcodegen generate` after any wave that adds app-target files), `Packages/CueCore/Package.swift`, `Core/CueTypes.swift`, Git, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, reference-hash re-recording, and the Atlas helper (one session at a time).
 - **Tests** means `swift test --package-path Packages/CueCore --scratch-path <the worker's own scratch folder> --filter '<SuiteA|SuiteB>'`. FFmpeg suites add `FFMPEG_EXECUTABLE=/Applications/Magpie.app/Contents/Resources/ffmpeg` in front; without it they pass by skipping. A new scratch folder fetches `swift-subprocess` once from the network.
 - **Build** means `xcodegen generate && xcodebuild -project WaveformCue.xcodeproj -scheme WaveformCue -configuration Debug -derivedDataPath <folder outside the project> build`. The coordinator runs it after merging each wave, including Wave 2, whose public types the app compiles against. A worktree worker may run it for itself but does not commit `project.pbxproj`. `build` launches nothing.
@@ -167,7 +167,7 @@ Dependency graph (no cycles):
 
 ### Wave 4 (single task: it edits the inspector files 1.1 and 3.2 changed)
 
-- [ ] **4.1**: Inspector controls, override markers and Reset
+- [x] **4.1**: Inspector controls, override markers and Reset
   - Depends on / external gates: 1.1, 1.3, 3.1, 3.2 (U2 approved); Atlas helper for the on-screen pass
   - Owns: `App/Views/AppKit/CueAppearanceSidebar.swift`, `App/Views/AppKit/AppearanceSidebarRepresentable.swift`, `App/Views/AppKit/InspectorControls.swift` (only if a wrapper is missing), `App/Views/InspectorPane.swift`, `App/Views/JobInspector.swift`, `App/EditorModel.swift`
   - Detail: add the controls exactly as approved in U2. Push appearance into a live sidebar after Reset, Reset All and Save as Default. Disable Normalise while loudness analysis is off and suppress its gain prediction and waiting-for-measurement message. Disable end-zoom choices that are not narrower than the current zoom.
@@ -239,6 +239,7 @@ Added at the operator's request: reversed close-up shading.
 | 2.1 | One settings worker, independent migration reviewer, coordinator integration | 97 tests passed in the five required suites. Eight synthetic jobs written by the previous encoder retained every original field after a save and reload with both versions. Arm64 Debug build and signature verification passed. [Validation and commands](../sessions/2026-11-27.md#appearance-and-playhead-wave-2) | Local commit “Preserve saved cue appearances and expose per-job feature settings” | 3.1 and 3.2 ready |
 | 3.1 | Renderer worker, independent review, coordinator’s decoded-field test and Atlas check | All 20 legacy hashes matched. For the new factory shading, 15 hashes changed across default, custom title and warning at frames 0, 375, 625, 725 and 750. The five Zoom Off hashes matched. Ten new fixtures cover visibility, shading and window modes. Both real AVC-Intra MXFs matched the expected marker position on all 12 sampled fields. [Centered start](../sessions/evidence/appearance-wave3/centered-start.png) · [Centered end](../sessions/evidence/appearance-wave3/centered-end.png) · [Edge-held start](../sessions/evidence/appearance-wave3/edge-start.png) · [Edge-held end](../sessions/evidence/appearance-wave3/edge-end.png) | `d0ba334` | 4.1 |
 | 3.2 | Feature-switch worker, independent cancellation review, coordinator’s app export | The monitor, validation and exporter consume effective values. With stored trim, fades, pre-roll and normalisation all disabled, the first MXF audio track from Export Selected matched the entire original signal sample for sample. [Validation and handoff](../sessions/2026-11-27.md#appearance-and-playhead-wave-3) | `182b207` | 4.1. Interactive mid-measurement toggle remains in 5.1. |
+| 4.1 | One inspector worker for the two coupled tabs. Coordinator reviewed the diff and ran integration and Atlas checks. | All 65 required tests passed. Arm64 Debug build and signature verified. Two synthetic jobs exercised missing fonts, visibility, shading, zoom choices, all five feature switches, independent row resets, Save as Default, Reset All and relaunch. [Inspector evidence](../sessions/evidence/appearance-wave4/) | `cd0e6ae` | 5.1 ready. E1 and E2 remain open. |
 
 In Wave 3, drawing and hit-testing adopted the same source-time interval. Its intersection with the physical trim range excludes padded audio. The monitor uses the held interval during close-up drags. Wave 4 adds the controls for editing these settings.
 
