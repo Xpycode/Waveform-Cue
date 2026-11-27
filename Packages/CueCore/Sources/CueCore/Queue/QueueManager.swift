@@ -291,25 +291,26 @@ public final class QueueManager {
         return true
     }
 
-    /// Apply to All: copies the appearance and preset of `sourceID` to every Pending job
-    /// (never Done, Failed, Cancelled, Paused or running jobs). Returns how many changed.
+    public enum CopyScope {
+        case appearanceOnly, appearanceAndPreset
+    }
+
+    /// Copies the selected fields to other Pending jobs. Returns changed IDs in queue order.
     @discardableResult
-    public func applyToAll(from sourceID: UUID) -> Int {
-        guard let source = job(sourceID) else { return 0 }
-        var changed = 0
+    public func applyToAll(from sourceID: UUID, scope: CopyScope) -> [UUID] {
+        guard let source = job(sourceID) else { return [] }
+        var changed: [UUID] = []
         for index in jobs.indices where jobs[index].id != sourceID && jobs[index].status == .pending {
-            var job = jobs[index]
-            job.appearanceSnapshot = source.appearanceSnapshot
-            if job.presetID != source.presetID {
-                job.presetID = source.presetID
-                job.outputPath = nil
+            let copyPreset = scope == .appearanceAndPreset && jobs[index].presetID != source.presetID
+            guard copyPreset || jobs[index].appearance != source.appearance else { continue }
+            jobs[index].appearanceSnapshot = source.appearanceSnapshot
+            if copyPreset {
+                jobs[index].presetID = source.presetID
+                jobs[index].outputPath = nil
             }
-            if job != jobs[index] {
-                jobs[index] = job
-                changed += 1
-            }
+            changed.append(jobs[index].id)
         }
-        if changed > 0 { persist() }
+        if !changed.isEmpty { persist() }
         return changed
     }
 

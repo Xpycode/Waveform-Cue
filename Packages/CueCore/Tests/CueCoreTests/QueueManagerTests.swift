@@ -585,34 +585,76 @@ final class QueueManagerTests: XCTestCase {
 
     // MARK: Editing
 
-    func testApplyToAllCopiesAppearanceAndPresetToPendingJobsOnly() {
+    func testApplyToAllWithNoOtherPendingJobs() {
         let manager = makeManager(ControlledExporter())
         let source = job("Source")
-        let pending = job("Pending")
-        let done = job("Done", status: .done(output: URL(fileURLWithPath: "/Volumes/Media/Done - Cue.mxf")))
-        let failed = job("Failed", status: .failed(reason: "x", log: ""))
         let cancelled = job("Cancelled", status: .cancelled)
-        manager.add([source, pending, done, failed, cancelled])
-
-        var look = CueAppearance()
-        look.warning = .ten
-        look.remaining.size = .extraLarge
-        manager.update(source.id) {
-            $0.appearance = look
-            $0.presetID = "avci100-1080i50"
-            $0.labelText = "Only on the source"
-            $0.trim.preRoll = 5
+        manager.add([source, cancelled])
+        for scope in [QueueManager.CopyScope.appearanceOnly, .appearanceAndPreset] {
+            XCTAssertEqual(manager.applyToAll(from: source.id, scope: scope), [])
+            XCTAssertEqual(manager.applyToAll(from: UUID(), scope: scope), [])
+            XCTAssertEqual(manager.jobs, [source, cancelled])
         }
+    }
 
-        XCTAssertEqual(manager.applyToAll(from: source.id), 1)
-        let updated = manager.job(pending.id)!
-        XCTAssertEqual(updated.appearanceSnapshot, AppearanceSnapshot(look))
-        XCTAssertEqual(updated.presetID, "avci100-1080i50")
-        XCTAssertEqual(updated.labelText, "Pending", "the label is not copied")
-        XCTAssertEqual(updated.trim, .none, "trim is not copied")
-        for untouched in [done, failed, cancelled] {
+    func testBothCopyScopesPreserveSongSettingsAndSkipIneligibleJobs() async throws {
+        let exporter = ControlledExporter()
+        let manager = makeManager(exporter)
+        var source = job("Source")
+        source.appearance.warning = .ten
+        source.appearance.remaining.size = .extraLarge
+        source.presetID = "avci100-1080i50"
+        var target = job("Pending")
+        target.labelText = "My overlay"
+        target.labelX = 0.75
+        target.labelY = 0.25
+        target.trim = TrimSettings(inPoint: 1, outPoint: 9, fadeIn: 0.5, fadeOut: 1, preRoll: 5)
+        target.markers = MusicMarkers(editedMusicEnd: 8.5, editedFadeStart: 7)
+        target.loudness = LoudnessMeasurement(integratedLUFS: -21, truePeakDBTP: -2, rangeLU: 5)
+        target.normalise = true
+        target.layout = .eight
+        target.startTimecode = "10:00:00:00"
+        target.filenameTemplate = "{preset} {name}"
+        target.destinationFolder = "/Volumes/Out"
+        target.outputPath = "/Volumes/Out/mpeg2-50 Pending 2.mxf"
+        var samePreset = job("Same preset")
+        samePreset.presetID = source.presetID
+        samePreset.outputPath = "/Volumes/Media/Same preset 2.mxf"
+        let running = job("Running")
+        let skipped = [
+            job("Done", status: .done(output: URL(fileURLWithPath: "/Volumes/Media/Done.mxf"))),
+            job("Failed", status: .failed(reason: "x", log: "")),
+            job("Cancelled", status: .cancelled), job("Paused", status: .paused)
+        ]
+        manager.add([source, target, samePreset, running] + skipped)
+        manager.start(only: [running.id])
+        await eventually("exporter starts") { exporter.calls.count == 1 }
+        let active = try XCTUnwrap(manager.job(running.id))
+
+        var expected = target
+        expected.appearance = source.appearance
+        var expectedSamePreset = samePreset
+        expectedSamePreset.appearance = source.appearance
+        XCTAssertEqual(manager.applyToAll(from: source.id, scope: .appearanceOnly), [target.id, samePreset.id])
+        XCTAssertEqual(manager.job(target.id), expected)
+        XCTAssertEqual(manager.job(samePreset.id), expectedSamePreset)
+        XCTAssertEqual(manager.applyToAll(from: source.id, scope: .appearanceOnly), [])
+
+        // Give both targets a different look again. Only a changed preset releases an output path.
+        manager.update(target.id) { $0.appearance = target.appearance }
+        manager.update(samePreset.id) { $0.appearance = samePreset.appearance }
+        expected.presetID = source.presetID
+        expected.outputPath = nil
+        XCTAssertEqual(manager.applyToAll(from: source.id, scope: .appearanceAndPreset), [target.id, samePreset.id])
+        XCTAssertEqual(manager.job(target.id), expected)
+        XCTAssertEqual(manager.job(samePreset.id), expectedSamePreset)
+        XCTAssertEqual(manager.applyToAll(from: source.id, scope: .appearanceAndPreset), [])
+        for untouched in skipped + [source, active] {
             XCTAssertEqual(manager.job(untouched.id), untouched)
         }
+
+        exporter.succeed(0)
+        await manager.waitUntilIdle()
     }
 
     func testRunningJobIsLockedOthersStayEditable() async {

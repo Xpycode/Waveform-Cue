@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The inspector's Job tab (gate U1): Export (preset, audio tracks, start timecode, filename),
 /// Markers (music end, fade start, Reset), Loudness (I / TP / LRA, Normalise), Trim (in, out,
-/// fades, pre-roll) and Apply to All.
+/// fades, pre-roll) and the appearance-and-preset copy action.
 /// Every control is an AppKit wrapper; edits go to the selected job through `EditorModel`.
 /// The running job's tab is dimmed and disabled (its settings are locked).
 struct JobInspector: View {
@@ -293,15 +293,13 @@ struct JobInspector: View {
     @ViewBuilder
     private var applyToAllSection: some View {
         let count = model.applyToAllCount
-        AppKitPushButton(title: "Apply to All",
-                         toolTip: "Copy this job’s appearance and preset to every Pending job.") {
-            model.applyToAll()
+        AppKitPushButton(title: "Apply Appearance and Preset to \(count) Pending Job\(count == 1 ? "" : "s")",
+                         toolTip: "Copy this job’s appearance and export preset to the other Pending jobs.",
+                         controlSize: .small) {
+            model.applyToAll(scope: .appearanceAndPreset)
         }
         .disabled(count == 0)
         .padding(.top, 20)
-        note(count == 0
-             ? "No other Pending jobs. Done, Failed and Cancelled jobs are never changed."
-             : "Copies this job’s appearance and preset to \(count) Pending job\(count == 1 ? "" : "s"). Done, Failed and Cancelled jobs are never changed.")
     }
 
     // MARK: Building blocks

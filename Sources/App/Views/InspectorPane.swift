@@ -40,6 +40,23 @@ struct InspectorPane: View {
                                                isInteractive: model.canEdit)
                     .frame(maxHeight: .infinity)
             }
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                let count = model.applyToAllCount
+                AppKitPushButton(title: "Apply Appearance to \(count) Pending Job\(count == 1 ? "" : "s")",
+                                 toolTip: "Copy this job’s appearance to the other Pending jobs.") {
+                    model.applyToAll(scope: .appearanceOnly)
+                }
+                .disabled(count == 0)
+                AppKitPushButton(title: "Save as Default",
+                                 toolTip: "Use this appearance for future imports.") {
+                    model.saveAppearanceAsDefault()
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .leading) { separator }
         }
         .frame(width: CueAppearanceSidebar.sidebarWidth)
         .frame(maxHeight: .infinity)

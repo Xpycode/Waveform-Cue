@@ -35,7 +35,10 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Changes with every successful load, so views can tell a new track from a re-render.
     private(set) var trackID: UUID?
     private(set) var label = CueLabel()
-    private(set) var appearance = CueAppearance.load()
+    private(set) var appearance: CueAppearance
+    private(set) var savedAppearance: CueAppearance
+    /// Unsaved Appearance-tab edits made with no job selected survive switching jobs.
+    @ObservationIgnored private var unselectedAppearance: CueAppearance?
     /// The playhead: a position of `previewTimeline` (see Playback).
     private(set) var frame = 0
     private(set) var isPlaying = false
@@ -113,7 +116,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var loadID = UUID()
     @ObservationIgnored private var ingestTask: Task<Void, Never>?
-    @ObservationIgnored private var ingestBacklog: [URL] = []
+    @ObservationIgnored private var ingestBacklog: [(url: URL, appearance: CueAppearance)] = []
     @ObservationIgnored private var ingestSkipped = 0
     /// A track decoded while adding, kept so selecting that job needs no second decode.
     @ObservationIgnored private var ingestedTrack: (job: UUID, track: AudioTrack)?
@@ -143,6 +146,9 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     @ObservationIgnored var openMainWindow: (() -> Void)?
 
     override init() {
+        let saved = CueAppearance.load()
+        appearance = saved
+        savedAppearance = saved
         audioLifetime = QueueSupport.makeAudioLifetime()
         queue = QueueSupport.makeManager(audio: audioLifetime)
         super.init()
@@ -416,7 +422,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             if ingestTask == nil { ingestSkipped = 0 }
             return
         }
-        ingestBacklog += expansion.files
+        // Capture the default for this drop, even if an earlier batch is still decoding.
+        ingestBacklog += expansion.files.map { ($0, savedAppearance) }
         pendingAdds = ingestBacklog.count + (ingestTask == nil ? 0 : 1)
         if let skipped { status = skipped; statusHelp = nil }
         guard ingestTask == nil else { return }
@@ -426,9 +433,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     private func drainIngest() async {
         var added = 0
         var failed = 0
-        let appearance = CueAppearance.load()
         while !ingestBacklog.isEmpty, !Task.isCancelled {
-            let url = ingestBacklog.removeFirst()
+            let (url, appearance) = ingestBacklog.removeFirst()
             pendingAdds = ingestBacklog.count + 1
             status = "Reading " + url.lastPathComponent + (ingestBacklog.isEmpty ? "" : "   ·   \(ingestBacklog.count) more to add")
             // The file is decoded into the workspace under the ingest role and analysed once; its
@@ -505,7 +511,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             ingestedTrack = nil
             label = CueLabel()
             positionIndex = 0
-            appearance = CueAppearance.load()
+            appearance = unselectedAppearance ?? savedAppearance
             placeholder = queue.jobs.isEmpty ? "Drop audio files" : "Select a job in the queue"
             return
         }
@@ -806,13 +812,23 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         storeLabel()
     }
 
-    /// The selected job takes the new appearance; it is also remembered as the look for jobs
-    /// added later. Other jobs keep their own.
+    /// Edit the selected job or, without a selection, the working copy of the default.
     func updateAppearance(_ appearance: CueAppearance) {
         guard canEdit else { return }
         self.appearance = appearance
+        if let id = selectedJobID {
+            queue.update(id) { $0.appearance = appearance }
+        } else {
+            unselectedAppearance = appearance
+        }
+    }
+
+    func saveAppearanceAsDefault() {
         appearance.save()
-        if let id = selectedJobID { queue.update(id) { $0.appearance = appearance } }
+        savedAppearance = appearance
+        unselectedAppearance = nil
+        status = "Saved the appearance as the default for new jobs."
+        statusHelp = nil
     }
 
     /// Typing and dragging defer the save (`queue.json` holds every job's waveform), so a burst
@@ -856,7 +872,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         return FilenameTemplate.expand(job.filenameTemplate, name: job.sourceName, preset: preset.name) + ".mxf"
     }
 
-    /// Other Pending jobs that Apply to All would change.
+    /// Other Pending jobs eligible for either copy action, including those already matching.
     var applyToAllCount: Int {
         guard let id = selectedJobID else { return 0 }
         return queue.jobs.filter { $0.id != id && $0.status == .pending }.count
@@ -1043,15 +1059,15 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         if hasAudio { seek(frame: target) } else { frame = min(new.positionCount, max(0, target)) }
     }
 
-    /// Apply to All: the selected job's appearance and preset go to every Pending job.
-    func applyToAll() {
+    func applyToAll(scope: QueueManager.CopyScope) {
         guard let id = selectedJobID else { NSSound.beep(); return }
         let pending = applyToAllCount
-        let changed = queue.applyToAll(from: id)
+        let changed = queue.applyToAll(from: id, scope: scope).count
         if pending == 0 {
-            status = "No other Pending jobs. Apply to All never changes Done, Failed, Cancelled or running jobs."
+            status = "No other Pending jobs."
         } else {
-            status = "Applied this job’s appearance and preset to \(pending) Pending job\(pending == 1 ? "" : "s")"
+            let settings = scope == .appearanceOnly ? "appearance" : "appearance and preset"
+            status = "Applied this job’s \(settings) to \(pending) Pending job\(pending == 1 ? "" : "s")"
                 + (changed < pending ? " (\(pending - changed) already matched)." : ".")
         }
         statusHelp = nil
