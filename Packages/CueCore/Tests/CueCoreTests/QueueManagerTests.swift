@@ -376,7 +376,7 @@ final class QueueManagerTests: XCTestCase {
 
     // MARK: Retry and naming
 
-    func testRetryGetsAFreshNonCollidingName() async throws {
+    func testRetryReusesTheNameAFailedAttemptLeftFree() async throws {
         let exporter = ControlledExporter()
         let manager = makeManager(exporter)
         let a = job("A")
@@ -391,14 +391,14 @@ final class QueueManagerTests: XCTestCase {
         files.existing.insert("/Volumes/Media/A - Cue 2.mxf")   // someone else's file
         XCTAssertTrue(manager.retry(a.id))
         XCTAssertEqual(status(manager, a.id), .pending)
-        XCTAssertEqual(manager.job(a.id)?.outputPath, "/Volumes/Media/A - Cue 3.mxf")
+        XCTAssertEqual(manager.job(a.id)?.outputPath, "/Volumes/Media/A - Cue.mxf", "the failed attempt left nothing")
 
         manager.start()
         await eventually("retry call") { exporter.calls.count == 2 }
-        XCTAssertEqual(exporter.calls[1].job.outputPath, "/Volumes/Media/A - Cue 3.mxf")
+        XCTAssertEqual(exporter.calls[1].job.outputPath, "/Volumes/Media/A - Cue.mxf")
         exporter.succeed(1)
         await manager.waitUntilIdle()
-        XCTAssertEqual(status(manager, a.id), .done(output: URL(fileURLWithPath: "/Volumes/Media/A - Cue 3.mxf")))
+        XCTAssertEqual(status(manager, a.id), .done(output: URL(fileURLWithPath: "/Volumes/Media/A - Cue.mxf")))
         XCTAssertFalse(manager.retry(a.id), "Done jobs are not retried")
     }
 
@@ -408,7 +408,106 @@ final class QueueManagerTests: XCTestCase {
         manager.add(a)
         XCTAssertTrue(manager.retry(a.id))
         XCTAssertEqual(status(manager, a.id), .pending)
+        XCTAssertEqual(manager.job(a.id)?.outputPath, "/Volumes/Media/A - Cue.mxf")
         XCTAssertFalse(manager.retry(a.id), "Pending jobs are not retried")
+    }
+
+    /// Real files in a temporary folder: Retry keeps the name only while nothing is there.
+    func testRetryNamingAgainstFilesOnDisk() async throws {
+        let folder = directory.appendingPathComponent("out")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let manager = QueueManager(storageDirectory: directory, exporter: ControlledExporter())
+        let source = folder.appendingPathComponent("Song.wav")
+        try Data().write(to: source)
+        let a = CueJob(source: source, presetID: "mpeg2-50")
+        manager.add(a)
+
+        // Cancelled during export: the attempt wrote nothing, so Retry reuses its name.
+        manager.start()
+        await eventually("exporting") { manager.job(a.id)?.status.isActive == true }
+        let name = try XCTUnwrap(manager.job(a.id)?.outputPath)
+        XCTAssertEqual(name, folder.appendingPathComponent("Song - Cue.mxf").path)
+        manager.cancel(a.id)
+        await manager.waitUntilIdle()
+        XCTAssertEqual(status(manager, a.id), .cancelled)
+        XCTAssertTrue(manager.retry(a.id))
+        XCTAssertEqual(manager.job(a.id)?.outputPath, name)
+
+        // A file has since appeared at that name: Retry picks the next free one.
+        manager.cancel(a.id)
+        try Data("x".utf8).write(to: URL(fileURLWithPath: name))
+        try Data("x".utf8).write(to: folder.appendingPathComponent("Song - Cue 2.mxf"))
+        XCTAssertTrue(manager.retry(a.id))
+        XCTAssertEqual(manager.job(a.id)?.outputPath, folder.appendingPathComponent("Song - Cue 3.mxf").path)
+        XCTAssertEqual(try String(contentsOfFile: name, encoding: .utf8), "x")
+    }
+
+    func testRetryAvoidsANameAnotherJobClaims() {
+        let manager = makeManager(ControlledExporter())
+        let claimed = URL(fileURLWithPath: "/Volumes/Media/A - Cue.mxf")
+        var other = job("A", status: .done(output: claimed))
+        other.outputPath = claimed.path
+        var a = CueJob(source: other.sourceURL, presetID: "mpeg2-50", status: .cancelled)
+        a.outputPath = claimed.path
+        manager.add([other, a])
+        XCTAssertTrue(manager.retry(a.id))
+        XCTAssertEqual(manager.job(a.id)?.outputPath, "/Volumes/Media/A - Cue 2.mxf")
+    }
+
+    func testRetryChoosesAgainWhenTheNamingChanged() {
+        let manager = makeManager(ControlledExporter())
+        var a = job("A", status: .failed(reason: "x", log: ""))
+        a.outputPath = "/Volumes/Media/A - Cue.mxf"
+        manager.add(a)
+        manager.update(a.id) { $0.filenameTemplate = "{name} v2" }
+        XCTAssertTrue(manager.retry(a.id))
+        XCTAssertEqual(manager.job(a.id)?.outputPath, "/Volumes/Media/A v2.mxf")
+    }
+
+    // MARK: Re-export of Done jobs
+
+    func testReexportOfDoneJobGetsAFreshNameAndNeverOverwrites() async throws {
+        let folder = directory.appendingPathComponent("out")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let exporter = ControlledExporter()
+        let manager = QueueManager(storageDirectory: directory, exporter: exporter)
+        let source = folder.appendingPathComponent("Song.wav")
+        try Data().write(to: source)
+        let a = CueJob(source: source, presetID: "mpeg2-50")
+        manager.add(a)
+        XCTAssertFalse(manager.reexport(a.id), "only Done jobs are re-exported")
+
+        manager.start()
+        await eventually("first call") { exporter.calls.count == 1 }
+        let first = try XCTUnwrap(exporter.calls[0].job.outputURL)
+        XCTAssertEqual(first.lastPathComponent, "Song - Cue.mxf")
+        try Data("first".utf8).write(to: first)   // the file the exporter wrote
+        exporter.succeed(0)
+        await manager.waitUntilIdle()
+        XCTAssertEqual(status(manager, a.id), .done(output: first))
+
+        XCTAssertTrue(manager.reexport(a.id))
+        XCTAssertEqual(status(manager, a.id), .pending)
+        let second = folder.appendingPathComponent("Song - Cue 2.mxf")
+        XCTAssertEqual(manager.job(a.id)?.outputPath, second.path)
+        manager.start(only: [a.id])
+        await eventually("second call") { exporter.calls.count == 2 }
+        XCTAssertEqual(exporter.calls[1].job.outputPath, second.path)
+        exporter.succeed(1)
+        await manager.waitUntilIdle()
+        XCTAssertEqual(status(manager, a.id), .done(output: second))
+        XCTAssertEqual(try String(contentsOf: first, encoding: .utf8), "first", "the first file is left intact")
+    }
+
+    func testReexportAvoidsThePreviousFileEvenWhenItIsGone() {
+        let manager = makeManager(ControlledExporter())
+        let written = URL(fileURLWithPath: "/Volumes/Media/A - Cue.mxf")
+        var a = job("A", status: .done(output: written))
+        a.outputPath = written.path
+        manager.add(a)
+        XCTAssertTrue(manager.reexport(a.id))
+        XCTAssertEqual(manager.job(a.id)?.outputPath, "/Volumes/Media/A - Cue 2.mxf")
+        XCTAssertFalse(manager.reexport(a.id), "a Pending job is not re-exported")
     }
 
     func testTwoJobsFromSameSourceGetDistinctNames() async {
