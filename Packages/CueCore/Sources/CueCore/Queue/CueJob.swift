@@ -200,6 +200,9 @@ public struct CueJob: Identifiable, Sendable, Equatable {
     public var markers: MusicMarkers
     public var loudness: LoudnessMeasurement?
     public var peaks: PeaksSummary?
+    /// The full analysis (detail peaks, detected markers, absolute peak), so a restored job draws
+    /// its waveform with `AudioTrack(url:analysis:)` and needs no re-analysis when it is decoded.
+    public var analysis: TrackAnalysis?
     /// Folder chosen for this job; `nil` means beside the source.
     public var destinationFolder: String?
     /// Destination file of the current or last attempt, resolved by the queue before export.
@@ -211,7 +214,8 @@ public struct CueJob: Identifiable, Sendable, Equatable {
                 layout: AudioLayout = .default, startTimecode: String = CueJob.defaultStartTimecode,
                 filenameTemplate: String = CueJob.defaultFilenameTemplate, trim: TrimSettings = .none,
                 markers: MusicMarkers = .none, loudness: LoudnessMeasurement? = nil,
-                peaks: PeaksSummary? = nil, destinationFolder: URL? = nil, status: JobStatus = .pending) {
+                peaks: PeaksSummary? = nil, analysis: TrackAnalysis? = nil,
+                destinationFolder: URL? = nil, status: JobStatus = .pending) {
         let label = label ?? CueLabel(text: source.deletingPathExtension().lastPathComponent)
         self.id = id
         self.sourcePath = source.path
@@ -227,6 +231,7 @@ public struct CueJob: Identifiable, Sendable, Equatable {
         self.markers = markers
         self.loudness = loudness
         self.peaks = peaks
+        self.analysis = analysis
         self.destinationFolder = destinationFolder?.path
         self.outputPath = nil
         self.status = status
@@ -255,7 +260,7 @@ public struct CueJob: Identifiable, Sendable, Equatable {
 extension CueJob: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, sourcePath, labelText, labelX, labelY, appearance, presetID, layout
-        case startTimecode, filenameTemplate, trim, markers, loudness, peaks
+        case startTimecode, filenameTemplate, trim, markers, loudness, peaks, analysis
         case destinationFolder, outputPath, status
         // Decode-only legacy keys (build 10 era single-job shape).
         case source, label, title
@@ -289,6 +294,8 @@ extension CueJob: Codable {
         markers = value(MusicMarkers.self, .markers) ?? .none
         loudness = value(LoudnessMeasurement.self, .loudness)
         peaks = value(PeaksSummary.self, .peaks)
+        // Unusable stored peaks (empty, odd byte count) drop only the analysis: the job re-analyses.
+        analysis = value(TrackAnalysis.self, .analysis)
         destinationFolder = value(String.self, .destinationFolder)
         outputPath = value(String.self, .outputPath)
         status = value(JobStatus.self, .status) ?? .pending
@@ -310,6 +317,7 @@ extension CueJob: Codable {
         try c.encode(markers, forKey: .markers)
         try c.encodeIfPresent(loudness, forKey: .loudness)
         try c.encodeIfPresent(peaks, forKey: .peaks)
+        try c.encodeIfPresent(analysis, forKey: .analysis)
         try c.encodeIfPresent(destinationFolder, forKey: .destinationFolder)
         try c.encodeIfPresent(outputPath, forKey: .outputPath)
         try c.encode(status, forKey: .status)

@@ -718,4 +718,138 @@ final class QueueManagerTests: XCTestCase {
         clock.nanos = 1
         _ = coalescer.offer(0.2)
     }
+
+    // MARK: Task 3.3: stored analysis, deferred saves, paused-folder resume
+
+    private func analysis(seconds: Double = 2) -> TrackAnalysis {
+        TrackAnalysis(seconds: seconds, detailPeaks: (0..<400).map { Float($0 % 17) / 16 },
+                      markers: MusicMarkers(detectedMusicEnd: 1.5, detectedFadeStart: 1.2), absolutePeak: 0.7)
+    }
+
+    func testStoredAnalysisSurvivesRelaunch() throws {
+        let manager = makeManager(ControlledExporter())
+        var a = job("A")
+        a.analysis = analysis()
+        let b = job("B", status: .done(output: URL(fileURLWithPath: "/Volumes/Media/B - Cue.mxf")))
+        manager.add([a, b])
+
+        let reloaded = makeManager(ControlledExporter())
+        XCTAssertEqual(reloaded.job(a.id)?.analysis, a.analysis, "peaks and markers come back bit-identical")
+        XCTAssertNil(reloaded.job(b.id)?.analysis)
+        // A restored job draws from its analysis without any audio.
+        let stored = try XCTUnwrap(reloaded.job(a.id)?.analysis)
+        let track = AudioTrack(url: a.sourceURL, analysis: stored)
+        XCTAssertFalse(track.isDecoded)
+        XCTAssertEqual(track.markers, a.analysis?.markers)
+    }
+
+    func testUnreadableStoredAnalysisDropsOnlyTheAnalysis() throws {
+        var a = job("A")
+        a.analysis = analysis()
+        var document = try JSONSerialization.jsonObject(with: JSONEncoder().encode(QueueDocument(jobs: [a]))) as! [String: Any]
+        var jobs = document["jobs"] as! [[String: Any]]
+        var stored = jobs[0]["analysis"] as! [String: Any]
+        stored["detailPeaks"] = "AAA="   // two bytes: not whole Float32s
+        jobs[0]["analysis"] = stored
+        document["jobs"] = jobs
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: document).write(to: directory.appendingPathComponent(QueueStore.fileName))
+
+        let manager = makeManager(ControlledExporter())
+        XCTAssertEqual(manager.jobs.map(\.id), [a.id])
+        XCTAssertNil(manager.job(a.id)?.analysis)
+        XCTAssertEqual(status(manager, a.id), .pending)
+    }
+
+    /// Quit with pending and done jobs and relaunch: the queue is restored, a missing source
+    /// reads "Source not found", and the queue-wide destination is kept.
+    func testRelaunchWithPendingAndDoneJobs() {
+        let first = makeManager(ControlledExporter())
+        let pending = job("Pending"), gone = job("Gone")
+        let done = job("Done", status: .done(output: URL(fileURLWithPath: "/Volumes/Media/Done - Cue.mxf")))
+        first.add([pending, done, gone])
+        first.setDestinationOverride(URL(fileURLWithPath: "/Volumes/Out"))
+        files.existing.remove(gone.sourcePath)
+
+        let second = makeManager(ControlledExporter())
+        XCTAssertEqual(second.jobs.map(\.id), [pending.id, done.id, gone.id])
+        XCTAssertEqual(status(second, pending.id), .pending)
+        XCTAssertEqual(status(second, done.id), done.status)
+        XCTAssertEqual(status(second, gone.id), .failed(reason: QueueManager.sourceNotFound, log: ""))
+        XCTAssertEqual(second.destinationOverride?.path, "/Volumes/Out")
+    }
+
+    func testDeferredSaveWaitsAndFlushes() async {
+        let manager = makeManager(ControlledExporter())
+        manager.deferredSaveDelay = 60
+        let a = job("A")
+        manager.add(a)
+        manager.update(a.id, deferringSave: true) { $0.labelText = "Typed" }
+        XCTAssertEqual(manager.job(a.id)?.labelText, "Typed")
+        XCTAssertTrue(manager.hasPendingSave)
+        XCTAssertEqual(makeManager(ControlledExporter()).job(a.id)?.labelText, "A", "not written yet")
+
+        manager.flushPendingSave()
+        XCTAssertFalse(manager.hasPendingSave)
+        XCTAssertEqual(makeManager(ControlledExporter()).job(a.id)?.labelText, "Typed")
+
+        // An ordinary save writes a waiting deferred edit too.
+        manager.update(a.id, deferringSave: true) { $0.labelText = "Typed more" }
+        manager.update(a.id) { $0.startTimecode = "10:00:00:00" }
+        XCTAssertFalse(manager.hasPendingSave)
+        XCTAssertEqual(makeManager(ControlledExporter()).job(a.id)?.labelText, "Typed more")
+
+        // And the delay alone writes it.
+        manager.deferredSaveDelay = 0.01
+        manager.update(a.id, deferringSave: true) { $0.labelText = "Later" }
+        await eventually("deferred save") { !manager.hasPendingSave }
+        XCTAssertEqual(makeManager(ControlledExporter()).job(a.id)?.labelText, "Later")
+    }
+
+    func testPausedJobsAreListedAndResumeReportsThem() async {
+        let exporter = ControlledExporter()
+        let manager = makeManager(exporter)
+        let a = job("A", folder: "/Volumes/X"), b = job("B", folder: "/Volumes/X"), c = job("C", folder: "/Volumes/Y")
+        manager.add([a, b, c])
+        manager.start()
+        await eventually("A") { exporter.calls.count == 1 }
+        exporter.fail(0, JobExportError.destinationUnwritable(folder: URL(fileURLWithPath: "/Volumes/X"), reason: "Ejected"))
+        await eventually("C") { exporter.calls.count == 2 }
+        exporter.succeed(1)
+        await manager.waitUntilIdle()
+
+        let folder = URL(fileURLWithPath: "/Volumes/X")
+        XCTAssertEqual(manager.pausedJobs(in: folder), [a.id, b.id])
+        XCTAssertEqual(manager.pausedJobs(in: URL(fileURLWithPath: "/Volumes/X/")), [a.id, b.id], "trailing slash matches")
+        XCTAssertEqual(manager.pausedJobs(in: URL(fileURLWithPath: "/Volumes/Y")), [])
+        let resumed = manager.resumePaused(in: folder, newFolder: URL(fileURLWithPath: "/Volumes/Z"))
+        XCTAssertEqual(resumed, [a.id, b.id])
+        XCTAssertEqual(manager.pausedJobs(in: folder), [])
+
+        // The caller restarts just those jobs when the queue has already ended.
+        manager.start(only: Set(resumed))
+        await eventually("A again") { exporter.calls.count == 3 }
+        guard exporter.calls.count == 3 else { return }
+        XCTAssertEqual(exporter.calls[2].job.id, a.id)
+        XCTAssertEqual(exporter.calls[2].job.outputURL?.deletingLastPathComponent().path, "/Volumes/Z")
+        manager.stopQueue()
+        await manager.waitUntilIdle()
+    }
+
+    func testSleepIsPreventedForTheWholeBatch() async {
+        let exporter = ControlledExporter()
+        let sleep = CountingSleep()
+        let manager = makeManager(exporter, sleep: sleep)
+        manager.add([job("A"), job("B"), job("C")])
+        manager.start()
+        for index in 0..<3 {
+            await eventually("job \(index)") { exporter.calls.count == index + 1 }
+            XCTAssertEqual(sleep.begins, 1)
+            XCTAssertEqual(sleep.ends, 0, "held between jobs")
+            if exporter.calls.count == index + 1 { exporter.succeed(index) }
+        }
+        await manager.waitUntilIdle()
+        XCTAssertEqual(sleep.begins, 1)
+        XCTAssertEqual(sleep.ends, 1)
+    }
 }

@@ -3,7 +3,7 @@ import CueCore
 import SwiftUI
 
 /// The batch queue: a heading, the AppKit job list (drop target for files and folders) and a
-/// destination footer. Rows and their controls are AppKit (`QueueTableRepresentable`).
+/// destination footer (Beside source, or one folder for the whole queue). Rows and their controls are AppKit (`QueueTableRepresentable`).
 struct QueueSidebar: View {
     let model: EditorModel
 
@@ -27,14 +27,16 @@ struct QueueSidebar: View {
                                     selectedID: queue.selectedJobID)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
-            Text(destinationLine(queue))
-                .font(AppTypography.caption)
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .padding(.horizontal, AppMetrics.sectionSpacing)
-                .padding(.vertical, AppMetrics.standardSpacing)
-                .help("Each job is written beside its audio file unless you choose File → Export Selected to Folder….")
+            HStack(spacing: 6) {
+                Text("Destination:")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize()
+                DestinationPopUpRepresentable(model: model, folder: queue.destinationOverride, isEnabled: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, AppMetrics.sectionSpacing)
+            .padding(.vertical, AppMetrics.standardSpacing)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.secondaryBackground)
@@ -46,10 +48,5 @@ struct QueueSidebar: View {
         var line = "\(done) of \(jobs.count) done"
         if model.pendingAdds > 0 { line += " · adding \(model.pendingAdds)" }
         return line
-    }
-
-    private func destinationLine(_ queue: QueueManager) -> String {
-        if let folder = queue.destinationOverride { return "Destination: " + folder.lastPathComponent }
-        return "Destination: beside each source"
     }
 }

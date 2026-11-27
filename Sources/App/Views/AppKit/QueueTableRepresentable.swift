@@ -155,6 +155,7 @@ struct QueueTableRepresentable: NSViewRepresentable {
             cell.onCancel = { [weak self] in self?.model.cancelJob(id) }
             cell.onRetry = { [weak self] in self?.model.retryJob(id) }
             cell.onReveal = { [weak self] in self?.model.reveal(id) }
+            cell.onChooseFolder = { [weak self] in self?.model.choosePausedFolder(for: id) }
             cell.onDisclose = { [weak self] open in self?.setExpanded(open, for: id) }
         }
 
@@ -279,8 +280,9 @@ final class QueueDropView: NSView {
 
 // MARK: - Row
 
-/// One job: name; status with a progress bar while exporting; Cancel, Retry or Show in Finder;
-/// and, for a failed job, a Log disclosure that shows the reason and the encoder's log tail.
+/// One job: name; status with a progress bar while exporting; Cancel, Retry, Show in Finder or
+/// (Paused) Choose Folder…; and, for a failed job, a Log disclosure that shows the reason and the
+/// encoder's log tail.
 final class QueueJobCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("QueueJobCell")
     static let baseHeight: CGFloat = 72
@@ -291,6 +293,7 @@ final class QueueJobCell: NSTableCellView {
     var onCancel: (() -> Void)?
     var onRetry: (() -> Void)?
     var onReveal: (() -> Void)?
+    var onChooseFolder: (() -> Void)?
     var onDisclose: ((Bool) -> Void)?
 
     private let name = NSTextField(labelWithString: "")
@@ -299,6 +302,7 @@ final class QueueJobCell: NSTableCellView {
     private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
     private let retry = NSButton(title: "Retry", target: nil, action: nil)
     private let reveal = NSButton(title: "Show in Finder", target: nil, action: nil)
+    private let chooseFolder = NSButton(title: "Choose Folder…", target: nil, action: nil)
     private let disclosure = NSButton()
     private let logTitle = NSTextField(labelWithString: "Log")
     private let logScroll = NSScrollView()
@@ -322,7 +326,8 @@ final class QueueJobCell: NSTableCellView {
 
         for (button, selector, tip) in [(cancel, #selector(cancelPressed), "Cancel this job. A running export stops and leaves no file."),
                                         (retry, #selector(retryPressed), "Return this job to Pending with a fresh file name."),
-                                        (reveal, #selector(revealPressed), "Show the exported MXF in Finder.")] {
+                                        (reveal, #selector(revealPressed), "Show the exported MXF in Finder."),
+                                        (chooseFolder, #selector(chooseFolderPressed), "Choose a writable folder for the jobs paused with this one, and resume them.")] {
             button.bezelStyle = .rounded
             button.controlSize = .small
             button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -362,7 +367,7 @@ final class QueueJobCell: NSTableCellView {
         statusRow.spacing = 6
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let buttons = NSStackView(views: [cancel, retry, reveal, spacer, disclosure, logTitle])
+        let buttons = NSStackView(views: [cancel, retry, reveal, chooseFolder, spacer, disclosure, logTitle])
         buttons.orientation = .horizontal
         buttons.spacing = 6
         buttons.alignment = .centerY
@@ -404,6 +409,7 @@ final class QueueJobCell: NSTableCellView {
             line = "Failed: " + reason
             failure = (reason, log)
         case .exporting(let value): line = "Exporting   \(Int((value * 100).rounded(.down)))%"
+        case .paused: line = "Paused: destination can’t be written"
         default: line = job.status.title
         }
         status.stringValue = line
@@ -419,6 +425,7 @@ final class QueueJobCell: NSTableCellView {
         cancel.isHidden = !(active || job.status == .pending || job.status == .paused)
         retry.isHidden = !job.status.canRetry
         if case .done = job.status { reveal.isHidden = false } else { reveal.isHidden = true }
+        chooseFolder.isHidden = job.status != .paused
         disclosure.isHidden = failure == nil
         logTitle.isHidden = failure == nil
         disclosure.state = expanded ? .on : .off
@@ -433,5 +440,6 @@ final class QueueJobCell: NSTableCellView {
     @objc private func cancelPressed() { onCancel?() }
     @objc private func retryPressed() { onRetry?() }
     @objc private func revealPressed() { onReveal?() }
+    @objc private func chooseFolderPressed() { onChooseFolder?() }
     @objc private func disclosePressed() { onDisclose?(disclosure.state == .on) }
 }

@@ -20,7 +20,7 @@ struct MonitorPane: View {
                                    frame: model.frame,
                                    frames: model.track?.frames ?? 0,
                                    isPlaying: model.isPlaying,
-                                   isEnabled: model.isReady)
+                                   isEnabled: model.canPlay)
                 .frame(height: 30)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)

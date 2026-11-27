@@ -13,6 +13,7 @@
 		417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */; };
 		468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */; };
 		47CD199208A574368D145D2F /* CueCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5290EC1FEDA9CFC55BFAE0A9 /* CueCore */; };
+		4DD766C688092A967FDE0EE2 /* SleepAssertion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4A67929EE1D084A8217FB90 /* SleepAssertion.swift */; };
 		64A66B6CF832348F75D83E9B /* AppKitButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 432B9F05919250B0355A4D2E /* AppKitButton.swift */; };
 		6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */; };
 		69C2B6BBFA026CB2F118F512 /* WindowReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 598A11E249649DBE0B31CE2E /* WindowReader.swift */; };
@@ -21,6 +22,7 @@
 		73A56F168C6522B560C11AED /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A5E3FF4D2DFB625EA4A54C8 /* ProcessKit */; };
 		7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */; };
 		8BA42A9957F25211E3F85814 /* AppShellKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0FB5306E6FFEE9D3E2315288 /* AppShellKit */; };
+		8E22180BAC25FC88F3AA93D4 /* DestinationPopUpRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */; };
 		913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */ = {isa = PBXBuildFile; fileRef = DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */; };
 		BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */; };
 		DA2853F40580865E8F0DF404 /* AppearanceSidebarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */; };
@@ -31,6 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationPopUpRepresentable.swift; sourceTree = "<group>"; };
 		2DF670FE79893C490F0C8939 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
 		373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueTableRepresentable.swift; sourceTree = "<group>"; };
 		3F59DF60304D0AB83FCF1105 /* zPackages */ = {isa = PBXFileReference; lastKnownFileType = folder; name = zPackages; path = ../../zPackages; sourceTree = SOURCE_ROOT; };
@@ -42,6 +45,7 @@
 		7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportRepresentable.swift; sourceTree = "<group>"; };
 		8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRepresentable.swift; sourceTree = "<group>"; };
 		966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBarRepresentable.swift; sourceTree = "<group>"; };
+		A4A67929EE1D084A8217FB90 /* SleepAssertion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepAssertion.swift; sourceTree = "<group>"; };
 		A6FB5801C154716BA548ED36 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSidebar.swift; sourceTree = "<group>"; };
 		B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearanceSidebar.swift; sourceTree = "<group>"; };
@@ -73,6 +77,7 @@
 			children = (
 				46B2BC3DFE54BD2C8C841F6E /* LegacyExportAdapter.swift */,
 				D4858B105B71A20A7F42C05B /* QueueSupport.swift */,
+				A4A67929EE1D084A8217FB90 /* SleepAssertion.swift */,
 			);
 			path = Queue;
 			sourceTree = "<group>";
@@ -124,6 +129,7 @@
 				EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */,
 				432B9F05919250B0355A4D2E /* AppKitButton.swift */,
 				B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */,
+				01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */,
 				8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */,
 				2DF670FE79893C490F0C8939 /* MonitorView.swift */,
 				966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */,
@@ -264,6 +270,7 @@
 				64A66B6CF832348F75D83E9B /* AppKitButton.swift in Sources */,
 				DA2853F40580865E8F0DF404 /* AppearanceSidebarRepresentable.swift in Sources */,
 				BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */,
+				8E22180BAC25FC88F3AA93D4 /* DestinationPopUpRepresentable.swift in Sources */,
 				F5FDDFEAD0B86F8D7FB7D1A0 /* EditorModel.swift in Sources */,
 				ED01D10D9DB4D915812CE74F /* InspectorPane.swift in Sources */,
 				6B105910EC8A2917F1CB8729 /* LegacyExportAdapter.swift in Sources */,
@@ -275,6 +282,7 @@
 				2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */,
 				13E785A5E98173768F0A12A6 /* QueueSupport.swift in Sources */,
 				DA8E69147F818603EAF9F92C /* QueueTableRepresentable.swift in Sources */,
+				4DD766C688092A967FDE0EE2 /* SleepAssertion.swift in Sources */,
 				7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */,
 				468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */,
 				69C2B6BBFA026CB2F118F512 /* WindowReader.swift in Sources */,
