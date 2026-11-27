@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 13/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 14/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -260,13 +260,14 @@ Dependency graph (no cycles):
   - Success: integration tests export a 4-second signal with each preset and assert via `ffprobe` or `ffmpeg -i` parsing: codec and profile, 10-bit 4:2:2, 1920 × 1080, `field_order=tt` for 1080i50, the RP2027 label bytes (`…31 02` for 1080i50, `…31 04` for 1080p25), no body partition for AVC-I, Rec. 709 tags, N mono 24-bit 48 kHz tracks of identical length with tracks 3+ digitally silent, the start timecode, and whole-frame padding. A decoded frame equals the preview bitmap for the same settings within codec tolerance. Measured export rate recorded under Operational Learnings.
   - Backpressure: `FFMPEG_EXECUTABLE=… swift test --package-path Packages/CueCore --filter ExportIntegrationTests`
 
-- [ ] **3.2**: Markers, countdown target, clock position and guides in the picture (spec D and F rendering)
+- [x] **3.2**: Markers, countdown target, clock position and guides in the picture (spec D and F rendering)
   - Depends on: 2.1, 2.2
   - Owns: `CuePicture.swift`, `MonitorView.swift`, `RenderTests.swift` (additions), `CountdownTests.swift`
   - Detail: draw music-end and fade-start markers on both waveforms. With Countdown target Music end, the fade to red, the solid-red threshold and both waveform fades measure to the marker, and Remaining holds at 00:00:00 in red after it. Clocks move as a pair above or below the waveforms. Hatched safe-zone guides are drawn by `MonitorView` only, never by `CuePicture`. Markers can be dragged in the monitor.
   - Interface: `MonitorView.onMarkerChanged`; `CuePicture.draw` takes markers through the timeline.
   - Success: baseline hashes unchanged with target File end and no markers; frame tests at fade start, solid-red threshold, the marker and after it; a no-tail track renders identically for both targets; an export contains no guide pixels (bitmap test on `CuePicture` output with guides on).
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'BaselineTests|RenderTests|CountdownTests'`
+  - Evidence (2026-11-27): baseline hashes unchanged; 7 `CountdownTests` + 2 new `RenderTests` (Remaining matches a clip trimmed at the marker at frames 0–650 incl. fade start, solid-red threshold and the marker; holds red 00:00:00 after it; no marker/no music/no tail identical for both targets; guides never in `CuePicture` output; clocks move as a pair; marker hit-test and drag mapping). Full suite with FFmpeg 189 tests, 0 failures. Rendered preview checked by the coordinator: dashed blue "Fade" and solid yellow "End" lines on both waveforms. Open items moved to 4.1: wire `MonitorView.onMarkerChanged`/`markers` through `MonitorRepresentable` into the job; keep fade start ≤ music end while dragging. Remaining turns red past a Music-end target even with the warning Off (per spec).
 
 - [ ] **3.3**: Queue integration: persistence, lifetime and failure handling (spec B, edge cases, error states)
   - Depends on: 2.2, 2.3
@@ -281,7 +282,7 @@ Dependency graph (no cycles):
 - [ ] **4.1**: Job tab: export settings, markers, loudness, Apply to All (spec C, D, E controls)
   - Depends on / external gates: 3.1, 3.3; **U1**
   - Owns: `Sources/App/Views/JobInspector.swift`, `InspectorPane.swift`, `Sources/App/Views/AppKit/**`
-  - Detail: AppKit-wrapped pop-up, text field, checkbox and button components. Preset picker with the format readout and the Experimental note for 1080p50; audio tracks; start timecode with validation; filename template; marker time fields with Reset; loudness readout with the badge and Normalise to −23 LUFS (shows achieved loudness when peak-limited); Apply to All; "No music detected" state.
+  - Detail: also wire marker drags from 3.2 (`MonitorView.onMarkerChanged`, `markers` set after `track` in `MonitorRepresentable`) into the selected job's `MusicMarkers` edits, keeping fade start ≤ music end. AppKit-wrapped pop-up, text field, checkbox and button components. Preset picker with the format readout and the Experimental note for 1080p50; audio tracks; start timecode with validation; filename template; marker time fields with Reset; loudness readout with the badge and Normalise to −23 LUFS (shows achieved loudness when peak-limited); Apply to All; "No music detected" state.
   - Success: Atlas pass over each control; an exported file reflects the chosen preset, tracks, timecode and name; Apply to All never changes a Done job.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
 
