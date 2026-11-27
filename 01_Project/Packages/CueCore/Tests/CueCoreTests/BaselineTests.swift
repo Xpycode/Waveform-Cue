@@ -7,8 +7,8 @@ import CryptoKit
 /// hashes unchanged whenever their new settings are at their defaults (safe zones None,
 /// countdown target File end, no markers, no trim, no pre-roll).
 ///
-/// Hashes depend on Core Text and Core Graphics output, so they are pinned to this macOS
-/// release. To re-record after an OS update, run with `CUE_RECORD_BASELINE=1` and check the
+/// Hashes depend on Core Text and Core Graphics output, so they are pinned per macOS
+/// release (see `expected`). To re-record after an OS update, run with `CUE_RECORD_BASELINE=1` and check the
 /// printed values against a visual comparison before replacing them.
 final class BaselineTests: XCTestCase {
 
@@ -70,7 +70,39 @@ final class BaselineTests: XCTestCase {
         [0, track.frames / 2, track.frames - 5 * AudioTrack.fps, track.frames - AudioTrack.fps, track.frames]
     }
 
-    static let expected: [String: String] = [
+    /// The baseline for the running macOS release. Core Text and Core Graphics output differs
+    /// between major releases, so each release keeps its own table.
+    static var expected: [String: String] {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 ? expectedMacOS27 : expectedOriginal
+    }
+
+    /// Recorded on macOS 27.2 (M1 Max, 2026-11-27). The task 0.2 code (`4e41e75`) and the code at
+    /// task 6.0 give exactly these hashes there, so the render is unchanged since the baseline.
+    static let expectedMacOS27: [String: String] = [
+        "default@0": "55f4d3ac7fedaec956e2d065f0d6e4589dd041b3e6c52a5a6575f0f2f9ba925c",
+        "default@375": "5078ff3869fe7ea7d42490a41f36de3dbbcd323e21b763991a0f6a8de5477cd2",
+        "default@625": "a53c11ce4399fa829455d5665575e7f3ce99c1aadea6058db20e6bbd8364acb2",
+        "default@725": "fb337e7a9cbb4b1c0f9f9cde438710607f98ef32854bc8015af3ceb0a17d1a4a",
+        "default@750": "72a2c834d29b181f5e618131585dd4285b496124e724d122b12f9540492ec44a",
+        "zoomOff@0": "65d6acde477c30d3e86a1a7281ebb0714ed3fd22280c22282aaf58ea04910730",
+        "zoomOff@375": "3c5a44c92795ef86527eb8dfc9dffdfd40c2035c27cb28537e717971454ddec6",
+        "zoomOff@625": "60ea14c27c1d758ea973019fb3f8cde3070728b1e3462905a9ff45b42c83a74a",
+        "zoomOff@725": "02a5605c36b4937a4b985e3da44b56fb02993486e27833eb1269ac2213c02e80",
+        "zoomOff@750": "7a383a22ea8a434b56c965dc002829888e179898ed64fc6a10200b46961eadb7",
+        "customTitle@0": "02f34483f04e06bb98e1fb40a6d80567a1fbce2b0488ad0c94c0b7ee612c4ec4",
+        "customTitle@375": "3ffe6900ed44bc4446c6f84d2d681121448750f13f5748dfa8657113136f98ad",
+        "customTitle@625": "85c3c7d91f2945c969a5a7d49cce00d3b04fa6be881ec0151807e18edc5e6dd6",
+        "customTitle@725": "302315b0c6c5a8c0d8da78bcbd2ba3a57e2f94035800f7a6cf3c28de6daeb95e",
+        "customTitle@750": "3495457494fe1d29dce9efa3794404902b989f67eee467e7366dd23b5b6fcf74",
+        "warning@0": "55f4d3ac7fedaec956e2d065f0d6e4589dd041b3e6c52a5a6575f0f2f9ba925c",
+        "warning@375": "5078ff3869fe7ea7d42490a41f36de3dbbcd323e21b763991a0f6a8de5477cd2",
+        "warning@625": "1de6d9a7ff550aa37f48e1a976dfcfb2c6c75b4b3acf64c0edda638a158cc06d",
+        "warning@725": "463e03d869072f01c7da9e1a462844d1b8e9aec6c9f9bf27a9a570806c37c7aa",
+        "warning@750": "6c7f15b206d0c06a9313e3dd51509243cdfa18d2f7fe1ad5cc598f460c6e2b64",
+    ]
+
+    /// Recorded at task 0.2 on the M4 Pro, where it matched build 10.
+    static let expectedOriginal: [String: String] = [
         "default@0": "f44853a073dcd58a41e174fffc2e950f645408fded14b19cfd16489e7a030a3d",
         "default@375": "c77fe66913eaefc4b9b61897e97e2041d599726d5c7e0224bbe9b0e8f6055b6d",
         "default@625": "5f9376abc008fcd5a1d621f467c74c1d3ed0417118db4fc9a0301fb227b157b8",
