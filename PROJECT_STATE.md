@@ -4,14 +4,15 @@ Last updated: 2026-11-27
 
 ## Now
 
-Building the batch, preset and cue tools round from [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Build 10 in `04_Exports/0.1-10` is still the last handoff; the build 11 candidate is in `04_Exports/0.1-11-rc`, awaiting acceptance. See the [current handoff](sessions/2026-11-27.md#resume-after-wave-6-block).
+**Execution:** [Appearance and playhead plan](specs/cue-appearance-and-playhead-plan.md) on `feature/cue-appearance-playhead`, 8/9 complete. Wave 5 task 5.1 is ready for five-song acceptance, full-suite validation and the build 12 Release candidate. E1 and E2 require EVS hardware. [Current handoff](sessions/2026-11-27.md#resume-after-appearance-wave-4)
 
-**Execution:** 23/25 tasks done (Waves 0–5, 6.1, 6.3). Blocked: 6.2, the Atlas acceptance pass. The helper is stuck on another session's action (operator must recover it). 6.4 (build 11) waits on 6.2. Gates X1–X4 open.
+The separate [build 11 plan](IMPLEMENTATION_PLAN.md) is at 23/25. Its original 6.2 acceptance batch and 6.4 Release handoff remain outstanding. The helper was available for the Wave 1 check. Build 11 has its own candidate in `04_Exports/0.1-11-rc`.
 
 ## Recent
 
-- Wave 6 so far: all 247 tests pass with nothing skipped, 3-minute cues export in under 45 s, and a review led to six fixes (temp-file cleanup, quitting, paused progress, the decoded-audio limit). The on-screen acceptance pass is waiting for the Atlas helper.
-- Finished Wave 5: the Job tab, trim/fade/pre-roll controls with I and O keys, and safe Retry and re-export naming, all checked on screen with real exports.
-- Built Waves 0–4: CueCore package with 227 tests, App Shell window, batch queue with restore, AVC-Intra 100 presets, music-end markers, safe zones, slate and trim engine. Verified on screen in the Atlas helper.
-- Planned the batch, preset and cue tools round. Planning research confirmed the AVC-Intra arguments and found that `-top 1` is deprecated and that 1080p50 cannot be labelled correctly by FFmpeg.
-- An AVC-Intra 100 1080i50 test file imported and played on EVS. The server's on-screen text covers the clocks, so safe zones were added to the spec.
+- Finished appearance Wave 4. The inspector exposes the new settings, shows per-job overrides and restores the saved default. Edits survived switching jobs and relaunching.
+- Finished appearance Wave 3. Both playhead modes passed preview and decoded-field checks. An app export with audio processing disabled preserved the source samples.
+- Finished appearance Wave 2. Eight jobs saved by the previous encoder retained all original fields. Each job can now recover its configured values when a feature is enabled again.
+- Finished appearance Wave 1. Both inspector tabs copy a look, saved defaults survive relaunch, and the close-up gains 62 px at the rehearsal reserves.
+- Reviewed the next-round plan with three independent checks and rewrote it: nine tasks, sixteen corrections, reversed close-up shading added, control placement approved.
+- The operator completed five exports. EVS photos show a one-frame countdown difference at dotted timecode and a bottom overlay touching the clocks. Both checks are recorded in the next-round handoff.

@@ -367,11 +367,13 @@ Dependency graph (no cycles):
   - While unavailable: Wave 0, 1.1–1.6, the parity part of 1.7, 2.1, 2.2, 3.1, 3.2 and 4.3 can proceed.
 
 - [ ] **X1**: Measure the EVS OSD bands
+  - Operator photos of clip 413A with Custom 11% top and bottom show the title clears the top status line, but the EVS timecode row overlaps the lower edges of the burned-in clocks. The `!Net` indicator also appears over the close-up. The bottom text reaches roughly 14–15% up the displayed picture in these photographs. Test a 16% bottom reserve with a direct output grab before setting the preset.
   - Requires: a straight-on still or grab of the cue output with OSD on, ideally over a plain background
   - Gates: the final numbers of the EVS OSD safe-zone preset (spec F, first criterion). Code proceeds with the provisional 10 % top and 20 % bottom; 6.4 or a follow-up sets the measured values.
   - Note: the XT3 manual documents "OSD on outputs" Yes/No under Operation → OSD Settings, but gives no positions or sizes.
 
 - [ ] **X2**: EVS ingest of files made by build 11
+  - Operator photos show the build 11 cue picture playing as EVS clip 413A (1080i50 selected in the app). Both clocks match at elapsed 00:23:20, with 00:00:24 remaining. Two first-frame photos show a one-frame countdown difference at the dotted EVS timecode. Other presets, channel routing and pre-roll remain open.
   - Depends on: 6.4
   - Requires: the operator's EVS
   - Gates: the claims "ingests on EVS" for the app's own 1080i50 and 1080p25 output; that 4 and 8 mono tracks appear and play on the right channels; whether 1080p50 with the 25p label is accepted (keeps or drops the Experimental preset); how a `23:59:55:00` pre-roll start and 50p timecode display; whether the MPEG-2 preset is worth keeping.
