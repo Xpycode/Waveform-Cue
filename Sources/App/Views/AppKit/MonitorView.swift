@@ -11,15 +11,22 @@ final class MonitorView: NSView {
             needsDisplay = true
         }
     }
-    var cueAppearance = CueAppearance.load() {
+    var cueAppearance: CueAppearance {
         didSet {
-            if (oldValue.zoom == .off) != (cueAppearance.zoom == .off) { updateOverview() }
+            // One layout per appearance change, shared by drawing, seek, scrub and title drag.
+            let newLayout = cueAppearance.layout
+            if newLayout != layout {
+                let overviewMoved = newLayout.overview != layout.overview
+                layout = newLayout
+                if overviewMoved { updateOverview() }
+            }
             needsDisplay = true
         }
     }
+    private(set) var layout: CueLayout
 
     private func updateOverview() {
-        path = CuePicture.waveform(track?.peaks ?? [], in: CuePicture.overviewRect(for: cueAppearance.zoom))
+        path = CuePicture.waveform(track?.peaks ?? [], in: layout.overview)
     }
     var label = CueLabel() { didSet { needsDisplay = true } }
     var frameNumber = 0 { didSet { if oldValue != frameNumber { needsDisplay = true } } }
@@ -39,6 +46,9 @@ final class MonitorView: NSView {
     override var acceptsFirstResponder: Bool { true }
 
     override init(frame: NSRect) {
+        let appearance = CueAppearance.load()
+        cueAppearance = appearance
+        layout = appearance.layout
         super.init(frame: frame)
         registerForDraggedTypes([.fileURL])
         setAccessibilityElement(true)
@@ -60,7 +70,7 @@ final class MonitorView: NSView {
         let picture = self.picture
         guard !picture.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
         if let track {
-            CuePicture.draw(in: context, rect: picture, track: track, path: path, frame: frameNumber, label: label, appearance: cueAppearance, heldRange: heldDetail)
+            CuePicture.draw(in: context, rect: picture, track: track, path: path, frame: frameNumber, label: label, appearance: cueAppearance, layout: layout, heldRange: heldDetail)
         } else {
             NSColor(cgColor: CuePicture.rgb(0.047, 0.067, 0.076))?.setFill()
             picture.fill()
@@ -91,9 +101,7 @@ final class MonitorView: NSView {
     }
 
     private func point(_ event: NSEvent) -> CGPoint {
-        let p = convert(event.locationInWindow, from: nil)
-        return CGPoint(x: (p.x - picture.minX) / picture.width * CuePicture.size.width,
-                       y: (p.y - picture.minY) / picture.height * CuePicture.size.height)
+        CuePicture.picturePoint(convert(event.locationInWindow, from: nil), in: picture)
     }
     override func mouseDown(with event: NSEvent) {
         guard editingEnabled else { return }
@@ -101,16 +109,17 @@ final class MonitorView: NSView {
         guard let track else { onChoose?(); return }
         let p = point(event)
         down = p
-        let box = CuePicture.caption(label).1
-        if !label.text.isEmpty && box.insetBy(dx: -6, dy: -6).contains(p) {
+        switch CuePicture.hitTarget(at: p, label: label, layout: layout) {
+        case .title:
             labelOrigin = label.position
             return
-        }
-        if CuePicture.overviewRect(for: cueAppearance.zoom).insetBy(dx: -8, dy: -12).contains(p) {
+        case .overview:
             scrubRange = 0..<track.frames
-        } else if cueAppearance.zoom != .off, CuePicture.detail.insetBy(dx: -8, dy: -12).contains(p) {
+        case .detail:
             heldDetail = CuePicture.closeUp(frame: frameNumber, total: track.frames, zoom: cueAppearance.zoom)
             scrubRange = heldDetail
+        case .none:
+            break
         }
         if scrubRange != nil {
             onScrubChanged?(true)
@@ -120,10 +129,7 @@ final class MonitorView: NSView {
     override func mouseDragged(with event: NSEvent) {
         let p = point(event)
         if let origin = labelOrigin, let down {
-            let box = CuePicture.caption(label).1
-            let dx = (p.x - down.x) / max(1, CuePicture.wave.width - box.width)
-            let dy = (p.y - down.y) / (CuePicture.size.height - 110 - box.height)
-            onPlace?(CGPoint(x: min(1, max(0, origin.x + dx)), y: min(1, max(0, origin.y + dy))))
+            onPlace?(CuePicture.draggedTitlePosition(origin: origin, down: down, to: p, label: label, layout: layout))
         } else if scrubRange != nil { scrub(p) }
     }
     override func mouseUp(with event: NSEvent) {
@@ -137,8 +143,7 @@ final class MonitorView: NSView {
     }
     private func scrub(_ p: CGPoint) {
         guard let scrubRange else { return }
-        let fraction = min(1, max(0, (p.x - CuePicture.wave.minX) / CuePicture.wave.width))
-        onSeek?(scrubRange.lowerBound + Int((fraction * CGFloat(scrubRange.count)).rounded()))
+        onSeek?(CuePicture.scrubFrame(at: p, in: scrubRange, layout: layout))
     }
     private func file(_ info: NSDraggingInfo) -> URL? {
         let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],

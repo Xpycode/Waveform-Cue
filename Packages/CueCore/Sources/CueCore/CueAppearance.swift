@@ -1,6 +1,6 @@
 import AppKit
 
-public struct CueColor: Codable {
+public struct CueColor: Codable, Sendable, Equatable {
     public let red: Double
     public let green: Double
     public let blue: Double
@@ -33,7 +33,7 @@ public struct CueColor: Codable {
     }
 }
 
-public enum ClockSize: String, Codable, CaseIterable {
+public enum ClockSize: String, Codable, Sendable, CaseIterable {
     case small = "Small", medium = "Medium", large = "Large", extraLarge = "Extra large"
 
     public var points: CGFloat {
@@ -46,12 +46,12 @@ public enum ClockSize: String, Codable, CaseIterable {
     }
 }
 
-public struct ClockStyle: Codable {
+public struct ClockStyle: Codable, Sendable, Equatable {
     public var color: CueColor
     public var size: ClockSize
 }
 
-public enum ZoomWindow: Int, Codable, CaseIterable {
+public enum ZoomWindow: Int, Codable, Sendable, CaseIterable {
     case off = -1, auto = 0, two = 2, five = 5, ten = 10, twenty = 20, thirty = 30, sixty = 60
 
     public var title: String {
@@ -69,7 +69,7 @@ public enum ZoomWindow: Int, Codable, CaseIterable {
     }
 }
 
-public enum CountdownWarning: Int, Codable, CaseIterable {
+public enum CountdownWarning: Int, Codable, Sendable, CaseIterable {
     case off = 0, five = 5, ten = 10
 
     public var title: String { self == .off ? "Off" : "\(rawValue) seconds" }
@@ -82,14 +82,14 @@ public enum CountdownWarning: Int, Codable, CaseIterable {
     }
 }
 
-public enum SolidRedThreshold: String, Codable, CaseIterable {
+public enum SolidRedThreshold: String, Codable, Sendable, CaseIterable {
     case lastFrame, oneSecond
 
     public var frames: Int { self == .lastFrame ? 1 : AudioTrack.fps }
     public var title: String { self == .lastFrame ? "Last frame" : "1 second" }
 }
 
-public struct CueAppearance: Codable {
+public struct CueAppearance: Codable, Sendable, Equatable {
     public static let defaultOverview = CueColor(0.44, 0.54, 0.55)
     public static let defaultDetail = CueColor(0.45, 0.74, 0.66)
     public var overviewColor: CueColor?
@@ -101,6 +101,20 @@ public struct CueAppearance: Codable {
     public var zoom: ZoomWindow = .auto
     public var elapsed = ClockStyle(color: CueColor(0.84, 0.88, 0.88), size: .medium)
     public var remaining = ClockStyle(color: CueColor(0.93, 0.77, 0.52), size: .medium)
+    /// Bands kept clear for a server overlay (spec F). None is build 10's layout.
+    public var safeZones: SafeZones = .none
+    /// Clocks below (build 10) or above the waveforms.
+    public var clockPosition: ClockPosition = .below
+    /// What Remaining counts down to. Rendering of Music end arrives in task 3.2.
+    public var countdownTarget: CountdownTarget = .fileEnd
+    /// Hatched safe-zone guides over the monitor only; never part of an export.
+    public var showGuides = false
+
+    /// The picture geometry for this appearance. Compute it once per appearance change and
+    /// share it between the preview, hit-testing and the export.
+    public var layout: CueLayout {
+        CueLayout(appearance: self, clockPosition: clockPosition, safeZones: safeZones)
+    }
 
     // Build 4 stored only the clocks under this key.
     private static let key = "ClockAppearance.v1"
@@ -120,6 +134,11 @@ public struct CueAppearance: Codable {
         fadeCloseUp = try values.decodeIfPresent(Bool.self, forKey: .fadeCloseUp) ?? false
         fadeFullTrack = try values.decodeIfPresent(Bool.self, forKey: .fadeFullTrack) ?? false
         zoom = try values.decodeIfPresent(ZoomWindow.self, forKey: .zoom) ?? .auto
+        // Added in the batch round; build 10 appearances have none of these keys.
+        safeZones = (try? values.decodeIfPresent(SafeZones.self, forKey: .safeZones)) ?? .none
+        clockPosition = (try? values.decodeIfPresent(ClockPosition.self, forKey: .clockPosition)) ?? .below
+        countdownTarget = (try? values.decodeIfPresent(CountdownTarget.self, forKey: .countdownTarget)) ?? .fileEnd
+        showGuides = (try? values.decodeIfPresent(Bool.self, forKey: .showGuides)) ?? false
     }
 
     public static func load() -> Self {
