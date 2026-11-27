@@ -10,6 +10,11 @@ import UniformTypeIdentifiers
 /// so a file that cannot be decoded arrives as a Failed job); selecting a job loads it into the
 /// monitor; text, position and appearance edits go to the selected job only. The running job is
 /// locked while every other job stays editable. Export goes through `QueueManager`.
+///
+/// Decoded audio goes through `JobAudioLifetime`: the selected job, the running job and the file
+/// being added are the only ones that may hold a CAF, never more than two at once. A job restored
+/// with stored analysis shows its waveform at once; its audio is decoded only when it is selected
+/// (for playback) or run, and it is never re-analysed.
 @MainActor
 @Observable
 final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
@@ -17,14 +22,16 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                           "Middle right", "Bottom left", "Bottom center", "Bottom right"]
     /// Index of the "Custom" item that follows the nine anchors in the position pop-up.
     static let customPositionIndex = anchors.count
-    static let formatReadout = "1080p25   ·   MXF"
-    static let formatDetail = "MXF OP1a · 1920 × 1080p25 · MPEG-2 4:2:2, 50 Mb/s · Rec. 709 · Stereo PCM, 48 kHz, 24-bit · Start TC 00:00:00:00"
     static let exportHelp = "Export the selected job beside its audio file (Command-E). Use File → Export Selected to Folder… to choose another location."
 
     // MARK: Observed state
 
     let queue: QueueManager
+    /// Who may hold decoded audio (the selected job, the running job, a file being added).
+    let audioLifetime: JobAudioLifetime
     private(set) var track: AudioTrack?
+    /// The selected job's audio is decoded and the player is ready.
+    private(set) var hasAudio = false
     /// Changes with every successful load, so views can tell a new track from a re-render.
     private(set) var trackID: UUID?
     private(set) var label = CueLabel()
@@ -45,15 +52,31 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// The selected job can be edited: it is not the one being exported.
     var canEdit: Bool { selectedJobID.map { !queue.isLocked($0) } ?? true }
     var isReady: Bool { canEdit && track != nil }
+    /// Playback, seek and frame steps need the decoded audio, not just the stored waveform.
+    var canPlay: Bool { isReady && hasAudio }
+
+    /// The selected job's preset, or the default preset when nothing is selected. An empty or
+    /// unknown preset ID means the default (AVC-Intra 100 1080i50).
+    var selectedPreset: ExportPreset {
+        selectedJob.flatMap { ExportPreset.preset(for: $0.presetID) } ?? .default
+    }
 
     var toolbarReadout: String {
-        guard let job = selectedJob else { return Self.formatReadout }
-        return job.sourceURL.lastPathComponent + "   ·   " + Self.formatReadout
+        let format = selectedPreset.formatReadout.replacingOccurrences(of: " · ", with: "   ·   ")
+        guard let job = selectedJob else { return format }
+        return job.sourceURL.lastPathComponent + "   ·   " + format
+    }
+
+    var formatDetail: String {
+        selectedPreset.detailedReadout(layout: selectedJob?.layout ?? .default)
+            + " · Start TC " + (selectedJob?.startTimecode ?? "00:00:00:00")
     }
 
     var canStartQueue: Bool { !queue.isRunning && queue.jobs.contains { $0.status == .pending } }
     var canExportSelected: Bool {
         guard let job = selectedJob, !job.status.isActive else { return false }
+        // "Safe zones leave too little room" (task 4.2) disables export for that job.
+        guard job.appearance.layout.fits else { return false }
         if queue.isRunning && queue.isStopping { return false }
         switch job.status {
         case .pending, .failed, .cancelled: return true
@@ -87,6 +110,11 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     @ObservationIgnored private var keyMonitor: Any?
     @ObservationIgnored private var closeObserver: NSObjectProtocol?
     @ObservationIgnored private var wasRunning = false
+    /// True inside `selectJob`, so lifetime changes it causes are not handled twice.
+    @ObservationIgnored private var isSelecting = false
+    /// Unwritable folders already offered to the operator (standardised paths).
+    @ObservationIgnored private var promptedFolders: Set<String> = []
+    @ObservationIgnored private var isPromptingFolder = false
     @ObservationIgnored private(set) weak var window: NSWindow?
     /// Registered by the AppKit wrappers so the key monitor can manage focus.
     @ObservationIgnored weak var monitorView: NSView?
@@ -96,16 +124,27 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     @ObservationIgnored var openMainWindow: (() -> Void)?
 
     override init() {
-        queue = QueueSupport.makeManager()
+        audioLifetime = QueueSupport.makeAudioLifetime()
+        queue = QueueSupport.makeManager(audio: audioLifetime)
         super.init()
+        audioLifetime.onChange = { [weak self] in self?.audioEntitlementChanged() }
         if let problem = queue.persistenceProblem {
             status = "Queue file problem: " + problem
             statusHelp = queue.recoveryFile.map { "A copy was saved to " + $0.path }
         } else if !queue.jobs.isEmpty {
-            status = "Restored \(queue.jobs.count) job\(queue.jobs.count == 1 ? "" : "s"). Select one to preview it."
+            let count = queue.jobs.count
+            let missing = queue.jobs.filter {
+                if case .failed(let reason, _) = $0.status { return reason == QueueManager.sourceNotFound }
+                return false
+            }.count
+            status = "Restored \(count) job\(count == 1 ? "" : "s")."
+                + (missing > 0 ? " \(missing) source\(missing == 1 ? "" : "s") not found." : "")
+                + " Select one to preview it."
             placeholder = "Select a job in the queue"
         }
         observeQueueRun()
+        observe({ [weak self] in self?.queue.currentJobID }) { [weak self] in self?.currentJobChanged() }
+        observe({ [weak self] in self?.queue.unwritableFolders }) { [weak self] in self?.unwritableFoldersChanged() }
     }
 
     // MARK: Window and app lifecycle
@@ -139,6 +178,24 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                 self.observeQueueRun()
             }
         }
+    }
+
+    /// Calls `changed` on the main actor after every change to what `value` reads.
+    private func observe<T>(_ value: @escaping () -> T, _ changed: @escaping () -> Void) {
+        withObservationTracking {
+            _ = value()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                changed()
+                self.observe(value, changed)
+            }
+        }
+    }
+
+    /// The running job holds the export slot of the audio lifetime from the moment it starts.
+    private func currentJobChanged() {
+        audioLifetime.assign(.running, to: queue.currentJobID)
     }
 
     private func queueRunChanged() {
@@ -200,7 +257,36 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
+    /// Close (Command-W) asks to stop the queue first, as quitting does. The window's close button
+    /// stays disabled while the queue runs; closing the last window quits the app.
+    func requestClose() {
+        guard let window else { return }
+        guard queue.isRunning else { window.performClose(nil); return }
+        guard window.attachedSheet == nil else { NSSound.beep(); return }
+        let alert = NSAlert()
+        alert.messageText = "The queue is exporting."
+        alert.informativeText = "Stop the queue and close the window? Closing it quits Waveform Cue. The current job is cancelled and leaves no file; the other jobs stay Pending and are restored next time."
+        alert.addButton(withTitle: "Stop Queue and Close")
+        alert.addButton(withTitle: "Keep Exporting")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            guard response == .alertFirstButtonReturn else {
+                self.status = "The queue keeps exporting."
+                return
+            }
+            self.status = "Stopping the queue before closing…"
+            self.queue.stopQueue()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.queue.waitUntilIdle()
+                self.updateWindowClosable()
+                self.window?.performClose(nil)
+            }
+        }
+    }
+
     func shutdown() {
+        queue.flushPendingSave()
         loadTask?.cancel()
         ingestTask?.cancel()
         ingestedTrack = nil
@@ -223,11 +309,10 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         guard let window, window.isKeyWindow, window.attachedSheet == nil else { return event }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         if queue.isRunning, modifiers == .command, event.charactersIgnoringModifiers == "w" {
-            status = "The queue is exporting. Stop the queue before closing."
-            NSSound.beep()
+            requestClose()
             return nil
         }
-        guard !(window.firstResponder is NSTextView), modifiers.isEmpty, isReady else { return event }
+        guard !(window.firstResponder is NSTextView), modifiers.isEmpty, canPlay else { return event }
         if let responder = window.firstResponder as? NSView, let inspectorView,
            responder.isDescendant(of: inspectorView) { return event }
         switch event.keyCode {
@@ -282,9 +367,15 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             let url = ingestBacklog.removeFirst()
             pendingAdds = ingestBacklog.count + 1
             status = "Reading " + url.lastPathComponent + (ingestBacklog.isEmpty ? "" : "   ·   \(ingestBacklog.count) more to add")
-            let worker = Task.detached(priority: .userInitiated) { try AudioTrack.read(url) }
+            // The file is decoded into the workspace under the ingest role and analysed once; its
+            // CAF goes when the next file takes the role, unless the job became the selected one.
+            let id = UUID()
+            audioLifetime.assign(.ingest, to: id)
+            let lifetime = audioLifetime
             let outcome: Result<AudioTrack, Error>
             do {
+                let pcm = try await lifetime.audio(for: id, source: url, as: .ingest)
+                let worker = Task.detached(priority: .userInitiated) { try AudioTrack.analyse(url, audio: pcm) }
                 outcome = .success(try await withTaskCancellationHandler(operation: { try await worker.value },
                                                                        onCancel: { worker.cancel() }))
             } catch {
@@ -293,8 +384,9 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             if Task.isCancelled { break }
             switch outcome {
             case .success(let track):
-                let job = CueJob(source: url, appearance: appearance,
-                                 peaks: PeaksSummary(seconds: track.seconds, overview: track.peaks))
+                let job = CueJob(id: id, source: url, appearance: appearance,
+                                 peaks: PeaksSummary(seconds: track.seconds, overview: track.peaks),
+                                 analysis: track.analysis)
                 queue.add(job)
                 added += 1
                 if queue.selectedJobID == nil {
@@ -302,11 +394,14 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                     selectJob(job.id)
                 }
             case .failure(let error):
-                queue.add(CueJob(source: url, appearance: appearance,
+                queue.add(CueJob(id: id, source: url, appearance: appearance,
                                  status: .failed(reason: error.localizedDescription, log: "")))
                 failed += 1
             }
         }
+        // Held until the batch is read (the next file takes the role over directly), so a
+        // squeezed-out selected job is not decoded and dropped again between files.
+        audioLifetime.assign(.ingest, to: nil)
         ingestTask = nil
         pendingAdds = 0
         var line = "Added \(added) job\(added == 1 ? "" : "s")"
@@ -321,23 +416,28 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     // MARK: Selection
 
     /// Selects a job and loads it into the monitor with its own text, position and appearance.
-    /// Selecting the already selected job does nothing, unless its audio is not loaded yet
-    /// (for example after a failed read) or `force` is set.
+    /// A job with stored analysis shows its waveform at once; its audio is then decoded through
+    /// the workspace for playback (no re-analysis). Selecting the already selected job does
+    /// nothing, unless its audio is not loaded yet (for example after a failed read) or `force`.
     func selectJob(_ id: UUID?, force: Bool = false) {
-        let unchanged = id == queue.selectedJobID && !(id != nil && trackID == nil && loadTask == nil)
+        let unchanged = id == queue.selectedJobID && !(id != nil && !hasAudio && loadTask == nil)
         guard force || !unchanged else { return }
+        isSelecting = true
+        defer { isSelecting = false }
         queue.select(id)
         appearanceSidebar?.closeColorPicker()
-        loadTask?.cancel()
+        // A load in flight is abandoned, not cancelled: its job may still be entitled (it is also
+        // running), and the lifetime releases it when it is not.
+        loadID = UUID()
         loadTask = nil
-        stopTimer()
-        player?.stop()
-        player = nil
+        dropPlayer()
         track = nil
         trackID = nil
         frame = 0
         syncPlaying()
+        audioLifetime.assign(.selected, to: queue.selectedJobID)
         guard let job = queue.selectedJob else {
+            ingestedTrack = nil
             label = CueLabel()
             positionIndex = 0
             appearance = CueAppearance.load()
@@ -360,22 +460,55 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             status = QueueManager.sourceNotFound + ": " + url.path
             return
         }
+        if let analysis = job.analysis {
+            track = AudioTrack(url: url, analysis: analysis)
+            trackID = UUID()
+        }
         placeholder = "Reading waveform…"
+        loadSelectedAudio()
+    }
+
+    /// Decodes the selected job's audio through the workspace, if the lifetime allows it now.
+    /// A job without stored analysis is analysed once and the result kept with the job.
+    private func loadSelectedAudio() {
+        guard let job = queue.selectedJob, !hasAudio, loadTask == nil else { return }
+        let url = job.sourceURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        guard audioLifetime.isEntitled(job.id) else {
+            placeholder = "Waiting for audio…"
+            status = "Preview audio returns once the files are added."
+            return
+        }
         let id = UUID()
         loadID = id
         let jobID = job.id
+        let stored = job.analysis
+        let lifetime = audioLifetime
         loadTask = Task { [weak self] in
-            let worker = Task.detached(priority: .userInitiated) { try AudioTrack.read(url) }
             do {
-                let track = try await withTaskCancellationHandler(operation: { try await worker.value },
-                                                                  onCancel: { worker.cancel() })
-                guard let self, self.loadID == id, !Task.isCancelled,
-                      let job = self.queue.job(jobID), self.queue.selectedJobID == jobID else { return }
+                let pcm = try await lifetime.audio(for: jobID, source: url, as: .selected)
+                let track: AudioTrack
+                if let stored {
+                    track = AudioTrack(url: url, analysis: stored, audio: pcm)
+                } else {
+                    let worker = Task.detached(priority: .userInitiated) { try AudioTrack.analyse(url, audio: pcm) }
+                    track = try await worker.value
+                }
+                guard let self, self.loadID == id else { return }
                 self.loadTask = nil
+                guard let job = self.queue.job(jobID), self.queue.selectedJobID == jobID else { return }
+                if stored == nil {
+                    self.queue.update(jobID) {
+                        $0.analysis = track.analysis
+                        $0.peaks = PeaksSummary(seconds: track.seconds, overview: track.peaks)
+                    }
+                }
                 self.adopt(track, for: job)
             } catch {
-                guard let self, self.loadID == id, !Task.isCancelled else { return }
+                guard let self, self.loadID == id else { return }
                 self.loadTask = nil
+                // Squeezed out or deselected: `audioEntitlementChanged` loads it again when it may.
+                if error is CancellationError { return }
                 self.placeholder = "Couldn’t read this job’s audio"
                 self.status = "Couldn’t open audio. " + error.localizedDescription
                 self.statusHelp = error.localizedDescription
@@ -383,14 +516,48 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
+    /// The selected job gained or lost its place in the audio lifetime (files being added while
+    /// the queue runs take it). Without it, the waveform stays and playback waits.
+    private func audioEntitlementChanged() {
+        guard !isSelecting, let id = queue.selectedJobID else { return }
+        if audioLifetime.isEntitled(id) {
+            if !hasAudio { loadSelectedAudio() }
+        } else if hasAudio || loadTask != nil {
+            loadID = UUID()
+            loadTask = nil
+            dropPlayer()
+            if let track {
+                self.track = AudioTrack(url: track.url, analysis: track.analysis)
+                trackID = UUID()
+            } else {
+                placeholder = "Waiting for audio…"
+            }
+            syncPlaying()
+            status = "Preview audio is paused while files are added during the export."
+        }
+    }
+
+    private func dropPlayer() {
+        stopTimer()
+        player?.stop()
+        player = nil
+        hasAudio = false
+    }
+
     private func adopt(_ track: AudioTrack, for job: CueJob) {
+        guard let pcm = track.audio else {
+            self.track = track
+            trackID = UUID()
+            return
+        }
         do {
-            let audio = try AVAudioPlayer(contentsOf: track.pcm.url)
+            let audio = try AVAudioPlayer(contentsOf: pcm.url)
             guard audio.prepareToPlay() else { throw CueError("Audio playback could not be prepared.") }
             audio.delegate = self
             player = audio
             self.track = track
             trackID = UUID()
+            hasAudio = true
             if !queue.isRunning, pendingAdds == 0 {
                 status = "Click the waveform to cue. Drag the text to position it."
             }
@@ -485,7 +652,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     func setLabelText(_ text: String) {
         guard canEdit else { return }
         label.text = text
-        storeLabel()
+        storeLabel(deferringSave: true)
     }
 
     /// Title drag in the monitor.
@@ -493,7 +660,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         guard canEdit else { return }
         label.position = point
         positionIndex = Self.customPositionIndex
-        storeLabel()
+        storeLabel(deferringSave: true)
     }
 
     /// Position pop-up: one of the nine anchors, or Custom.
@@ -517,10 +684,12 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         if let id = selectedJobID { queue.update(id) { $0.appearance = appearance } }
     }
 
-    private func storeLabel() {
+    /// Typing and dragging defer the save (`queue.json` holds every job's waveform), so a burst
+    /// of keystrokes writes the file once.
+    private func storeLabel(deferringSave: Bool = false) {
         guard let id = selectedJobID else { return }
         let label = self.label
-        if !queue.update(id, { $0.label = label }) {
+        if !queue.update(id, deferringSave: deferringSave, { $0.label = label }) {
             status = "This job is exporting. Its settings are locked."
         }
     }
@@ -566,6 +735,11 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Export Selected to Folder…: points the selected job at a folder, then exports it.
     func exportSelectedToFolder() {
         guard let job = selectedJob, canExportSelected else { NSSound.beep(); return }
+        if let override = queue.destinationOverride {
+            status = "Every job goes to “" + override.lastPathComponent + "”. Choose Beside source in the queue footer to pick a folder per job."
+            NSSound.beep()
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -603,7 +777,132 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
+    // MARK: Destination
+
+    /// The queue footer's destination: `nil` writes each job beside its source.
+    func setQueueDestination(_ folder: URL?) {
+        queue.setDestinationOverride(folder)
+        if let folder {
+            status = "Every job is written to " + folder.path + "."
+        } else {
+            status = "Each job is written beside its audio file."
+        }
+        statusHelp = nil
+    }
+
+    /// Destination pop-up → Choose Folder….
+    func chooseQueueDestination() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use Folder"
+        panel.message = "Choose the folder every job in the queue is written to."
+        if let current = queue.destinationOverride { panel.directoryURL = current }
+        present(panel) { [weak self] urls in
+            guard let folder = urls.first else { return }
+            self?.setQueueDestination(folder)
+        }
+    }
+
+    // MARK: Unwritable folders
+
+    private static func folderKey(_ url: URL) -> String { url.standardizedFileURL.path }
+
+    /// A folder became unwritable: its jobs are Paused and the operator is asked for a new one,
+    /// once per folder. Further folders are asked about after the current prompt.
+    private func unwritableFoldersChanged() {
+        let folders = queue.unwritableFolders
+        promptedFolders.formIntersection(folders.map(Self.folderKey))
+        guard !isPromptingFolder,
+              let folder = folders.first(where: { !promptedFolders.contains(Self.folderKey($0)) }) else { return }
+        promptedFolders.insert(Self.folderKey(folder))
+        let count = queue.pausedJobs(in: folder).count
+        guard count > 0 else { return }
+        isPromptingFolder = true
+        status = "Paused \(count) job\(count == 1 ? "" : "s"): can’t write to " + folder.path
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Can’t write to “" + folder.lastPathComponent + "”."
+        alert.informativeText = "\(count) job\(count == 1 ? " that exports" : "s that export") there \(count == 1 ? "is" : "are") paused. Choose another folder to resume \(count == 1 ? "it" : "them"), or leave \(count == 1 ? "it" : "them") paused and use Choose Folder… on a paused row later.\n\n" + folder.path
+        alert.addButton(withTitle: "Choose Folder…")
+        alert.addButton(withTitle: "Leave Paused")
+        present(alert) { [weak self] response in
+            guard let self else { return }
+            if response == .alertFirstButtonReturn {
+                // Let the alert's sheet end before the panel's begins.
+                DispatchQueue.main.async { self.chooseReplacementFolder(for: folder) }
+            } else {
+                self.finishFolderPrompt()
+            }
+        }
+    }
+
+    /// A paused row's Choose Folder…: asks for a new folder for every job paused with it.
+    func choosePausedFolder(for id: UUID) {
+        guard let job = queue.job(id), job.status == .paused else { NSSound.beep(); return }
+        guard !isPromptingFolder else { NSSound.beep(); return }
+        isPromptingFolder = true
+        chooseReplacementFolder(for: queue.effectiveFolder(for: job))
+    }
+
+    private func chooseReplacementFolder(for folder: URL) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Resume Here"
+        panel.message = "Choose a folder for the jobs paused because “" + folder.lastPathComponent + "” can’t be written."
+        present(panel, then: { [weak self] urls in
+            guard let self else { return }
+            if let newFolder = urls.first { self.resumePaused(in: folder, newFolder: newFolder) }
+            self.finishFolderPrompt()
+        }, cancelled: { [weak self] in
+            self?.status = "The paused jobs wait for a folder. Use Choose Folder… on a paused row."
+            self?.finishFolderPrompt()
+        })
+    }
+
+    /// Points the paused jobs at `newFolder` and exports them: they join a running queue, or run
+    /// on their own once it has ended.
+    private func resumePaused(in folder: URL, newFolder: URL) {
+        let resumed = queue.resumePaused(in: folder, newFolder: newFolder)
+        promptedFolders.remove(Self.folderKey(folder))
+        guard !resumed.isEmpty else { return }
+        queue.start(only: Set(resumed))
+        status = "Resumed \(resumed.count) job\(resumed.count == 1 ? "" : "s") in " + newFolder.path + "."
+        statusHelp = nil
+    }
+
+    private func finishFolderPrompt() {
+        isPromptingFolder = false
+        unwritableFoldersChanged()
+    }
+
     // MARK: Helpers
+
+    private func present(_ alert: NSAlert, then handler: @escaping (NSApplication.ModalResponse) -> Void) {
+        if let window, window.isVisible {
+            alert.beginSheetModal(for: window, completionHandler: handler)
+        } else {
+            handler(alert.runModal())
+        }
+    }
+
+    private func present(_ panel: NSOpenPanel, then handler: @escaping ([URL]) -> Void,
+                         cancelled: @escaping () -> Void) {
+        if let window, window.isVisible {
+            panel.beginSheetModal(for: window) { response in
+                if response == .OK { handler(panel.urls) } else { cancelled() }
+            }
+        } else if panel.runModal() == .OK {
+            handler(panel.urls)
+        } else {
+            cancelled()
+        }
+    }
 
     private func present(_ panel: NSOpenPanel, then handler: @escaping ([URL]) -> Void) {
         if let window {

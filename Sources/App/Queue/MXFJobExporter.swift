@@ -7,26 +7,22 @@ import Foundation
 /// For each job: resolve the preset (an empty or unknown ID means the default, AVC-Intra 100
 /// 1080i50), check the destination before decoding (writable, and room for the MXF plus the
 /// CAF when that will be decoded onto the same volume), acquire the CAF through the
-/// `JobWorkspace`, re-analyse the peaks from it, build the timeline from the job's trim,
+/// `JobAudioLifetime` (the running role, so the two-CAF cap holds), reuse the job's stored
+/// analysis (analyse only a legacy job without one), build the timeline from the job's trim,
 /// markers and countdown target, and write `job.outputURL`.
 struct MXFJobExporter: JobExporting {
-    let workspace: JobWorkspace
+    let audio: JobAudioLifetime
     let encoder: URL
     /// Loudness gain for a job in dB. The job has no Normalise setting yet (task 4.1), so the
     /// default leaves the audio untouched; 4.1 passes `Loudness.normalisation(for:).gainDB`
     /// for jobs with Normalise on.
     let gain: @Sendable (CueJob) -> Double
-    /// Whether to delete the job's CAF after the export. The queue keeps it for the job shown
-    /// in the monitor (task 3.3 owns that policy).
-    let releasesAudio: @Sendable (UUID) async -> Bool
 
-    init(workspace: JobWorkspace, encoder: URL = PreparedAudio.encoder,
-         gain: @escaping @Sendable (CueJob) -> Double = { _ in 0 },
-         releasesAudio: @escaping @Sendable (UUID) async -> Bool = { _ in true }) {
-        self.workspace = workspace
+    init(audio: JobAudioLifetime, encoder: URL = PreparedAudio.encoder,
+         gain: @escaping @Sendable (CueJob) -> Double = { _ in 0 }) {
+        self.audio = audio
         self.encoder = encoder
         self.gain = gain
-        self.releasesAudio = releasesAudio
     }
 
     func export(_ job: CueJob, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
@@ -46,6 +42,7 @@ struct MXFJobExporter: JobExporting {
             let estimate = ClipTimeline(duration: seconds, trim: job.trim, markers: job.markers,
                                         target: appearance.countdownTarget, standard: preset.video.timelineRate)
             try estimate.validate()
+            let workspace = audio.workspace
             let decoded = await workspace.isReady(job.id)
             let caf = !decoded && DiskSpace.sameVolume(workspace.directory, folder) ? DiskSpace.cafBytes(seconds: seconds) : 0
             try DiskSpace.preflight(folder: folder, required: DiskSpace.requiredBytes(
@@ -54,10 +51,14 @@ struct MXFJobExporter: JobExporting {
             try DiskSpace.probeWritable(folder)
         }
 
-        let audio = try await workspace.acquire(for: job.id, source: job.sourceURL)
+        let lifetime = self.audio
+        defer { Task { @MainActor in lifetime.exportEnded(job.id) } }
+        let pcm = try await lifetime.exportAudio(for: job.id, source: job.sourceURL)
         let encoder = self.encoder
+        let stored = job.analysis
         let worker = Task.detached(priority: .userInitiated) { () throws -> URL in
-            let track = try AudioTrack.analyse(job.sourceURL, audio: audio)
+            let track = try stored.map { AudioTrack(url: job.sourceURL, analysis: $0, audio: pcm) }
+                ?? AudioTrack.analyse(job.sourceURL, audio: pcm)
             let timeline = MXFExport.timeline(for: track, preset: preset, trim: job.trim, markers: job.markers,
                                               target: appearance.countdownTarget)
             try timeline.validate()
@@ -72,7 +73,6 @@ struct MXFJobExporter: JobExporting {
         } onCancel: {
             worker.cancel()
         }
-        if await releasesAudio(job.id) { await workspace.release(job.id) }
         return try result.get()
     }
 }

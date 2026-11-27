@@ -65,7 +65,7 @@ struct MainWindow: View {
                     .frame(maxWidth: 360)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
-                    .help(EditorModel.formatDetail)
+                    .help(model.formatDetail)
                     .accessibilityLabel("Export format")
                 Button(action: model.toggleQueue) {
                     toolbarLabel(model.isExporting ? "Stop Queue" : "Start Queue",

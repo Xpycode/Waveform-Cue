@@ -128,6 +128,10 @@ public final class QueueManager {
     @ObservationIgnored private var runToken: UUID?
     @ObservationIgnored private var cancelRequested = false
     @ObservationIgnored private var saveFailed = false
+    /// A save deferred by `update(_:deferringSave:_:)`, written by the next save or `flushPendingSave()`.
+    @ObservationIgnored private var pendingSave: Task<Void, Never>?
+    /// How long a deferred save waits for further edits (label keystrokes) before writing.
+    @ObservationIgnored public var deferredSaveDelay: TimeInterval = 0.5
     /// Jobs the current run may export; `nil` means every pending job.
     @ObservationIgnored private var runScope: Set<UUID>?
     /// Jobs counted in the overall progress of the current run.
@@ -241,8 +245,11 @@ public final class QueueManager {
     /// Edits one job. Refused (returns false) for the running job. The ID and status cannot
     /// be changed this way. A change to anything that shapes the output name clears the
     /// resolved destination so it is chosen again.
+    /// With `deferringSave`, the change is saved after `deferredSaveDelay` without further deferred
+    /// edits (or with the next ordinary save, or `flushPendingSave()`), so typing a label does not
+    /// rewrite `queue.json`, stored waveforms and all, on every keystroke.
     @discardableResult
-    public func update(_ id: UUID, _ change: (inout CueJob) -> Void) -> Bool {
+    public func update(_ id: UUID, deferringSave: Bool = false, _ change: (inout CueJob) -> Void) -> Bool {
         guard let index = jobs.firstIndex(where: { $0.id == id }), !jobs[index].status.isActive else {
             return false
         }
@@ -253,7 +260,7 @@ public final class QueueManager {
         if Self.namingChanged(before, edited), !before.status.isFinished { edited.outputPath = nil }
         guard edited != before else { return true }
         jobs[index] = edited
-        persist()
+        if deferringSave { schedulePersist() } else { persist() }
         return true
     }
 
@@ -345,13 +352,22 @@ public final class QueueManager {
         return true
     }
 
+    /// The Paused jobs that write to `folder`, in list order.
+    public func pausedJobs(in folder: URL) -> [UUID] {
+        let key = Self.folderKey(folder)
+        return jobs.filter { $0.status == .paused && Self.folderKey(effectiveFolder(for: $0)) == key }.map(\.id)
+    }
+
     /// Returns the Paused jobs of `folder` to Pending. With `newFolder`, they (or the queue
-    /// override, if that was the unwritable folder) are pointed at it first.
-    public func resumePaused(in folder: URL, newFolder: URL? = nil) {
+    /// override, if that was the unwritable folder) are pointed at it first. Returns the jobs
+    /// resumed, so the caller can export them if the queue has stopped meanwhile.
+    @discardableResult
+    public func resumePaused(in folder: URL, newFolder: URL? = nil) -> [UUID] {
         let key = Self.folderKey(folder)
         let matching = jobs.indices.filter {
             jobs[$0].status == .paused && Self.folderKey(effectiveFolder(for: jobs[$0])) == key
         }
+        let resumed = matching.map { jobs[$0].id }
         let overrideWasUnwritable = destinationOverride.map(Self.folderKey) == key
         if let newFolder, overrideWasUnwritable { destinationOverride = newFolder }
         for index in matching {
@@ -361,6 +377,7 @@ public final class QueueManager {
         }
         unwritableFolders.removeAll { Self.folderKey($0) == key }
         persist()
+        return resumed
     }
 
     /// Waits until the current run (if any) has ended.
@@ -496,7 +513,27 @@ public final class QueueManager {
         if loaded.problem != nil || restored != loaded.document.jobs { persist() }
     }
 
+    /// Writes a deferred save now, if one is waiting (before quitting).
+    public func flushPendingSave() {
+        if pendingSave != nil { persist() }
+    }
+
+    /// True while a deferred save is waiting.
+    public var hasPendingSave: Bool { pendingSave != nil }
+
+    private func schedulePersist() {
+        pendingSave?.cancel()
+        let delay = UInt64(max(0, deferredSaveDelay) * 1_000_000_000)
+        pendingSave = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            self?.persist()
+        }
+    }
+
     private func persist() {
+        pendingSave?.cancel()
+        pendingSave = nil
         let document = QueueDocument(jobs: jobs, destinationOverride: destinationOverride?.path)
         do {
             try store.save(document)

@@ -11,17 +11,29 @@ enum QueueSupport {
         return base.appendingPathComponent("Waveform Cue", isDirectory: true)
     }
 
+    /// The queue, saved in `storageDirectory`, holding a power assertion while it exports.
+    ///
+    /// `MXFJobExporter` decodes through `JobAudioLifetime.exportAudio(for:source:)`, so the
+    /// running job's CAF lives in the same capped workspace as the selected job's.
     @MainActor
-    static func makeManager() -> QueueManager {
-        let manager = QueueManager(storageDirectory: storageDirectory, exporter: LegacyExportAdapter())
+    static func makeManager(audio: JobAudioLifetime) -> QueueManager {
+        let manager = QueueManager(storageDirectory: storageDirectory, exporter: MXFJobExporter(audio: audio),
+                                   sleep: SleepAssertion())
         manager.outputNamer = outputName
         return manager
+    }
+
+    /// The decoded-audio owner: one workspace in the session's temporary folder (deleted on quit),
+    /// at most two CAFs (the selected job and the running job, or a file being added).
+    @MainActor
+    static func makeAudioLifetime() -> JobAudioLifetime {
+        JobAudioLifetime(workspace: JobWorkspace())
     }
 
     /// The job's filename template resolved with `FilenameTemplate.resolve` in `folder`.
     static func outputName(for job: CueJob, in folder: URL, isTaken: (URL) -> Bool) -> URL {
         let name = FilenameTemplate.resolve(job.filenameTemplate, name: job.sourceName,
-                                            preset: LegacyExportAdapter.preset.name) { candidate in
+                                            preset: (ExportPreset.preset(for: job.presetID) ?? .default).name) { candidate in
             isTaken(folder.appendingPathComponent(candidate))
         }
         return folder.appendingPathComponent(name)
