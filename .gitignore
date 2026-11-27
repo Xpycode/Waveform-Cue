@@ -8,3 +8,4 @@ DerivedData/
 *.sync-conflict-*
 .claude/settings.local.json
 .claude/worktrees/
+.claude/zPackages

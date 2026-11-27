@@ -9,8 +9,13 @@ let package = Package(
     name: "CueCore",
     platforms: [.macOS(.v14)],
     products: [.library(name: "CueCore", targets: ["CueCore"])],
+    dependencies: [
+        // House packages, beside this project's folder. Agent worktrees reach them through
+        // the ignored `.claude/zPackages` symlink.
+        .package(path: "../../../../zPackages")
+    ],
     targets: [
-        .target(name: "CueCore", swiftSettings: v5),
+        .target(name: "CueCore", dependencies: [.product(name: "ProcessKit", package: "zPackages")], swiftSettings: v5),
         .testTarget(name: "CueCoreTests", dependencies: ["CueCore"], swiftSettings: v5)
     ]
 )

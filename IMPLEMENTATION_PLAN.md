@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 8/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 9/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -54,6 +54,7 @@ Facts established while planning that change or sharpen the spec's technical not
 - FFmpeg is not the bottleneck: 250 piped 1080p frames encode in 1.3–1.8 s. Core Graphics rendering sets the export speed.
 
 **House packages and references**
+- `CueCore` depends on `zPackages` (`ProcessKit`) at `../../../../zPackages`; agent worktrees under `.claude/worktrees/` resolve it through the ignored symlink `.claude/zPackages`.
 - `zPackages` is one Swift package (tools 6.2, macOS 14) with products `AppShellKit` and `ProcessKit`. The path from this folder is `../../zPackages`. It pulls `swift-subprocess` from the network on first resolve.
 - No existing app consumes AppShellKit through XcodeGen, so task 0.2 is the first to prove that wiring.
 - AppShellKit offers `FlatToolbarButtonStyle`, `PaneToggleButton`, `View.autosaveSplitView(named:)`, `AppAppearancePreference` with `View.appAppearance(_:)` and `AppAppearanceCommands`, and `Theme`. It has no window helper; the app sets `.windowStyle(.hiddenTitleBar)` and `.toolbarRole(.editor)` itself.
@@ -184,13 +185,14 @@ Dependency graph (no cycles):
   - Backpressure: `swift test --package-path Packages/CueCore --filter ClipTimelineTests`
   - Evidence (2026-11-27): 25 tests; identity case equals `AudioTrack.frames`, clamped clocks and build 10's `-af` string for 13 durations. Rate supplied through `TimelineRateProviding` (`.fps25`, `.fields50`, `.fps50`); `VideoStandard` needs a conformance in 2.x/3.1. FFmpeg trial: exact sample count, silent pre-roll, correct fades.
 
-- [ ] **1.4**: `CueLayout` computation (spec F, geometry only)
+- [x] **1.4**: `CueLayout` computation (spec F, geometry only)
   - Depends on: 0.3
   - Owns: `CueLayout.swift`, `CueLayoutTests.swift`
   - Detail: computes every rectangle and size `CuePicture` hard-codes today (overview, detail, clock baseline and sizes, labels, title travel area, margins) from zoom, clock sizes, clock position and safe zones. Give-way order: waveform heights, gaps, clock size (not below Small), title (not below 34 pt), then `fits == false`. EVS OSD preset is provisional: top 10 %, bottom 20 % (see X1).
   - Interface: `CueLayout(appearance inputs…)` with `overview`, `detail`, `clockBaseline`, `elapsedSize`, `remainingSize`, `titleArea`, `usable`, `reserved` bands, `fits`.
   - Success: with safe zones None and clocks below, every value equals today's constants (742/100, 361/265, baseline 100, 96 px margins, 55 px title inset); with reserves, no element rectangle intersects a reserved band; the give-way order and the does-not-fit case are tested.
   - Backpressure: `swift test --package-path Packages/CueCore --filter CueLayoutTests`
+  - Evidence (2026-11-27): 12 tests; every zoom × clock-size combination equals build 10's constants with safe zones None; with reserves no element extent (text, cursor overhang, shadow) enters a band; give-way order and top 30 % + bottom 30 % not fitting are tested. Constant-to-property map for 2.1 is in the task 1.4 report summarised in 2.1's brief. `ZoomWindow`/`ClockSize` are not `Sendable`; `CueLayout` stores raw values.
 
 - [x] **1.5**: Loudness parsing and gain rule (spec E, pure part)
   - Depends on: 0.3
