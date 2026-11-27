@@ -110,6 +110,63 @@ final class CueTypesTests: XCTestCase {
         XCTAssertEqual(clamped?.top, 30)
     }
 
+    func testEveryAppearanceSettingCanBeResetIndependentlyToSavedDefault() {
+        let job = CueAppearance()
+        var saved = CueAppearance()
+        saved.overviewColor = CueColor(1, 0, 0)
+        saved.detailColor = CueColor(0, 1, 0)
+        saved.warning = .ten
+        saved.solidRedAt = .oneSecond
+        saved.fadeCloseUp = false
+        saved.fadeFullTrack = true
+        saved.zoom = .off
+        saved.elapsed.size = .small
+        saved.elapsed.color = CueColor(0, 0, 1)
+        saved.remaining.size = .large
+        saved.remaining.color = CueColor(0, 1, 1)
+        saved.safeZones = SafeZones(preset: .custom, custom: .init(top: 11, bottom: 16, left: 3, right: 5))
+        saved.clockPosition = .above
+        saved.countdownTarget = .musicEnd
+        saved.showGuides = true
+        saved.titleFontName = "Georgia"
+        saved.clockFontName = "Menlo-Bold"
+        saved.showTitle = false
+        saved.showElapsed = false
+        saved.showRemaining = false
+        saved.showFullTrack = false
+        saved.playheadMode = .centered
+        saved.endZoom = .three
+        saved.closeUpShading = .playedBrighter
+        saved.markersEnabled = false
+        saved.loudnessAnalysisEnabled = false
+        saved.trimAndFadesEnabled = false
+        saved.preRollEnabled = false
+        saved.safeZonesEnabled = false
+
+        let settings = Set(CueAppearance.Setting.allCases)
+        XCTAssertEqual(job.differences(from: saved), settings)
+        for setting in settings {
+            let reset = job.resetting(setting, to: saved)
+            XCTAssertEqual(reset.differences(from: job), [setting])
+            XCTAssertEqual(reset.differences(from: saved), settings.subtracting([setting]))
+        }
+        XCTAssertEqual(job.resetting(.elapsedSize, to: saved).elapsed.size, .small)
+        XCTAssertEqual(job.resetting(.safeZoneBottom, to: saved).safeZones.custom.bottom, 16)
+    }
+
+    func testExplicitFactoryColorsAndFontNamesHaveNoOverride() {
+        let saved = CueAppearance()
+        var edited = saved
+        edited.overviewColor = CueAppearance.defaultOverview
+        edited.detailColor = CueAppearance.defaultDetail
+        edited.titleFontName = "HelveticaNeue-Medium"
+        edited.clockFontName = "Menlo-Regular"
+        XCTAssertEqual(edited.differences(from: saved), [])
+        edited.titleFontName = "MissingOnThisMac"
+        XCTAssertEqual(edited.differences(from: saved), [.titleFontName])
+        XCTAssertNil(edited.resetting(.titleFontName, to: saved).titleFontName)
+    }
+
     func testTrimIdentity() {
         XCTAssertTrue(TrimSettings().isIdentity)
         XCTAssertFalse(TrimSettings(preRoll: 2).isIdentity)

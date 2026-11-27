@@ -53,3 +53,9 @@ Jobs in a batch can share a look while keeping their own preset, title, timing a
 ## 2026-11-27 · Clock clearance and end zoom
 
 Rehearsal frames showed unused space above the clocks while the waveforms lost height. With clocks below, the layout now reduces that gap to its floor first. The operator's EVS output check still determines the final safe-zone percentages. End zoom has its own Off, 2, 3 and 5-second values. Keeping these separate from the starting zoom preserves the existing close-up choices. [Appearance and playhead plan](specs/cue-appearance-and-playhead-plan.md)
+
+## 2026-11-27 · Copy feature switches with the appearance and keep song values on the job
+
+Copying a batch look can disable trim, pre-roll, markers, safe zones or loudness analysis. Each job keeps its configured values, including its marker edits, trim points, fade lengths, pre-roll duration and loudness measurement. Preview and export can read the job’s effective settings and recover its original choices when a feature is enabled again.
+
+A saved job without a close-up shading choice gets played-brighter shading to preserve its build 11 look. The same missing choice in a saved import default selects upcoming-brighter for new jobs. Saving either choice makes it explicit for the next load. The existing Zoom Off choice continues to control close-up visibility. [Appearance and playhead plan](specs/cue-appearance-and-playhead-plan.md)

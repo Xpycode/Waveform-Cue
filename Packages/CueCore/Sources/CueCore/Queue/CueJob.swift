@@ -144,35 +144,21 @@ public struct PeaksSummary: Codable, Sendable, Equatable, Hashable {
 
 // MARK: - Appearance snapshot
 
-/// A job's copy of `CueAppearance`.
-///
-/// `CueAppearance` is `Codable` but neither `Equatable` nor `Sendable`, and it is owned by
-/// another task. Its stored properties are all immutable-value types (doubles, enums and
-/// optionals of them), so sharing a copy across threads is safe: hence `@unchecked Sendable`.
-/// Equality compares the canonical JSON form (sorted keys), which covers every saved field,
-/// including any `decodeIfPresent` fields added later.
-public struct AppearanceSnapshot: Codable, Equatable, @unchecked Sendable {
+/// The queue stores each job's appearance by value, in the original unwrapped JSON shape.
+public struct AppearanceSnapshot: Codable, Equatable, Sendable {
     public var value: CueAppearance
 
     public init(_ value: CueAppearance = CueAppearance()) { self.value = value }
 
     /// An unreadable appearance (for example a build 4 blob without clocks) falls back to the
-    /// default look rather than failing the job.
+    /// legacy job look.
     public init(from decoder: Decoder) throws {
-        value = (try? decoder.singleValueContainer().decode(CueAppearance.self)) ?? CueAppearance()
+        value = (try? decoder.singleValueContainer().decode(CueAppearance.self)) ?? .legacyJobAppearance
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
         try c.encode(value)
-    }
-
-    public static func == (lhs: Self, rhs: Self) -> Bool { lhs.canonical == rhs.canonical }
-
-    private var canonical: Data? {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return try? encoder.encode(value)
     }
 }
 
@@ -259,6 +245,41 @@ public struct CueJob: Identifiable, Sendable, Equatable {
         get { appearanceSnapshot.value }
         set { appearanceSnapshot = AppearanceSnapshot(newValue) }
     }
+
+    public var effectiveAppearance: CueAppearance {
+        var result = appearance
+        if !result.markersEnabled { result.countdownTarget = .fileEnd }
+        if !result.safeZonesEnabled {
+            result.safeZones = .none
+            result.showGuides = false
+        }
+        return result
+    }
+
+    public var effectiveMarkers: MusicMarkers {
+        effectiveMarkers(detected: analysis?.markers ?? markers)
+    }
+
+    /// The exporter may have just decoded a legacy job without a saved track analysis.
+    /// Always return an explicit value, so disabled markers cannot fall back to that detection.
+    public func effectiveMarkers(detected: MusicMarkers) -> MusicMarkers {
+        appearance.markersEnabled ? detected.applyingEdits(from: markers) : .none
+    }
+
+    public var effectiveTrim: TrimSettings {
+        var result = appearance.trimAndFadesEnabled ? trim : .none
+        result.preRoll = appearance.preRollEnabled ? trim.preRoll : 0
+        return result
+    }
+
+    public var shouldMeasureLoudness: Bool {
+        appearance.loudnessAnalysisEnabled && loudness == nil
+    }
+
+    public var effectiveGainDB: Double {
+        guard appearance.loudnessAnalysisEnabled, normalise, let loudness else { return 0 }
+        return Loudness.normalisation(for: loudness).gainDB
+    }
 }
 
 extension CueJob: Codable {
@@ -289,7 +310,7 @@ extension CueJob: Codable {
             ?? source.deletingPathExtension().lastPathComponent
         labelX = value(Double.self, .labelX).flatMap { $0.isFinite ? $0 : nil } ?? 0
         labelY = value(Double.self, .labelY).flatMap { $0.isFinite ? $0 : nil } ?? 1
-        appearanceSnapshot = value(AppearanceSnapshot.self, .appearance) ?? AppearanceSnapshot()
+        appearanceSnapshot = value(AppearanceSnapshot.self, .appearance) ?? AppearanceSnapshot(.legacyJobAppearance)
         presetID = value(PresetID.self, .presetID) ?? ""
         layout = value(AudioLayout.self, .layout) ?? .default
         startTimecode = value(String.self, .startTimecode) ?? Self.defaultStartTimecode

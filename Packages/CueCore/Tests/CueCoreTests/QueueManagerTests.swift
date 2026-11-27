@@ -597,6 +597,38 @@ final class QueueManagerTests: XCTestCase {
         }
     }
 
+    func testAppearanceOnlyCopiesFeatureSwitchesAndDisplayChoices() throws {
+        let manager = makeManager(ControlledExporter())
+        var source = job("Source")
+        source.appearance.titleFontName = "Georgia"
+        source.appearance.clockFontName = "Menlo-Bold"
+        source.appearance.playheadMode = .centered
+        source.appearance.endZoom = .three
+        source.appearance.closeUpShading = .playedBrighter
+        source.appearance.showTitle = false
+        source.appearance.showElapsed = false
+        source.appearance.showRemaining = false
+        source.appearance.showFullTrack = false
+        source.appearance.markersEnabled = false
+        source.appearance.loudnessAnalysisEnabled = false
+        source.appearance.trimAndFadesEnabled = false
+        source.appearance.preRollEnabled = false
+        source.appearance.safeZonesEnabled = false
+        var target = job("Own title")
+        target.trim = TrimSettings(inPoint: 1, outPoint: 30, fadeIn: 2, preRoll: 5)
+        target.normalise = true
+        target.loudness = LoudnessMeasurement(integratedLUFS: -25, truePeakDBTP: -6, rangeLU: 2)
+        target.markers = MusicMarkers(editedMusicEnd: 28)
+        target.presetID = "avci100-1080i50"
+        manager.add([source, target])
+        XCTAssertEqual(manager.applyToAll(from: source.id, scope: .appearanceOnly), [target.id])
+        var expected = target
+        expected.appearance = source.appearance
+        let copied = try XCTUnwrap(manager.job(target.id))
+        XCTAssertEqual(copied, expected)
+        XCTAssertEqual(try JSONDecoder().decode(CueJob.self, from: JSONEncoder().encode(copied)), expected)
+    }
+
     func testBothCopyScopesPreserveSongSettingsAndSkipIneligibleJobs() async throws {
         let exporter = ControlledExporter()
         let manager = makeManager(exporter)

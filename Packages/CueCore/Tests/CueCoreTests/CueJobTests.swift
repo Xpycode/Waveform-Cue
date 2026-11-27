@@ -101,7 +101,12 @@ final class CueJobTests: XCTestCase {
         XCTAssertEqual(job.markers, .none)
         XCTAssertNil(job.loudness)
         XCTAssertNil(job.peaks)
-        XCTAssertEqual(job.appearanceSnapshot, AppearanceSnapshot(), "unreadable appearance becomes the default")
+        var legacyLook = CueAppearance()
+        legacyLook.closeUpShading = .playedBrighter
+        XCTAssertEqual(job.appearance, legacyLook)
+        var missing = legacy
+        missing.removeValue(forKey: "appearance")
+        XCTAssertEqual(try decode(missing).appearance, legacyLook)
     }
 
     func testMalformedFieldsDegradeInsteadOfThrowing() throws {
@@ -164,6 +169,65 @@ final class CueJobTests: XCTestCase {
         a.fadeFullTrack = b.fadeFullTrack
         a.remaining.size = .large
         XCTAssertNotEqual(AppearanceSnapshot(a), AppearanceSnapshot(b))
+    }
+
+    func testFeatureSwitchesRestoreStoredSongSettings() throws {
+        var job = sampleJob()
+        job.normalise = true
+        job.appearance.safeZones = SafeZones(preset: .custom, custom: .init(top: 11, bottom: 16))
+        job.appearance.showGuides = true
+        job.appearance.countdownTarget = .musicEnd
+        let detected = MusicMarkers(detectedMusicEnd: 29, detectedFadeStart: 25)
+        job.analysis = TrackAnalysis(seconds: 31, detailPeaks: [1], markers: detected, absolutePeak: 1)
+        let original = job
+        let gain = Loudness.normalisation(for: try XCTUnwrap(job.loudness)).gainDB
+
+        job.appearance.markersEnabled = false
+        job.appearance.safeZonesEnabled = false
+        job.appearance.loudnessAnalysisEnabled = false
+        job.appearance.trimAndFadesEnabled = false
+        XCTAssertEqual(job.effectiveAppearance.countdownTarget, .fileEnd)
+        XCTAssertEqual(job.effectiveAppearance.safeZones, .none)
+        XCTAssertFalse(job.effectiveAppearance.showGuides)
+        XCTAssertEqual(job.effectiveMarkers, .none)
+        XCTAssertEqual(job.effectiveMarkers(detected: detected), .none)
+        XCTAssertEqual(job.effectiveTrim, TrimSettings(preRoll: 5))
+        XCTAssertEqual(job.effectiveGainDB, 0)
+        XCTAssertFalse(job.shouldMeasureLoudness)
+
+        job.appearance.preRollEnabled = false
+        XCTAssertEqual(job.effectiveTrim, .none)
+        job = try roundTrip(job)
+        job.appearance.trimAndFadesEnabled = true
+        var trimWithoutSlate = original.trim
+        trimWithoutSlate.preRoll = 0
+        XCTAssertEqual(job.effectiveTrim, trimWithoutSlate)
+        job.appearance.preRollEnabled = true
+        job.appearance.markersEnabled = true
+        job.appearance.safeZonesEnabled = true
+        job.appearance.loudnessAnalysisEnabled = true
+        XCTAssertEqual(job, original)
+        XCTAssertEqual(job.effectiveAppearance, original.appearance)
+        XCTAssertEqual(job.effectiveMarkers, detected.applyingEdits(from: original.markers))
+        XCTAssertEqual(job.effectiveTrim, original.trim)
+        XCTAssertEqual(job.effectiveGainDB, gain)
+        job.normalise = false
+        XCTAssertEqual(job.effectiveGainDB, 0)
+        XCTAssertFalse(job.shouldMeasureLoudness)
+        job.loudness = nil
+        XCTAssertTrue(job.shouldMeasureLoudness)
+        job.appearance.loudnessAnalysisEnabled = false
+        XCTAssertFalse(job.shouldMeasureLoudness)
+    }
+
+    func testFreshlyDetectedMarkersAreUsedForJobsWithoutStoredAnalysis() {
+        var job = sampleJob()
+        let fresh = MusicMarkers(detectedMusicEnd: 29, detectedFadeStart: 25)
+        XCTAssertNil(job.analysis)
+        XCTAssertEqual(job.effectiveMarkers, job.markers)
+        XCTAssertEqual(job.effectiveMarkers(detected: fresh), fresh.applyingEdits(from: job.markers))
+        job.appearance.markersEnabled = false
+        XCTAssertEqual(job.effectiveMarkers(detected: fresh), .none)
     }
 
     func testStatusHelpers() {

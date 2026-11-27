@@ -3,8 +3,8 @@
 > Execute with the shared `commands/execute.md` procedure when this plan is selected explicitly.
 > Task state and evidence are authoritative here. [TASKS.md](../TASKS.md) links here and holds backlog and inbox.
 
-**Progress:** 4/9. E1 and E2 remain open. D1, U2 and helper readiness passed 2026-11-27.
-**Status:** Wave 1 complete on `feature/cue-appearance-playhead`. Wave 2 task 2.1 is ready. The operator selected Wave 1 only.
+**Progress:** 5/9. E1 and E2 remain open. D1, U2 and helper readiness passed 2026-11-27.
+**Status:** Wave 2 is complete on `feature/cue-appearance-playhead`. Wave 3 tasks 3.1 and 3.2 are ready.
 **Task states:** unchecked = pending, implemented-unverified or blocked (name the gate); checked = complete with the required evidence.
 
 ## Goal
@@ -79,7 +79,7 @@ U2 is approved, so no task waits on it. A control that turns out not to fit as t
 
 ## Execution schedule and ownership
 
-- **Scope and limits.** The operator selected Wave 1 on 2026-11-27. Work on branch `feature/cue-appearance-playhead` until build 11's task 6.4 is closed, because 6.4 builds Release from the checkout. The coordinator sets `CURRENT_PROJECT_VERSION: "12"` in `project.yml` before 5.1; the Release build goes to `04_Exports/0.1-12-rc`. Pushes and app control keep their own authorization.
+- **Scope and limits.** The operator selected Waves 1 and 2 in separate requests on 2026-11-27. Work on branch `feature/cue-appearance-playhead` until build 11's task 6.4 is closed, because 6.4 builds Release from the checkout. The coordinator sets `CURRENT_PROJECT_VERSION: "12"` in `project.yml` before 5.1; the Release build goes to `04_Exports/0.1-12-rc`. Pushes and app control keep their own authorization.
 - **Coordinator-owned:** `project.yml`, `WaveformCue.xcodeproj` (run `xcodegen generate` after any wave that adds app-target files), `Packages/CueCore/Package.swift`, `Core/CueTypes.swift`, Git, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, reference-hash re-recording, and the Atlas helper (one session at a time).
 - **Tests** means `swift test --package-path Packages/CueCore --scratch-path <the worker's own scratch folder> --filter '<SuiteA|SuiteB>'`. FFmpeg suites add `FFMPEG_EXECUTABLE=/Applications/Magpie.app/Contents/Resources/ffmpeg` in front; without it they pass by skipping. A new scratch folder fetches `swift-subprocess` once from the network.
 - **Build** means `xcodegen generate && xcodebuild -project WaveformCue.xcodeproj -scheme WaveformCue -configuration Debug -derivedDataPath <folder outside the project> build`. The coordinator runs it after merging each wave, including Wave 2, whose public types the app compiles against. A worktree worker may run it for itself but does not commit `project.pbxproj`. `build` launches nothing.
@@ -137,7 +137,7 @@ Dependency graph (no cycles):
 
 ### Wave 2 (single task: the settings model everything later reads)
 
-- [ ] **2.1**: Store the new choices, keep older jobs unchanged, and expose effective settings
+- [x] **2.1**: Store the new choices, keep older jobs unchanged, and expose effective settings
   - Depends on / external gates: 1.1 (shares `QueueManagerTests`), 1.2 (`PlayheadMode`, `EndZoom`)
   - Owns: `Core/CueAppearance.swift`, `Core/Queue/CueJob.swift`, `Tests/CueJobTests.swift`, `Tests/CueTypesTests.swift`, `Tests/QueueStoreTests.swift`, the decoding tests in `Tests/RenderTests.swift:65–115`, and one added copy-scope test in `Tests/QueueManagerTests.swift`
   - Detail: add to `CueAppearance`, all optional and read with `decodeIfPresent`: title and clock font names, visibility of title, each clock and the full track, playhead mode, end zoom, close-up shading, and the five feature switches. A missing key in a saved job means today's behaviour: edge-held, end zoom Off, played audio brighter, everything visible and enabled. The factory look, and a saved default that predates this round, use upcoming audio brighter (D1). Add `differences(from:)` (the settings that differ from another appearance) and `resetting(_:to:)`. Fix the stale comment at `CueJob.swift:149`.
@@ -236,6 +236,7 @@ Added at the operator's request: reversed close-up shading.
 | 1.2 | Window worker, independent review by appearance worker | Six tests covering 20 ms jogs in both directions, widths, trim, music-end targets and partial final frames. At 6.01 s the five-second legacy window ends at 6.04 s and its intersection ends at 6.01 s. No continuity or target-hold exception. | `91144a8` | 2.1 and 3.1 |
 | 1.3 | Fonts worker, independent review by appearance worker | Four tests cover fallback, default measurements, shaped digits, clock candidates and mixed-digit kerning. American Typewriter and Euphemia UCAS remain available for titles. Clock selection excludes both because their timecodes change width. | `3be2e93` | 3.1 and 4.1 |
 | 2.2 | Coordinator, independent review by appearance worker | At 11%/11%, Small Elapsed, Large Remaining and five-second zoom, the full track grew from 71 to 93 px and close-up from 182 to 244 px. Tick-to-clock clearance went from 95.17 to 12.17 px. Raster tests found only background in reserved bands. Larger reserves spend the residual after waveform reduction. Above-clock and no-reserve fixtures passed. | `dcd417e` | 3.1 and E1 |
+| 2.1 | One settings worker, independent migration reviewer, coordinator integration | 97 tests passed in the five required suites. Eight synthetic jobs written by the previous encoder retained every original field after a save and reload with both versions. Arm64 Debug build and signature verification passed. [Validation and commands](../sessions/2026-11-27.md#appearance-and-playhead-wave-2) | Local commit “Preserve saved cue appearances and expose per-job feature settings” | 3.1 and 3.2 ready |
 
 Wave 3 integration should pass the picture timeline's fractional clock-frame position in source seconds and its physical source range to `CloseUpWindow.interval`. The window may extend through the last padded field. Its intersection clips to the actual source. The end-zoom and font controls are scheduled for Wave 4.
 

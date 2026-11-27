@@ -132,6 +132,62 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertNil(result.document.destinationOverride)
     }
 
+    func testBuild11QueueKeepsItsAppearanceAndSongValuesAcrossSaveAndReload() throws {
+        let fixture = """
+        {"version":1,"destinationOverride":"/out","jobs":[{
+          "id":"1337A672-5B86-45EA-B6F7-D8F4CBAFA72B","sourcePath":"/media/old.wav",
+          "labelText":"Old title","labelX":0.2,"labelY":0.8,"presetID":"avci100-1080i50",
+          "layout":4,"normalise":true,"trim":{"inPoint":1,"fadeOut":2,"preRoll":3},
+          "markers":{"editedMusicEnd":18},"loudness":{"integratedLUFS":-21,"truePeakDBTP":-2,"rangeLU":4},
+          "appearance":{"elapsed":{"color":{"red":1,"green":0,"blue":0},"size":"Small"},
+            "remaining":{"color":{"red":0,"green":1,"blue":0},"size":"Large"},"zoom":-1,
+            "warning":10,"fadeFullTrack":true,"fadeCloseUp":false,"solidRedAt":"oneSecond",
+            "overviewColor":{"red":0.8,"green":0.3,"blue":0.1},
+            "safeZones":{"preset":"custom","custom":{"top":11,"bottom":16}},
+            "clockPosition":"above","countdownTarget":"musicEnd","showGuides":true}}]}
+        """
+        let store = QueueStore(directory: directory)
+        try Data(fixture.utf8).write(to: store.fileURL)
+        let first = store.load()
+        XCTAssertNil(first.problem)
+        let job = try XCTUnwrap(first.document.jobs.first)
+        var expected = CueAppearance()
+        expected.elapsed.color = CueColor(1, 0, 0)
+        expected.elapsed.size = .small
+        expected.remaining.color = CueColor(0, 1, 0)
+        expected.remaining.size = .large
+        expected.zoom = .off
+        expected.warning = .ten
+        expected.fadeFullTrack = true
+        expected.fadeCloseUp = false
+        expected.solidRedAt = .oneSecond
+        expected.overviewColor = CueColor(0.8, 0.3, 0.1)
+        expected.safeZones = SafeZones(preset: .custom, custom: .init(top: 11, bottom: 16))
+        expected.clockPosition = .above
+        expected.countdownTarget = .musicEnd
+        expected.showGuides = true
+        expected.closeUpShading = .playedBrighter
+        XCTAssertEqual(job.effectiveAppearance, expected)
+        XCTAssertEqual(job.appearance.playheadMode, .edgeHeld)
+        XCTAssertEqual(job.appearance.endZoom, .off)
+        XCTAssertTrue(job.appearance.showTitle && job.appearance.showFullTrack)
+        XCTAssertTrue(job.appearance.showElapsed && job.appearance.showRemaining)
+        XCTAssertTrue(job.appearance.markersEnabled && job.appearance.safeZonesEnabled)
+        XCTAssertTrue(job.appearance.loudnessAnalysisEnabled && job.appearance.trimAndFadesEnabled && job.appearance.preRollEnabled)
+        XCTAssertEqual(job.effectiveTrim, TrimSettings(inPoint: 1, fadeOut: 2, preRoll: 3))
+        XCTAssertEqual(job.effectiveMarkers.musicEnd, 18)
+        XCTAssertEqual(job.effectiveGainDB, -2)
+        XCTAssertEqual(job.labelText, "Old title")
+        XCTAssertEqual(job.labelX, 0.2)
+        XCTAssertEqual(job.labelY, 0.8)
+        XCTAssertEqual(job.layout, .four)
+        XCTAssertEqual(job.presetID, "avci100-1080i50")
+        try store.save(first.document)
+        let second = QueueStore(directory: directory).load()
+        XCTAssertNil(second.problem)
+        XCTAssertEqual(second.document, first.document)
+    }
+
     func testLegacyDocumentWithoutVersion() throws {
         let fixture = #"{"jobs": [{"sourcePath": "/a/b.wav"}], "destinationOverride": "/out"}"#
         try Data(fixture.utf8).write(to: directory.appendingPathComponent(QueueStore.fileName))

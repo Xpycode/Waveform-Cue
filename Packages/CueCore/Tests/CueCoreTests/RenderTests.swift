@@ -89,6 +89,22 @@ final class RenderTests: XCTestCase {
         XCTAssertEqual(decoded.layout, CueLayout(zoom: .five, elapsed: .large, remaining: .extraLarge))
     }
 
+    func testOldDefaultUsesNewShadingAndExplicitlySavedLegacyShadingSurvives() throws {
+        let suite = "CueAppearanceTests-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(CueAppearance.load(from: defaults).closeUpShading, .upcomingBrighter)
+        let blob = Data(Self.build10JSON.utf8)
+        defaults.set(blob, forKey: "ClockAppearance.v1")
+        var expected = try JSONDecoder().decode(CueAppearance.self, from: blob)
+        XCTAssertEqual(expected.closeUpShading, .playedBrighter)
+        expected.closeUpShading = .upcomingBrighter
+        XCTAssertEqual(CueAppearance.load(from: defaults), expected)
+        expected.closeUpShading = .playedBrighter
+        expected.save(to: defaults)
+        XCTAssertEqual(CueAppearance.load(from: defaults), expected)
+    }
+
     func testNewSettingsRoundTripAndToleratePoorValues() throws {
         var appearance = CueAppearance()
         appearance.safeZones = Self.zones(top: 4, bottom: 22, left: 3, right: 9)
@@ -103,12 +119,22 @@ final class RenderTests: XCTestCase {
         object["clockPosition"] = "sideways"
         object["countdownTarget"] = 3
         object["showGuides"] = "yes"
+        object["endZoom"] = 20
+        object["playheadMode"] = "future mode"
+        object["closeUpShading"] = "invalid"
+        object["markersEnabled"] = "no"
+        object["showTitle"] = NSNull()
         let poor = try JSONDecoder().decode(CueAppearance.self, from: JSONSerialization.data(withJSONObject: object))
         XCTAssertEqual(poor.safeZones, .none)
         XCTAssertEqual(poor.clockPosition, .below)
         XCTAssertEqual(poor.countdownTarget, .fileEnd)
         XCTAssertFalse(poor.showGuides)
         XCTAssertEqual(poor.zoom, .five)
+        XCTAssertEqual(poor.endZoom, .off)
+        XCTAssertEqual(poor.playheadMode, .edgeHeld)
+        XCTAssertEqual(poor.closeUpShading, .playedBrighter)
+        XCTAssertTrue(poor.markersEnabled)
+        XCTAssertTrue(poor.showTitle)
     }
 
     // MARK: - Timeline entry point
