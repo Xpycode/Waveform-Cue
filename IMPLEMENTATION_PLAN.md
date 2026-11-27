@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 2/24; external acceptance: U1, X1, X2, X3, X4 open (G1 passed 2026-11-27).
+**Progress:** 3/24; external acceptance: U1, X1, X2, X3, X4 open (G1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -146,13 +146,14 @@ Dependency graph (no cycles):
   - Backpressure: `swift test --package-path Packages/CueCore` and `xcodegen generate && xcodebuild -scheme WaveformCue -configuration Debug -derivedDataPath <scratch>/dd build`
   - Evidence (2026-11-27): 7 baseline tests pass in debug and release (benchmark skipped without `CUE_BENCH`); 20 render hashes pinned (4 appearances × 5 frames, including a countdown-warning case); `xcodebuild build` succeeded with `CueCore`, `AppShellKit` and `ProcessKit` linked. Behaviour unchanged by construction (files moved, only `public` and a `CueLabel` init added); no launch was made.
 
-- [ ] **0.3**: Shared value types
+- [x] **0.3**: Shared value types
   - Depends on: 0.2
   - Owns: `Packages/CueCore/Sources/CueCore/CueTypes.swift`, `CueTypesTests.swift`
   - Detail: small `Codable, Equatable, Sendable` types with tolerant decoding (cookbook 122) that several Wave 1 tasks exchange: `AudioLayout` (2, 4, 8 mono), `MusicMarkers` (detected and edited music end and fade start, in seconds; `noMusic`), `LoudnessMeasurement` (integrated, true peak, range), `TrimSettings` (in, out, fade in, fade out, pre-roll seconds), `SafeZones` (preset none / evsOSD / custom, four percentages 0–30), `ClockPosition`, `CountdownTarget` (file end, music end), `PresetID` (string).
   - Interface: these names and fields are frozen for Waves 1–5; changes go through the coordinator.
   - Success: round-trip and missing-key decoding tests pass.
   - Backpressure: `swift test --package-path Packages/CueCore --filter CueTypesTests`
+  - Evidence (2026-11-27): 9 `CueTypesTests` pass (round trips, empty and partial objects, unknown enum values, wrong types, clamping); full suite 16 tests, 0 failures. Additions beyond the list: `SafeZones.Insets` (clamped 0–30) and `SafeZones.evsOSDInsets` (provisional 10/20, X1); `LoudnessMeasurement` stores silence (`-inf`) as `nil` because JSON cannot hold infinity; `TrimSettings.fadeChoices`/`preRollChoices`.
 
 ### Wave 1 (parallel — seven tasks, all new files, disjoint ownership)
 
@@ -378,6 +379,7 @@ Dependency graph (no cycles):
 |---|---|---|---|---|
 | 0.1 | Coordinator, serial | `git status -sb` → `## main...origin/main`; https://github.com/Xpycode/Waveform-Cue (public) | `b51eee8` | Next: 0.2, then 0.3; execution not yet requested |
 | 0.2 | Coordinator, serial (foundation every later task builds on) | `swift test --package-path Packages/CueCore` 7 tests, 0 failures, 1 skip (benchmark); release run with `CUE_BENCH=1` 254 frames/s; `xcodebuild … build` succeeded | see commit "Extract CueCore" | Next: 0.3 |
+| 0.3 | Coordinator, serial (frozen interface for Wave 1) | `swift test --package-path Packages/CueCore` 16 tests, 0 failures, 1 skip | see commit "Add shared value types" | Next: Wave 1 |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
