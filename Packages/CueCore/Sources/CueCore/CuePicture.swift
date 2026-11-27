@@ -17,6 +17,11 @@ public enum MarkerKind: String, Equatable, Hashable, Sendable, CaseIterable {
     case musicEnd, fadeStart
 }
 
+/// The two ends of a trim: the in point and the out point.
+public enum TrimEdge: String, Equatable, Hashable, Sendable, CaseIterable {
+    case inPoint, outPoint
+}
+
 extension MusicMarkers {
     /// The marker in force (edited, else detected).
     public func value(_ kind: MarkerKind) -> Double? { kind == .musicEnd ? musicEnd : fadeStart }
@@ -79,6 +84,20 @@ public enum CuePicture {
         waveform(track.peaks, in: layout.overview)
     }
 
+    /// The full-track envelope for a timeline: only the trimmed range (in to out) spans the
+    /// overview. Untrimmed it is exactly `overviewPath(_:layout:)`, so build 10 renders are
+    /// unchanged. Pass it as `path` to the timeline `draw`.
+    public static func overviewPath(_ track: AudioTrack, layout: CueLayout, timeline: ClipTimeline) -> CGPath {
+        guard timeline.isTrimmed, !track.detailPeaks.isEmpty else { return overviewPath(track, layout: layout) }
+        let range = timeline.sourceRange
+        return waveform(track.peaks(in: range.lowerBound..<max(range.upperBound, range.lowerBound + 1e-6),
+                                    columns: overviewColumns),
+                        in: layout.overview)
+    }
+
+    /// Columns in the full-track envelope (build 10's `AudioTrack.peaks` count).
+    public static let overviewColumns = 1600
+
     public static func line(_ text: String, font: String, size: CGFloat, color: CGColor) -> CTLine {
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName(font as CFString, size, nil),
@@ -120,11 +139,13 @@ public enum CuePicture {
              heldRange: heldRange)
     }
 
-    /// The untrimmed 25 fps timeline for a track: its markers and the appearance's countdown
-    /// target. `markers` overrides the track's own (a job's edited values).
+    /// The 25 fps preview timeline for a track: its markers and the appearance's countdown
+    /// target. `markers` overrides the track's own (a job's edited values); `trim` adds the
+    /// job's in and out points and pre-roll (none by default: the whole track, as in build 10).
     public static func timeline(for track: AudioTrack, appearance: CueAppearance,
-                                markers: MusicMarkers? = nil) -> ClipTimeline {
-        ClipTimeline(duration: track.seconds, markers: markers ?? track.markers, target: appearance.countdownTarget)
+                                markers: MusicMarkers? = nil, trim: TrimSettings = .none) -> ClipTimeline {
+        ClipTimeline(duration: track.seconds, trim: trim, markers: markers ?? track.markers,
+                     target: appearance.countdownTarget)
     }
 
     // Marker colours: distinct from the waveforms, the cursor and the warning red.
@@ -144,16 +165,26 @@ public enum CuePicture {
     /// target File end (or no marker, or no tail) the clocks and fades are build 10's.
     /// Safe-zone guides are never drawn here (the monitor overlays them).
     ///
-    /// Not yet here: the pre-roll slate draws as the first music frame (task 4.3).
+    /// With a trim, `path` must be `overviewPath(track, layout:, timeline:)`: the overview, the
+    /// close-up, the clocks and the markers then cover only the trimmed range. During the
+    /// pre-roll (`timeline.position(at:)` is `.slate`) the image is the slate instead: title,
+    /// music duration, `loudness` when known and the "Starts in" countdown, with no waveforms
+    /// and no clocks (`drawSlate`).
     public static func draw(in ctx: CGContext, rect: CGRect, track: AudioTrack, path: CGPath,
                             timeline: ClipTimeline, layout: CueLayout, position: Int, label: CueLabel,
-                            appearance: CueAppearance = CueAppearance(), heldRange: Range<Int>? = nil) {
+                            appearance: CueAppearance = CueAppearance(), heldRange: Range<Int>? = nil,
+                            loudness: LoudnessMeasurement? = nil) {
         typealias M = CueLayout.Metrics
         ctx.saveGState()
         defer { ctx.restoreGState() }
         ctx.translateBy(x: rect.minX, y: rect.minY)
         ctx.scaleBy(x: rect.width / size.width, y: rect.height / size.height)
         ctx.textMatrix = .identity
+        if case .slate(let startsIn) = timeline.position(at: position) {
+            drawSlate(slate(track: track, timeline: timeline, startsIn: startsIn, label: label, loudness: loudness),
+                      in: ctx, layout: layout)
+            return
+        }
         func fill(_ rect: CGRect, _ color: CGColor) {
             ctx.setFillColor(color)
             ctx.fill(rect)
@@ -310,6 +341,114 @@ public enum CuePicture {
         }
     }
 
+    // MARK: Slate
+
+    /// What the pre-roll slate shows, top to bottom.
+    public struct Slate: Sendable, Equatable {
+        /// The overlay title, or the file name when the title is empty.
+        public var title: String
+        public var startsInLabel: String
+        /// The countdown to the first music frame, `MM:SS:FF` on the 25 base.
+        public var startsIn: String
+        /// "Music duration MM:SS:FF": the trimmed range.
+        public var duration: String
+        /// The loudness line, or nil when no measurement is known.
+        public var loudness: String?
+
+        /// The lines in drawing order.
+        public var lines: [String] { [title, startsInLabel, startsIn, duration] + (loudness.map { [$0] } ?? []) }
+    }
+
+    public static let startsInLabel = "Starts in"
+
+    /// The slate content for a position `startsIn` 25-base frames before the music.
+    public static func slate(track: AudioTrack, timeline: ClipTimeline, startsIn: Int, label: CueLabel,
+                             loudness: LoudnessMeasurement?) -> Slate {
+        let trimmed = label.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = trimmed.isEmpty ? track.url.deletingPathExtension().lastPathComponent : trimmed
+        return Slate(title: title, startsInLabel: startsInLabel, startsIn: AudioTrack.clock(startsIn),
+                     duration: "Music duration " + AudioTrack.clock(timeline.clockFrames),
+                     loudness: loudness.map(loudnessText))
+    }
+
+    /// "−23.0 LUFS · TP −1.0 dBTP · LRA 6.2 LU"; "Loudness: silent" without integrated loudness.
+    public static func loudnessText(_ m: LoudnessMeasurement) -> String {
+        func number(_ value: Double) -> String {
+            String(format: "%.1f", value).replacingOccurrences(of: "-", with: "\u{2212}")
+        }
+        guard let lufs = m.integratedLUFS else { return "Loudness: silent" }
+        var parts = ["\(number(lufs)) LUFS"]
+        if let tp = m.truePeakDBTP { parts.append("TP \(number(tp)) dBTP") }
+        parts.append("LRA \(number(m.rangeLU)) LU")
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
+    /// Slate type sizes at full scale (picture points).
+    enum SlateMetrics {
+        static let titleSize: CGFloat = 64
+        static let labelSize: CGFloat = 36
+        static let countdownSize: CGFloat = 190
+        static let infoSize: CGFloat = 36
+        /// Gaps above each row after the first: label, countdown, duration, loudness.
+        static let gaps: [CGFloat] = [64, 8, 64, 16]
+    }
+
+    /// Draws the slate centred in `layout.safeFrame`, so nothing enters a reserved band. The
+    /// stack scales down as a whole when the safe frame is too small; long lines are truncated
+    /// to its width. Called with the context already in picture points.
+    static func drawSlate(_ slate: Slate, in ctx: CGContext, layout: CueLayout) {
+        typealias S = SlateMetrics
+        ctx.setFillColor(background)
+        ctx.fill(CGRect(origin: .zero, size: size))
+        // Keep antialiasing off the safe frame's edges.
+        let frame = layout.safeFrame.insetBy(dx: 2, dy: 2)
+        guard frame.width > 4, frame.height > 4 else { return }
+        let text = rgb(0.83, 0.87, 0.87)
+        var rows: [(text: String, font: String, points: CGFloat, color: CGColor)] = [
+            (slate.title, "HelveticaNeue-Medium", S.titleSize, text),
+            (slate.startsInLabel, "HelveticaNeue-Medium", S.labelSize, dim),
+            (slate.startsIn, "Menlo", S.countdownSize, mint),
+            (slate.duration, "HelveticaNeue-Medium", S.infoSize, text),
+        ]
+        if let loudness = slate.loudness { rows.append((loudness, "HelveticaNeue-Medium", S.infoSize, dim)) }
+        func metrics(_ run: CTLine) -> (width: CGFloat, ascent: CGFloat, descent: CGFloat) {
+            var ascent: CGFloat = 0, descent: CGFloat = 0
+            let width = CGFloat(CTLineGetTypographicBounds(run, &ascent, &descent, nil))
+            return (width, ascent, descent)
+        }
+        func lines(scale: CGFloat) -> [CTLine] {
+            rows.map { row in
+                let run = line(row.text, font: row.font, size: row.points * scale, color: row.color)
+                guard metrics(run).width > frame.width else { return run }
+                let ellipsis = line("\u{2026}", font: row.font, size: row.points * scale, color: row.color)
+                return CTLineCreateTruncatedLine(run, Double(frame.width), .end, ellipsis) ?? run
+            }
+        }
+        func height(_ runs: [CTLine], scale: CGFloat) -> CGFloat {
+            runs.map { let m = metrics($0); return m.ascent + m.descent }.reduce(0, +)
+                + S.gaps.prefix(runs.count - 1).reduce(0, +) * scale
+        }
+        // The countdown is never truncated: the whole stack shrinks until it fits the width.
+        let countdownWidth = metrics(line(slate.startsIn, font: "Menlo", size: S.countdownSize, color: mint)).width
+        var scale = min(1, frame.width / max(1, countdownWidth),
+                        frame.height / max(1, height(lines(scale: 1), scale: 1)))
+        var runs = lines(scale: scale)
+        // Font metrics do not scale exactly linearly; shrink until the stack fits.
+        while height(runs, scale: scale) > frame.height, scale > 0.05 {
+            scale *= 0.95
+            runs = lines(scale: scale)
+        }
+        var y = frame.midY + height(runs, scale: scale) / 2
+        for (index, run) in runs.enumerated() {
+            if index > 0 { y -= S.gaps[index - 1] * scale }
+            let m = metrics(run)
+            let baseline = y - m.ascent
+            ctx.textPosition = CGPoint(x: frame.midX - min(m.width, frame.width) / 2, y: baseline)
+            CTLineDraw(run, ctx)
+            y = baseline - m.descent
+        }
+    }
+
     /// The playhead on the 25 clock base for a timeline position: whole frames at 25 images per
     /// second, half frames for 50 Hz fields and frames. Clamped to the music; 0 during the slate.
     public static func playheadFrame(timeline: ClipTimeline, position: Int) -> Double {
@@ -341,6 +480,8 @@ extension CuePicture {
     public enum HitTarget: Equatable, Sendable {
         case title, overview, detail, none
         case marker(MarkerKind, onCloseUp: Bool)
+        /// A trim handle at the left (in) or right (out) edge of the full-track overview.
+        case trim(TrimEdge)
     }
 
     /// Horizontal grab tolerance either side of a marker line, in picture points.
@@ -381,16 +522,69 @@ extension CuePicture {
         return nil
     }
 
-    /// `hitTarget(at:label:layout:)` with marker lines: the title first, then a marker within
-    /// tolerance, then scrubbing on either waveform.
+    /// `hitTarget(at:label:layout:)` with marker lines and trim handles: the title first, then a
+    /// marker within tolerance, then a trim handle (`trimHandles`), then scrubbing on either
+    /// waveform. Markers win over trim handles because a music-end marker with no silent tail
+    /// sits on the overview's right edge; the out handle's grab zone reaches further into the
+    /// margin than the marker tolerance, so it stays reachable there.
     public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout,
-                                 timeline: ClipTimeline, closeUp: Range<Int>) -> HitTarget {
+                                 timeline: ClipTimeline, closeUp: Range<Int>, trimHandles: Bool = false) -> HitTarget {
         let target = hitTarget(at: point, label: label, layout: layout)
         if target == .title { return .title }
         if let hit = markerHit(at: point, timeline: timeline, layout: layout, closeUp: closeUp) {
             return .marker(hit.kind, onCloseUp: hit.onCloseUp)
         }
+        if trimHandles, let edge = trimHandleHit(at: point, layout: layout) { return .trim(edge) }
         return target
+    }
+
+    // MARK: Trim handles (monitor)
+
+    /// How far a trim handle's grab zone reaches outside the overview panel, and inside it.
+    public static let trimHandleOutside: CGFloat = 30
+    public static let trimHandleInside: CGFloat = 8
+
+    /// The grab zone of a trim handle in picture points: a strip at the overview's left (in) or
+    /// right (out) edge, mostly in the side margin so it does not steal scrubbing.
+    public static func trimHandleRect(_ edge: TrimEdge, layout: CueLayout) -> CGRect {
+        let overview = layout.overview
+        let width = trimHandleOutside + trimHandleInside
+        let x = edge == .inPoint ? overview.minX - trimHandleOutside : overview.maxX - trimHandleInside
+        return CGRect(x: x, y: overview.minY - 12, width: width, height: overview.height + 24)
+    }
+
+    /// The trim handle under `point`, if any.
+    public static func trimHandleHit(at point: CGPoint, layout: CueLayout) -> TrimEdge? {
+        TrimEdge.allCases.first { trimHandleRect($0, layout: layout).contains(point) }
+    }
+
+    /// The trim after dragging `edge` from `down` to `point`, starting from `original`.
+    ///
+    /// The drag is relative and maps the content column to the whole source (`duration`), since
+    /// the monitor shows the untrimmed track while a handle moves. Points snap to whole 25-base
+    /// frames, the range never shrinks below `ClipTimeline.minimumTrimSeconds` (or the whole
+    /// source when shorter), and an edge dragged to the source start or end becomes `nil`, so
+    /// an undone trim is the identity again. Fades and pre-roll are kept.
+    public static func draggedTrim(_ edge: TrimEdge, original: TrimSettings, down: CGPoint, to point: CGPoint,
+                                   duration: Double, layout: CueLayout) -> TrimSettings {
+        guard duration.isFinite, duration > 0 else { return original }
+        let fps = Double(ClipTimeline.clockRate)
+        let minimum = min(ClipTimeline.minimumTrimSeconds, duration)
+        let lower = min(duration, max(0, original.inPoint ?? 0))
+        let upper = min(duration, max(lower, original.outPoint ?? duration))
+        let delta = Double((point.x - down.x) / max(1, layout.contentWidth)) * duration
+        var trim = original
+        switch edge {
+        case .inPoint:
+            let limit = max(0, upper - minimum)
+            let value = min(limit, max(0, ((lower + delta) * fps).rounded() / fps))
+            trim.inPoint = value <= ClipTimeline.epsilon ? nil : value
+        case .outPoint:
+            let limit = min(duration, lower + minimum)
+            let value = max(limit, min(duration, ((upper + delta) * fps).rounded() / fps))
+            trim.outPoint = value >= duration - ClipTimeline.epsilon ? nil : value
+        }
+        return trim
     }
 
     /// The source time, in seconds, a marker dragged to `point` lands on: x maps across the
