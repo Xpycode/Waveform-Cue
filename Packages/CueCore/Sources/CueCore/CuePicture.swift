@@ -32,6 +32,70 @@ extension MusicMarkers {
     }
 }
 
+/// Resolved immutable Core Text descriptors and their measurements, shared for a layout's lifetime.
+struct PictureTypography: @unchecked Sendable, Equatable {
+    typealias M = CueLayout.Metrics
+    let title: CueFonts.Resolved
+    let clock: CueFonts.Resolved
+    let titleUnit: CueFonts.Metrics
+    let clockUnit: CueFonts.Metrics
+    let widths: [ClockSize: CGFloat]
+    let labelWidths: [CGFloat]
+
+    static let standard = Self(titleName: nil, clockName: nil)
+
+    init(titleName: String?, clockName: String?) {
+        let title = CueFonts.resolve(name: titleName, role: .title)
+        let clock = CueFonts.resolve(name: clockName, role: .clock)
+        self.title = title
+        self.clock = clock
+        titleUnit = CueFonts.metrics(for: title, size: 1)
+        clockUnit = CueFonts.metrics(for: clock, size: 1)
+        widths = Dictionary(uniqueKeysWithValues: ClockSize.allCases.map {
+            ($0, CueFonts.metrics(for: clock, size: $0.points).clockWidth)
+        })
+        labelWidths = ["Elapsed", "Remaining"].map {
+            let run = CuePicture.line($0, font: title.font(at: M.clockLabelSize), color: CuePicture.dim)
+            return CGFloat(CTLineGetTypographicBounds(run, nil, nil, nil)) + M.antialias
+        }
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.title.postScriptName == rhs.title.postScriptName && lhs.clock.postScriptName == rhs.clock.postScriptName
+    }
+
+    var usesLegacyTitle: Bool { title.postScriptName == "HelveticaNeue-Medium" }
+    var usesLegacyClock: Bool { clock.postScriptName == "Menlo-Regular" }
+
+    func titleBaselineInset(_ points: CGFloat) -> CGFloat {
+        max(M.titleBaselineInset, points * titleUnit.descent + M.titleShadowSpread)
+    }
+
+    func titleBoxHeight(_ points: CGFloat) -> CGFloat {
+        max(CueLayout.titleBoxHeight(points), titleBaselineInset(points) + points * titleUnit.ascent + M.titleShadowSpread)
+    }
+
+    func clockLabelRise(_ points: CGFloat) -> CGFloat {
+        points * max(M.clockLabelRise, clockUnit.ascent)
+            + max(M.clockLabelGap, M.clockLabelSize * titleUnit.descent + M.minimumGap)
+    }
+
+    func clockWidth(_ size: ClockSize, right: Bool) -> CGFloat {
+        max(widths[size]!, labelWidths[right ? 1 : 0])
+    }
+
+    var detailBelow: CGFloat {
+        max(M.cursorOverhang, M.tickLabelOffset + M.tickLabelSize * clockUnit.descent + M.antialias)
+    }
+    var detailAbove: CGFloat {
+        max(M.cursorTriangleRise, M.detailLabelOffset + M.detailLabelSize * titleUnit.ascent + M.antialias)
+    }
+    var overviewAbove: CGFloat {
+        max(M.cursorOverhang, M.overviewLabelOffset
+            + max(M.overviewLabelSize * titleUnit.ascent, M.overviewDurationSize * clockUnit.ascent) + M.antialias)
+    }
+}
+
 public enum CuePicture {
     public static let size = CGSize(width: 1920, height: 1080)
     /// Build 10 geometry (safe zones None). The renderer reads `CueLayout`; these remain for
@@ -44,12 +108,15 @@ public enum CuePicture {
         zoom == .off ? CGRect(x: wave.minX, y: detail.minY, width: wave.width, height: wave.maxY - detail.minY) : wave
     }
 
-    // Center the playhead in the travelling window. Against either end of
-    // the clip the window holds still and the cursor crosses the waveform.
+    /// Build 10's frame-based accessor, for whole-frame callers.
     public static func closeUp(frame: Int, total: Int, zoom: ZoomWindow) -> Range<Int> {
-        let length = zoom.frameCount(for: total)
-        let start = min(max(0, frame - length / 2), total - length)
-        return start..<(start + length)
+        guard total > 0 else { return 0..<0 }
+        let fps = Double(ClipTimeline.clockRate)
+        let timeline = ClipTimeline(duration: Double(total) / fps)
+        var appearance = CueAppearance()
+        appearance.zoom = zoom
+        let range = closeUp(timeline: timeline, position: frame, appearance: appearance).visible
+        return Int((range.lowerBound * fps).rounded())..<Int((range.upperBound * fps).rounded())
     }
     public static let paper = rgb(0.91, 0.94, 0.94)
     public static let dim = rgb(0.55, 0.63, 0.65)
@@ -81,26 +148,34 @@ public enum CuePicture {
 
     /// The full-track envelope for a layout: pass it as `path` to `draw`.
     public static func overviewPath(_ track: AudioTrack, layout: CueLayout) -> CGPath {
-        waveform(track.peaks, in: layout.overview)
+        layout.showFullTrack ? waveform(track.peaks, in: layout.overview) : CGMutablePath()
     }
 
     /// The full-track envelope for a timeline: only the trimmed range (in to out) spans the
     /// overview. Untrimmed it is exactly `overviewPath(_:layout:)`, so build 10 renders are
     /// unchanged. Pass it as `path` to the timeline `draw`.
     public static func overviewPath(_ track: AudioTrack, layout: CueLayout, timeline: ClipTimeline) -> CGPath {
-        guard timeline.isTrimmed, !track.detailPeaks.isEmpty else { return overviewPath(track, layout: layout) }
+        guard layout.showFullTrack else { return CGMutablePath() }
+        // The native overview already contains the padded final buckets. A trimmed slice contains only the cut.
+        guard timeline.isTrimmed else { return overviewPath(track, layout: layout) }
         let range = timeline.sourceRange
-        return waveform(track.peaks(in: range.lowerBound..<max(range.upperBound, range.lowerBound + 1e-6),
-                                    columns: overviewColumns),
-                        in: layout.overview)
+        let rect = audioRect(for: range, axis: overviewRange(timeline), in: layout.overview)
+        guard range.upperBound > range.lowerBound else { return CGMutablePath() }
+        let peaks = !track.detailPeaks.isEmpty
+            ? track.peaks(in: range.lowerBound..<range.upperBound, columns: overviewColumns) : track.peaks
+        return waveform(peaks, in: rect)
     }
 
     /// Columns in the full-track envelope (build 10's `AudioTrack.peaks` count).
     public static let overviewColumns = 1600
 
     public static func line(_ text: String, font: String, size: CGFloat, color: CGColor) -> CTLine {
+        line(text, font: CTFontCreateWithName(font as CFString, size, nil), color: color)
+    }
+
+    fileprivate static func line(_ text: String, font: CTFont, color: CGColor) -> CTLine {
         let attributes: [NSAttributedString.Key: Any] = [
-            NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName(font as CFString, size, nil),
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): color
         ]
         return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
@@ -109,22 +184,45 @@ public enum CuePicture {
     /// The overlay title and its box. The box travels inside `layout.titleArea`; positions
     /// outside 0…1 are clamped so the title never enters a reserved band.
     public static func caption(_ label: CueLabel, layout: CueLayout = CueLayout()) -> (CTLine, CGRect) {
+        let (run, box, _) = fittedCaption(label, layout: layout)
+        return (run, box)
+    }
+
+    /// Include overhanging glyphs as well as advances when aligning a custom face, e.g. Zapfino's long swashes.
+    private static func horizontalBounds(_ run: CTLine, includeInk: Bool) -> ClosedRange<CGFloat> {
+        let advance = CGFloat(CTLineGetTypographicBounds(run, nil, nil, nil))
+        let ink = includeInk ? CTLineGetBoundsWithOptions(run, .useGlyphPathBounds) : .null
+        return min(0, ink.minX)...max(advance, ink.isNull ? 0 : ink.maxX)
+    }
+
+    private static func fittedCaption(_ label: CueLabel, layout: CueLayout) -> (CTLine, CGRect, CGPoint) {
         let titleSize = layout.titleSize
         let area = layout.titleArea
         let color = rgb(0.83, 0.87, 0.87)
-        let original = line(label.text, font: "HelveticaNeue-Medium", size: titleSize, color: color)
-        let naturalWidth = CGFloat(CTLineGetTypographicBounds(original, nil, nil, nil))
-        let adjustedSize = max(CueLayout.Metrics.titleMinimumSize, titleSize * min(1, area.width / max(1, naturalWidth)))
-        let adjusted = adjustedSize < titleSize ? line(label.text, font: "HelveticaNeue-Medium", size: adjustedSize, color: color) : original
-        let ellipsis = line("…", font: "HelveticaNeue-Medium", size: adjustedSize, color: color)
-        let fitted = CTLineCreateTruncatedLine(adjusted, area.width, .end, ellipsis) ?? adjusted
-        let width = min(area.width, CGFloat(CTLineGetTypographicBounds(fitted, nil, nil, nil)))
-        let height = CueLayout.titleBoxHeight(adjustedSize)
+        let font = layout.typography.title
+        let custom = !layout.typography.usesLegacyTitle
+        let original = line(label.text, font: font.font(at: titleSize), color: color)
+        let natural = horizontalBounds(original, includeInk: custom)
+        let adjustedSize = max(CueLayout.Metrics.titleMinimumSize,
+                               titleSize * min(1, area.width / max(1, natural.upperBound - natural.lowerBound)))
+        let adjusted = adjustedSize < titleSize ? line(label.text, font: font.font(at: adjustedSize), color: color) : original
+        let ellipsis = line("…", font: font.font(at: adjustedSize), color: color)
+        var limit = area.width
+        var fitted = CTLineCreateTruncatedLine(adjusted, limit, .end, ellipsis) ?? adjusted
+        var bounds = horizontalBounds(fitted, includeInk: custom)
+        while custom && bounds.upperBound - bounds.lowerBound > area.width && limit > 0 {
+            limit = max(0, limit - max(1, bounds.upperBound - bounds.lowerBound - area.width))
+            fitted = CTLineCreateTruncatedLine(adjusted, limit, .end, ellipsis) ?? ellipsis
+            bounds = horizontalBounds(fitted, includeInk: true)
+        }
+        let width = min(area.width, bounds.upperBound - bounds.lowerBound)
+        let height = layout.typography.titleBoxHeight(adjustedSize)
         let x = min(1, max(0, label.position.x)), y = min(1, max(0, label.position.y))
         let rect = CGRect(x: area.minX + (area.width - width) * x,
                           y: area.minY + (area.height - height) * y,
                           width: width, height: height)
-        return (fitted, rect)
+        let origin = CGPoint(x: rect.minX - bounds.lowerBound, y: rect.minY + layout.typography.titleBaselineInset(adjustedSize))
+        return (fitted, rect, origin)
     }
 
     /// Build 10 entry point: `frame` is a 25-base clock frame of the whole, untrimmed track.
@@ -174,6 +272,20 @@ public enum CuePicture {
                             timeline: ClipTimeline, layout: CueLayout, position: Int, label: CueLabel,
                             appearance: CueAppearance = CueAppearance(), heldRange: Range<Int>? = nil,
                             loudness: LoudnessMeasurement? = nil) {
+        let held = heldRange.map { frames in
+            let start = timeline.sourceRange.lowerBound
+            let fps = Double(ClipTimeline.clockRate)
+            let range = (start + Double(frames.lowerBound) / fps)...(start + Double(frames.upperBound) / fps)
+            return CloseUpWindow(visible: range, intersection: range.clamped(to: timeline.sourceRange))
+        }
+        draw(in: ctx, rect: rect, track: track, path: path, timeline: timeline, layout: layout, position: position,
+             label: label, appearance: appearance, holding: held, loudness: loudness)
+    }
+
+    /// The monitor freezes the precise source interval while dragging a waveform or marker.
+    public static func draw(in ctx: CGContext, rect: CGRect, track: AudioTrack, path: CGPath,
+                            timeline: ClipTimeline, layout: CueLayout, position: Int, label: CueLabel,
+                            appearance: CueAppearance, holding held: CloseUpWindow?, loudness: LoudnessMeasurement? = nil) {
         typealias M = CueLayout.Metrics
         ctx.saveGState()
         defer { ctx.restoreGState() }
@@ -191,31 +303,29 @@ public enum CuePicture {
         }
         func drawText(_ text: String, _ x: CGFloat, _ y: CGFloat, _ size: CGFloat,
                       _ color: CGColor, mono: Bool = false, right: Bool = false) {
-            let run = line(text, font: mono ? "Menlo" : "HelveticaNeue-Medium", size: size, color: color)
-            let width = right ? CGFloat(CTLineGetTypographicBounds(run, nil, nil, nil)) : 0
-            ctx.textPosition = CGPoint(x: x - width, y: y)
+            let face = mono ? layout.typography.clock : layout.typography.title
+            let run = line(text, font: face.font(at: size), color: color)
+            let custom = mono ? !layout.typography.usesLegacyClock : !layout.typography.usesLegacyTitle
+            let bounds = horizontalBounds(run, includeInk: custom)
+            ctx.textPosition = CGPoint(x: x - (right ? bounds.upperBound : bounds.lowerBound), y: y)
             CTLineDraw(run, ctx)
         }
         let total = timeline.clockFrames
         let clocks = timeline.clocks(at: position)
         // Equals `toFileEnd` for target File end; counts to the music-end marker otherwise.
         let framesLeft = clocks.remaining
-        // Playhead on the 25 base; it moves between clock frames at 50 images per second.
-        let playhead = playheadFrame(timeline: timeline, position: position)
+        let fps = Double(ClipTimeline.clockRate)
+        let start = timeline.sourceRange.lowerBound
+        let playhead = start + playheadFrame(timeline: timeline, position: position) / fps
         let warningFraction = appearance.warning.fraction(framesLeft: framesLeft, solidAt: appearance.solidRedAt)
-        let window = heldRange.map { Window(lower: Double($0.lowerBound), count: $0.count) }
-            ?? Window.closeUp(playhead: playhead, total: total, zoom: appearance.zoom)
-        let fps = Double(AudioTrack.fps)
-        func xForFrame(_ frame: Double, in range: Window, rect: CGRect) -> CGFloat {
-            rect.minX + rect.width * CGFloat(frame - range.lower) / CGFloat(range.count)
-        }
-        let markerFrames: [(MarkerKind, Double)] = [
+        let window = held ?? closeUp(timeline: timeline, position: position, appearance: appearance)
+        let markers: [(MarkerKind, Double)] = [
             (MarkerKind.fadeStart, timeline.fadeStartMarker), (MarkerKind.musicEnd, timeline.musicEndMarker)
-        ].compactMap { kind, marker in marker.map { (kind, $0.seconds * fps) } }
-        func paintMarkers(in range: Window, rect: CGRect, labelSize: CGFloat) {
-            for (kind, frame) in markerFrames {
-                guard frame >= range.lower, frame <= range.upper else { continue }
-                let x = min(rect.maxX - 1.5, max(rect.minX + 1.5, xForFrame(frame, in: range, rect: rect)))
+        ].compactMap { kind, marker in marker.map { (kind, start + $0.seconds) } }
+        func paintMarkers(in range: ClosedRange<Double>, rect: CGRect, labelSize: CGFloat) {
+            for (kind, seconds) in markers {
+                guard range.contains(seconds) else { continue }
+                let x = min(rect.maxX - 1.5, max(rect.minX + 1.5, xPosition(seconds, in: range, rect: rect)))
                 let color = kind == .musicEnd ? musicEndColor : fadeStartColor
                 ctx.saveGState()
                 ctx.setStrokeColor(color)
@@ -241,56 +351,69 @@ public enum CuePicture {
                 CTLineDraw(run, ctx)
             }
         }
-        func paintEnvelope(_ path: CGPath, rect: CGRect, cursor: CGFloat, played: CueColor,
-                           upcoming: CueColor, fadeToRed: Bool, markersIn range: Window) {
+        func paintEnvelope(_ path: CGPath, rect: CGRect, audioRect: CGRect, cursor: CGFloat, bright: CueColor,
+                           dimmed: CueColor, shading: CloseUpShading, fadeToRed: Bool, markersIn range: ClosedRange<Double>,
+                           showCursor: Bool = true) {
             let fraction = fadeToRed ? warningFraction : 0
-            fill(CGRect(x: rect.minX, y: rect.midY, width: rect.width, height: 1.5), rgb(0.30, 0.37, 0.37))
-            ctx.setFillColor(upcoming.blended(toward: CueColor.warningRed.dimmed, fraction: fraction).cgColor)
+            let fullColor = bright.blended(toward: .warningRed, fraction: fraction).cgColor
+            let lowColor = dimmed.blended(toward: CueColor.warningRed.dimmed, fraction: fraction).cgColor
+            fill(CGRect(x: audioRect.minX, y: rect.midY, width: audioRect.width, height: 1.5), rgb(0.30, 0.37, 0.37))
+            ctx.setFillColor(shading == .upcomingBrighter ? fullColor : lowColor)
             ctx.addPath(path)
             ctx.fillPath()
             ctx.saveGState()
-            ctx.clip(to: CGRect(x: rect.minX, y: rect.minY, width: max(0, cursor - rect.minX), height: rect.height))
-            ctx.setFillColor(played.blended(toward: .warningRed, fraction: fraction).cgColor)
+            ctx.clip(to: CGRect(x: rect.minX, y: rect.minY, width: min(rect.width, max(0, cursor - rect.minX)), height: rect.height))
+            ctx.setFillColor(shading == .upcomingBrighter ? lowColor : fullColor)
             ctx.addPath(path)
             ctx.fillPath()
             ctx.restoreGState()
-            if !markerFrames.isEmpty {
+            if !markers.isEmpty {
                 paintMarkers(in: range, rect: rect, labelSize: rect.height >= 150 ? 20 : 16)
             }
+            guard showCursor else { return }
             let overhang = M.cursorOverhang
             fill(CGRect(x: cursor - overhang, y: rect.minY - overhang, width: 2 * overhang,
                         height: rect.height + 2 * overhang), paper)
         }
 
-        let full = Window(lower: 0, count: total)
-        let overview = layout.overview
-        let lo = xForFrame(window.lower, in: full, rect: overview)
-        let hi = xForFrame(window.upper, in: full, rect: overview)
+        let full = overviewRange(timeline)
         let panel = rgb(0.071, 0.102, 0.111)
         fill(CGRect(origin: .zero, size: size), background)
-        drawText("Full track", overview.minX, layout.overviewLabelBaseline, M.overviewLabelSize, dim)
-        drawText(AudioTrack.clock(total), overview.maxX, layout.overviewLabelBaseline, M.overviewDurationSize, dim,
-                 mono: true, right: true)
-        fill(overview, panel)
-        let highlight = CGRect(x: lo, y: overview.minY, width: hi - lo, height: overview.height)
-        if layout.detail != nil { fill(highlight, rgb(0.14, 0.22, 0.22)) }
-        paintEnvelope(path, rect: overview, cursor: xForFrame(playhead, in: full, rect: overview),
-                      played: appearance.overviewColor ?? CueAppearance.defaultOverview,
-                      upcoming: appearance.overviewColor?.dimmed ?? CueColor(0.31, 0.40, 0.41),
-                      fadeToRed: appearance.fadeFullTrack, markersIn: full)
+        ctx.clip(to: layout.usable)
+        if layout.showFullTrack {
+            let overview = layout.overview
+            drawText("Full track", overview.minX, layout.overviewLabelBaseline, M.overviewLabelSize, dim)
+            drawText(AudioTrack.clock(total), overview.maxX, layout.overviewLabelBaseline, M.overviewDurationSize, dim,
+                     mono: true, right: true)
+            fill(overview, panel)
+            let lo = xPosition(window.intersection.lowerBound, in: full, rect: overview)
+            let hi = xPosition(window.intersection.upperBound, in: full, rect: overview)
+            let highlight = CGRect(x: lo, y: overview.minY, width: hi - lo, height: overview.height)
+            if layout.detail != nil { fill(highlight, rgb(0.14, 0.22, 0.22)) }
+            let physical = audioRect(for: timeline.sourceRange, axis: full, in: overview)
+            paintEnvelope(path, rect: overview, audioRect: physical, cursor: xPosition(playhead, in: full, rect: overview),
+                          bright: appearance.overviewColor ?? CueAppearance.defaultOverview,
+                          dimmed: appearance.overviewColor?.dimmed ?? CueColor(0.31, 0.40, 0.41),
+                          shading: .playedBrighter, fadeToRed: appearance.fadeFullTrack, markersIn: full)
+            if layout.detail != nil {
+                ctx.setStrokeColor(rgb(0.51, 0.69, 0.64))
+                ctx.setLineWidth(2)
+                ctx.stroke(highlight)
+            }
+        }
         if let detail = layout.detail {
-            ctx.setStrokeColor(rgb(0.51, 0.69, 0.64))
-            ctx.setLineWidth(2)
-            ctx.stroke(highlight)
             drawText("Close-up", detail.minX, detail.maxY + M.detailLabelOffset, M.detailLabelSize, dim)
             fill(detail, panel)
             // Align ticks to track time so a fade ending at 1:20 keeps its mark while scrolling.
-            let tickStep = [1, 5, 10, 25, 50, 125, 250].first { $0 * 10 >= window.count } ?? 250
-            let firstTick = Int((window.lower / Double(tickStep)).rounded(.up)) * tickStep
-            let lastTick = Int(window.upper.rounded(.down))
+            let visible = window.visible
+            let sampled = window.intersection
+            let width = (visible.upperBound - visible.lowerBound) * fps
+            let tickStep = [1, 5, 10, 25, 50, 125, 250].first { Double($0 * 10) >= width - 1e-8 } ?? 250
+            let firstTick = Int(ceil(((sampled.lowerBound - start) * fps - 1e-8) / Double(tickStep))) * tickStep
+            let lastTick = Int(floor((sampled.upperBound - start) * fps + 1e-8))
             let tickBaseline = detail.minY - M.tickLabelOffset
             for tick in stride(from: firstTick, through: lastTick, by: tickStep) {
-                let tickX = xForFrame(Double(tick), in: window, rect: detail)
+                let tickX = xPosition(start + Double(tick) / fps, in: visible, rect: detail)
                 fill(CGRect(x: tickX, y: detail.minY, width: 2, height: 8), dim)
                 if (tick / tickStep).isMultiple(of: 2) {
                     fill(CGRect(x: tickX, y: detail.minY, width: 1.5, height: detail.height), rgb(0.12, 0.16, 0.17))
@@ -298,45 +421,54 @@ public enum CuePicture {
                         ? String(format: "%d:%02d", tick / AudioTrack.fps / 60, tick / AudioTrack.fps % 60)
                         : AudioTrack.clock(tick)
                     let width = CGFloat(CTLineGetTypographicBounds(
-                        line(value, font: "Menlo", size: M.tickLabelSize, color: dim), nil, nil, nil))
+                        line(value, font: layout.typography.clock.font(at: M.tickLabelSize), color: dim), nil, nil, nil))
                     let left = min(detail.maxX - width, max(detail.minX, tickX - width / 2))
                     drawText(value, left, tickBaseline, M.tickLabelSize, dim, mono: true)
                 }
             }
-            let start = timeline.sourceRange.lowerBound
-            let timeRange = (start + window.lower / fps)..<(start + window.upper / fps)
-            let detailPath = waveform(track.peaks(in: timeRange, columns: 1600), in: detail, expandQuiet: true)
-            let cursor = xForFrame(playhead, in: window, rect: detail)
-            paintEnvelope(detailPath, rect: detail, cursor: cursor,
-                          played: appearance.detailColor ?? CueAppearance.defaultDetail,
-                          upcoming: appearance.detailColor?.dimmed ?? CueColor(0.32, 0.48, 0.47),
-                          fadeToRed: appearance.fadeCloseUp, markersIn: window)
-            let triangleTop = detail.maxY + M.cursorTriangleRise
-            let half = M.cursorTriangleHalfWidth
-            ctx.beginPath()
-            ctx.move(to: CGPoint(x: cursor, y: detail.maxY - 2))
-            ctx.addLine(to: CGPoint(x: cursor - half, y: triangleTop))
-            ctx.addLine(to: CGPoint(x: cursor + half, y: triangleTop))
-            ctx.closePath()
-            ctx.setFillColor(paper)
-            ctx.fillPath()
+            let audioRect = audioRect(for: sampled, axis: visible, in: detail)
+            let peaks = sampled.upperBound > sampled.lowerBound && !track.detailPeaks.isEmpty
+                ? track.peaks(in: sampled.lowerBound..<sampled.upperBound,
+                              columns: max(1, Int((1600 * audioRect.width / detail.width).rounded()))) : []
+            let detailPath = waveform(peaks, in: audioRect, expandQuiet: true)
+            let cursor = xPosition(playhead, in: visible, rect: detail)
+            paintEnvelope(detailPath, rect: detail, audioRect: audioRect, cursor: cursor,
+                          bright: appearance.detailColor ?? CueAppearance.defaultDetail,
+                          dimmed: appearance.detailColor?.dimmed ?? CueColor(0.32, 0.48, 0.47),
+                          shading: appearance.closeUpShading, fadeToRed: appearance.fadeCloseUp, markersIn: visible,
+                          showCursor: visible.contains(playhead))
+            if visible.contains(playhead) {
+                let triangleTop = detail.maxY + M.cursorTriangleRise
+                let half = M.cursorTriangleHalfWidth
+                ctx.beginPath()
+                ctx.move(to: CGPoint(x: cursor, y: detail.maxY - 2))
+                ctx.addLine(to: CGPoint(x: cursor - half, y: triangleTop))
+                ctx.addLine(to: CGPoint(x: cursor + half, y: triangleTop))
+                ctx.closePath()
+                ctx.setFillColor(paper)
+                ctx.fillPath()
+            }
         }
         func drawClock(_ name: String, frame: Int, color: CueColor, size: ClockSize, labelBaseline: CGFloat, right: Bool) {
             let x = right ? layout.contentMaxX : layout.contentMinX
             drawText(name, x, labelBaseline, M.clockLabelSize, dim, right: right)
             drawText(AudioTrack.clock(frame), x, layout.clockBaseline, size.points, color.cgColor, mono: true, right: right)
         }
-        drawClock("Elapsed", frame: clocks.elapsed, color: appearance.elapsed.color, size: layout.elapsedSize,
+        if layout.showElapsed {
+            drawClock("Elapsed", frame: clocks.elapsed, color: appearance.elapsed.color, size: layout.elapsedSize,
                   labelBaseline: layout.elapsedLabelBaseline, right: false)
+        }
         // Past a music-end target Remaining holds at 00:00:00 in solid red until the clip ends.
         let remainingColor = clocks.isPastTarget ? CueColor.warningRed
             : appearance.remaining.color.blended(toward: .warningRed, fraction: warningFraction)
-        drawClock("Remaining", frame: framesLeft, color: remainingColor, size: layout.remainingSize,
+        if layout.showRemaining {
+            drawClock("Remaining", frame: framesLeft, color: remainingColor, size: layout.remainingSize,
                   labelBaseline: layout.remainingLabelBaseline, right: true)
-        if !label.text.isEmpty {
-            let (run, box) = caption(label, layout: layout)
+        }
+        if layout.showTitle && !label.text.isEmpty {
+            let (run, _, origin) = fittedCaption(label, layout: layout)
             ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: CGColor(gray: 0, alpha: 0.65))
-            ctx.textPosition = CGPoint(x: box.minX, y: box.minY + M.titleBaselineInset)
+            ctx.textPosition = origin
             CTLineDraw(run, ctx)
         }
     }
@@ -400,17 +532,21 @@ public enum CuePicture {
         typealias S = SlateMetrics
         ctx.setFillColor(background)
         ctx.fill(CGRect(origin: .zero, size: size))
+        ctx.clip(to: layout.usable)
         // Keep antialiasing off the safe frame's edges.
         let frame = layout.safeFrame.insetBy(dx: 2, dy: 2)
         guard frame.width > 4, frame.height > 4 else { return }
         let text = rgb(0.83, 0.87, 0.87)
-        var rows: [(text: String, font: String, points: CGFloat, color: CGColor)] = [
-            (slate.title, "HelveticaNeue-Medium", S.titleSize, text),
-            (slate.startsInLabel, "HelveticaNeue-Medium", S.labelSize, dim),
-            (slate.startsIn, "Menlo", S.countdownSize, mint),
-            (slate.duration, "HelveticaNeue-Medium", S.infoSize, text),
+        let title = layout.typography.title
+        let clock = layout.typography.clock
+        var rows: [(text: String, font: CueFonts.Resolved, points: CGFloat, color: CGColor)] = [
+            (slate.startsInLabel, title, S.labelSize, dim),
+            (slate.startsIn, clock, S.countdownSize, mint),
+            (slate.duration, title, S.infoSize, text),
         ]
-        if let loudness = slate.loudness { rows.append((loudness, "HelveticaNeue-Medium", S.infoSize, dim)) }
+        if layout.showTitle { rows.insert((slate.title, title, S.titleSize, text), at: 0) }
+        if let loudness = slate.loudness { rows.append((loudness, title, S.infoSize, dim)) }
+        let gaps = layout.showTitle ? S.gaps : Array(S.gaps.dropFirst())
         func metrics(_ run: CTLine) -> (width: CGFloat, ascent: CGFloat, descent: CGFloat) {
             var ascent: CGFloat = 0, descent: CGFloat = 0
             let width = CGFloat(CTLineGetTypographicBounds(run, &ascent, &descent, nil))
@@ -418,18 +554,18 @@ public enum CuePicture {
         }
         func lines(scale: CGFloat) -> [CTLine] {
             rows.map { row in
-                let run = line(row.text, font: row.font, size: row.points * scale, color: row.color)
+                let run = line(row.text, font: row.font.font(at: row.points * scale), color: row.color)
                 guard metrics(run).width > frame.width else { return run }
-                let ellipsis = line("\u{2026}", font: row.font, size: row.points * scale, color: row.color)
+                let ellipsis = line("\u{2026}", font: row.font.font(at: row.points * scale), color: row.color)
                 return CTLineCreateTruncatedLine(run, Double(frame.width), .end, ellipsis) ?? run
             }
         }
         func height(_ runs: [CTLine], scale: CGFloat) -> CGFloat {
             runs.map { let m = metrics($0); return m.ascent + m.descent }.reduce(0, +)
-                + S.gaps.prefix(runs.count - 1).reduce(0, +) * scale
+                + gaps.prefix(runs.count - 1).reduce(0, +) * scale
         }
         // The countdown is never truncated: the whole stack shrinks until it fits the width.
-        let countdownWidth = metrics(line(slate.startsIn, font: "Menlo", size: S.countdownSize, color: mint)).width
+        let countdownWidth = metrics(line(slate.startsIn, font: clock.font(at: S.countdownSize), color: mint)).width
         var scale = min(1, frame.width / max(1, countdownWidth),
                         frame.height / max(1, height(lines(scale: 1), scale: 1)))
         var runs = lines(scale: scale)
@@ -440,7 +576,7 @@ public enum CuePicture {
         }
         var y = frame.midY + height(runs, scale: scale) / 2
         for (index, run) in runs.enumerated() {
-            if index > 0 { y -= S.gaps[index - 1] * scale }
+            if index > 0 { y -= gaps[index - 1] * scale }
             let m = metrics(run)
             let baseline = y - m.ascent
             ctx.textPosition = CGPoint(x: frame.midX - min(m.width, frame.width) / 2, y: baseline)
@@ -457,19 +593,48 @@ public enum CuePicture {
         return min(Double(timeline.clockFrames), frame)
     }
 
-    /// A close-up window on the 25 base that may start between frames.
-    struct Window {
-        var lower: Double
-        var count: Int
-        var upper: Double { lower + Double(count) }
-
-        /// `closeUp(frame:total:zoom:)` for a fractional playhead; identical for whole frames.
-        static func closeUp(playhead: Double, total: Int, zoom: ZoomWindow) -> Window {
-            let length = zoom.frameCount(for: total)
-            let start = min(max(0, playhead - Double(length / 2)), Double(total - length))
-            return Window(lower: start, count: length)
-        }
+    /// The full-track time axis preserves the last padded clock frame, including its second field.
+    public static func overviewRange(_ timeline: ClipTimeline) -> ClosedRange<Double> {
+        let start = timeline.sourceRange.lowerBound
+        return start...(start + Double(timeline.clockFrames) / Double(ClipTimeline.clockRate))
     }
+
+    /// The window shared by the picture, monitor gestures and the two export fields.
+    public static func closeUp(timeline: ClipTimeline, position: Int, appearance: CueAppearance) -> CloseUpWindow {
+        let fps = Double(ClipTimeline.clockRate)
+        let start = timeline.sourceRange.lowerBound
+        let zoom = appearance.zoom
+        let width = zoom.rawValue > 0 ? Double(zoom.rawValue) : Double(zoom.frameCount(for: timeline.clockFrames)) / fps
+        let target: Double
+        if timeline.target == .musicEnd, let end = timeline.markers.musicEnd, end.isFinite {
+            target = min(timeline.sourceRange.upperBound, max(start, end))
+        } else {
+            target = timeline.sourceRange.upperBound
+        }
+        let interval = CloseUpWindow.interval(playhead: start + playheadFrame(timeline: timeline, position: position) / fps,
+                                              clip: timeline.sourceRange, target: target, startingWidth: width,
+                                              mode: appearance.playheadMode, endZoom: appearance.endZoom)
+        guard appearance.playheadMode == .edgeHeld, appearance.endZoom == .off else { return interval }
+        // Legacy edges land exactly on a field. Reconstruct their original seconds representation
+        // before floor/ceil select a peak bucket (e.g. 5.06 versus 5.0600000000000005).
+        func fieldTime(_ seconds: Double) -> Double {
+            start + ((seconds - start) * (2 * fps)).rounded() / (2 * fps)
+        }
+        let visible = fieldTime(interval.visible.lowerBound)...fieldTime(interval.visible.upperBound)
+        return CloseUpWindow(visible: visible, intersection: visible.clamped(to: timeline.sourceRange))
+    }
+
+    private static func audioRect(for audio: ClosedRange<Double>, axis: ClosedRange<Double>, in rect: CGRect) -> CGRect {
+        let lo = xPosition(audio.lowerBound, in: axis, rect: rect)
+        let hi = xPosition(audio.upperBound, in: axis, rect: rect)
+        return CGRect(x: lo, y: rect.minY, width: hi - lo, height: rect.height)
+    }
+
+    private static func xPosition(_ seconds: Double, in range: ClosedRange<Double>, rect: CGRect) -> CGFloat {
+        guard range.upperBound > range.lowerBound else { return rect.minX }
+        return rect.minX + rect.width * CGFloat(seconds - range.lowerBound) / CGFloat(range.upperBound - range.lowerBound)
+    }
+
 }
 
 // MARK: - Hit-testing (monitor)
@@ -494,30 +659,23 @@ extension CuePicture {
                       width: rect.width * sx, height: rect.height * sy)
     }
 
-    /// The marker line under `point`, nearest first, on the full track (whole clip) or the
-    /// close-up (`closeUp`, the 25-base window on screen). Nil when none is within tolerance.
+    /// The nearest marker on a visible waveform, using the same source-time axis as drawing.
     public static func markerHit(at point: CGPoint, timeline: ClipTimeline, layout: CueLayout,
-                                 closeUp: Range<Int>) -> (kind: MarkerKind, onCloseUp: Bool)? {
-        let fps = Double(ClipTimeline.clockRate)
+                                 closeUp: CloseUpWindow) -> (kind: MarkerKind, onCloseUp: Bool)? {
         let markers: [(MarkerKind, Double)] = [
             (MarkerKind.musicEnd, timeline.musicEndMarker), (MarkerKind.fadeStart, timeline.fadeStartMarker)
-        ].compactMap { kind, marker in marker.map { (kind, $0.seconds * fps) } }
-        guard !markers.isEmpty else { return nil }
-        var panes: [(rect: CGRect, lower: Double, upper: Double, onCloseUp: Bool)] = [
-            (layout.overview, 0, Double(timeline.clockFrames), false)
-        ]
-        if let detail = layout.detail {
-            panes.append((detail, Double(closeUp.lowerBound), Double(closeUp.upperBound), true))
-        }
-        for pane in panes where pane.rect.insetBy(dx: -markerHitTolerance, dy: -6).contains(point) {
-            guard pane.upper > pane.lower else { continue }
+        ].compactMap { kind, marker in marker.map { (kind, timeline.sourceRange.lowerBound + $0.seconds) } }
+        var panes: [(CGRect, ClosedRange<Double>, Bool)] = []
+        if layout.showFullTrack { panes.append((layout.overview, overviewRange(timeline), false)) }
+        if let detail = layout.detail { panes.append((detail, closeUp.visible, true)) }
+        for (rect, range, onCloseUp) in panes where rect.insetBy(dx: -markerHitTolerance, dy: -6).contains(point) {
             var best: (kind: MarkerKind, distance: CGFloat)?
-            for (kind, frame) in markers where frame >= pane.lower && frame <= pane.upper {
-                let x = pane.rect.minX + pane.rect.width * CGFloat((frame - pane.lower) / (pane.upper - pane.lower))
+            for (kind, seconds) in markers where range.contains(seconds) {
+                let x = xPosition(seconds, in: range, rect: rect)
                 let distance = abs(point.x - x)
                 if distance <= markerHitTolerance, distance < (best?.distance ?? .infinity) { best = (kind, distance) }
             }
-            if let best { return (best.kind, pane.onCloseUp) }
+            if let best { return (best.kind, onCloseUp) }
         }
         return nil
     }
@@ -528,7 +686,7 @@ extension CuePicture {
     /// sits on the overview's right edge; the out handle's grab zone reaches further into the
     /// margin than the marker tolerance, so it stays reachable there.
     public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout,
-                                 timeline: ClipTimeline, closeUp: Range<Int>, trimHandles: Bool = false) -> HitTarget {
+                                 timeline: ClipTimeline, closeUp: CloseUpWindow, trimHandles: Bool = false) -> HitTarget {
         let target = hitTarget(at: point, label: label, layout: layout)
         if target == .title { return .title }
         if let hit = markerHit(at: point, timeline: timeline, layout: layout, closeUp: closeUp) {
@@ -547,6 +705,7 @@ extension CuePicture {
     /// The grab zone of a trim handle in picture points: a strip at the overview's left (in) or
     /// right (out) edge, mostly in the side margin so it does not steal scrubbing.
     public static func trimHandleRect(_ edge: TrimEdge, layout: CueLayout) -> CGRect {
+        guard layout.showFullTrack else { return .null }
         let overview = layout.overview
         let width = trimHandleOutside + trimHandleInside
         let x = edge == .inPoint ? overview.minX - trimHandleOutside : overview.maxX - trimHandleInside
@@ -572,7 +731,8 @@ extension CuePicture {
         let minimum = min(ClipTimeline.minimumTrimSeconds, duration)
         let lower = min(duration, max(0, original.inPoint ?? 0))
         let upper = min(duration, max(lower, original.outPoint ?? duration))
-        let delta = Double((point.x - down.x) / max(1, layout.contentWidth)) * duration
+        let axis = overviewRange(ClipTimeline(duration: duration))
+        let delta = Double((point.x - down.x) / max(1, layout.contentWidth)) * axis.upperBound
         var trim = original
         switch edge {
         case .inPoint:
@@ -587,15 +747,19 @@ extension CuePicture {
         return trim
     }
 
-    /// The source time, in seconds, a marker dragged to `point` lands on: x maps across the
-    /// content column over `range` (25-base frames of the trimmed music: the whole clip for the
-    /// full track, the held window for the close-up), clamped inside the trimmed range.
-    public static func draggedMarkerSeconds(at point: CGPoint, in range: Range<Int>, timeline: ClipTimeline,
+    /// Invert the picture's time axis, including fractional and off-clip edges of a held window.
+    public static func draggedMarkerSeconds(at point: CGPoint, in range: ClosedRange<Double>, timeline: ClipTimeline,
                                             layout: CueLayout) -> Double {
-        let fraction = Double(min(1, max(0, (point.x - layout.contentMinX) / layout.contentWidth)))
-        let frame = Double(range.lowerBound) + fraction * Double(range.count)
-        let seconds = timeline.sourceRange.lowerBound + frame / Double(ClipTimeline.clockRate)
+        let fraction = min(1, max(0, (point.x - layout.contentMinX) / layout.contentWidth))
+        let seconds = range.lowerBound + fraction * (range.upperBound - range.lowerBound)
         return min(timeline.sourceRange.upperBound, max(timeline.sourceRange.lowerBound, seconds))
+    }
+
+    public static func scrubFrame(at point: CGPoint, in range: ClosedRange<Double>, timeline: ClipTimeline,
+                                  layout: CueLayout) -> Int {
+        let seconds = draggedMarkerSeconds(at: point, in: range, timeline: timeline, layout: layout)
+        if seconds >= timeline.sourceRange.upperBound { return timeline.clockFrames }
+        return Int(((seconds - timeline.sourceRange.lowerBound) * Double(ClipTimeline.clockRate)).rounded())
     }
 
     /// A point in the monitor view mapped to picture points (1920 × 1080, bottom-left origin).
@@ -605,10 +769,10 @@ extension CuePicture {
     }
 
     public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout) -> HitTarget {
-        if !label.text.isEmpty && caption(label, layout: layout).1.insetBy(dx: -6, dy: -6).contains(point) {
+        if layout.showTitle && !label.text.isEmpty && caption(label, layout: layout).1.insetBy(dx: -6, dy: -6).contains(point) {
             return .title
         }
-        if layout.overview.insetBy(dx: -8, dy: -12).contains(point) { return .overview }
+        if layout.showFullTrack && layout.overview.insetBy(dx: -8, dy: -12).contains(point) { return .overview }
         if let detail = layout.detail, detail.insetBy(dx: -8, dy: -12).contains(point) { return .detail }
         return .none
     }

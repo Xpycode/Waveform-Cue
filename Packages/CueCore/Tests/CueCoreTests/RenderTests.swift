@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import CoreText
 @testable import CueCore
 
 /// Task 2.1: the renderer and the monitor's hit-testing read `CueLayout`.
@@ -24,7 +25,7 @@ final class RenderTests: XCTestCase {
         let ctx = bitmap()
         let layout = appearance.layout
         CuePicture.draw(in: ctx, rect: CGRect(origin: .zero, size: CuePicture.size), track: track,
-                        path: CuePicture.overviewPath(track, layout: layout), timeline: timeline,
+                        path: CuePicture.overviewPath(track, layout: layout, timeline: timeline), timeline: timeline,
                         layout: layout, position: position, label: label, appearance: appearance)
         return pixels(ctx)
     }
@@ -138,6 +139,170 @@ final class RenderTests: XCTestCase {
     }
 
     // MARK: - Timeline entry point
+
+    func testHiddenPictureHasNoPixelsOrHitTargets() {
+        let track = BaselineTests.syntheticTrack()
+        var look = CueAppearance()
+        look.zoom = .off
+        look.showFullTrack = false
+        look.showElapsed = false
+        look.showRemaining = false
+        look.showTitle = false
+        let layout = look.layout
+        let label = CueLabel(text: "Hidden")
+        let timeline = ClipTimeline(duration: track.seconds, markers: MusicMarkers(detectedMusicEnd: 15))
+        let pixels = Self.render(track, timeline: timeline, position: 375, label: label, appearance: look)
+        XCTAssertEqual(Self.foreignPixels(pixels, in: layout.usable), 0)
+        XCTAssertTrue(layout.extents.isEmpty)
+        for x in [CuePicture.wave.midX, CuePicture.wave.minX - 5] {
+            let target = CuePicture.hitTarget(at: CGPoint(x: x, y: CuePicture.wave.midY), label: label,
+                                               layout: layout, timeline: timeline, closeUp: CuePicture.closeUp(timeline: timeline, position: 375, appearance: look), trimHandles: true)
+            XCTAssertEqual(target, .none)
+        }
+    }
+
+    func testPhysicalTrimBoundaryLeavesPaddedPartOfOverviewEmpty() {
+        let track = BaselineTests.syntheticTrack()
+        let look = CueAppearance()
+        let layout = look.layout
+        let timeline = ClipTimeline(duration: track.seconds, trim: TrimSettings(inPoint: 1, outPoint: 2.001))
+        let expected = layout.overview.minX + layout.overview.width * 1.001 / 1.04
+        let path = CuePicture.overviewPath(track, layout: layout, timeline: timeline)
+        XCTAssertEqual(path.boundingBox.maxX, expected, accuracy: 0.001)
+        let image = Self.render(track, timeline: timeline, position: 0, label: CueLabel(), appearance: look)
+        let tail = CGRect(x: expected + 3, y: layout.overview.minY + 2, width: layout.overview.maxX - expected - 6,
+                          height: layout.overview.height - 4)
+        XCTAssertEqual(CountdownTests.count(CuePicture.rgb(0.071, 0.102, 0.111), in: image, tail),
+                       Int(tail.maxX.rounded(.up) - tail.minX.rounded(.down)) * Int(tail.height))
+    }
+
+    func testCenteredTrimKeepsBlankHalvesAndScrubsInSourceTime() throws {
+        let track = BaselineTests.syntheticTrack()
+        var look = CueAppearance()
+        look.zoom = .five
+        look.playheadMode = .centered
+        let timeline = ClipTimeline(duration: track.seconds, trim: TrimSettings(inPoint: 9, outPoint: 10.2),
+                                    markers: MusicMarkers(detectedFadeStart: 9.6))
+        let layout = look.layout
+        let detail = try XCTUnwrap(layout.detail)
+        let center = CGPoint(x: detail.midX, y: detail.midY)
+        let label = CueLabel()
+        for position in [0, timeline.positionCount] {
+            let window = CuePicture.closeUp(timeline: timeline, position: position, appearance: look)
+            let image = Self.render(track, timeline: timeline, position: position, label: label, appearance: look)
+            let blank = CGRect(x: position == 0 ? detail.minX + 4 : detail.midX + 4, y: detail.minY + 2,
+                               width: detail.width / 2 - 8, height: detail.height - 4)
+            XCTAssertEqual(CountdownTests.count(CuePicture.rgb(0.071, 0.102, 0.111), in: image, blank),
+                           Int(blank.width * blank.height))
+            XCTAssertEqual(CountdownTests.count(CuePicture.paper, in: image,
+                                               CGRect(x: floor(center.x), y: floor(center.y), width: 1, height: 1)), 1)
+            XCTAssertEqual(CuePicture.scrubFrame(at: center, in: window.visible, timeline: timeline, layout: layout),
+                           position)
+            let marker = CGPoint(x: detail.minX + detail.width * (9.6 - window.visible.lowerBound) / 5, y: detail.midY)
+            XCTAssertEqual(CuePicture.hitTarget(at: marker, label: label, layout: layout, timeline: timeline,
+                                                closeUp: window), .marker(.fadeStart, onCloseUp: true))
+            XCTAssertEqual(CuePicture.draggedMarkerSeconds(at: marker, in: window.visible, timeline: timeline,
+                                                           layout: layout), 9.6, accuracy: 1e-8)
+            for (x, frame) in [(detail.minX, 0), (detail.maxX, timeline.clockFrames)] {
+                XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: x, y: detail.midY), in: window.visible,
+                                                     timeline: timeline, layout: layout), frame)
+            }
+        }
+    }
+
+    func testHeldWindowDoesNotDrawAnOffscreenCursorInReservedBands() throws {
+        let track = BaselineTests.syntheticTrack()
+        var look = CueAppearance()
+        look.zoom = .two
+        look.safeZones = Self.zones(left: 10, right: 10)
+        let layout = look.layout
+        let detail = try XCTUnwrap(layout.detail)
+        let timeline = ClipTimeline(duration: track.seconds)
+        let held = CuePicture.closeUp(timeline: timeline, position: 0, appearance: look)
+        let bitmap = Self.bitmap()
+        // Just beyond two seconds the cursor would lie inside the right reserve.
+        CuePicture.draw(in: bitmap, rect: CGRect(origin: .zero, size: CuePicture.size), track: track,
+                        path: CuePicture.overviewPath(track, layout: layout), timeline: timeline, layout: layout,
+                        position: 54, label: CueLabel(), appearance: look, holding: held)
+        let pixels = Self.pixels(bitmap)
+        for band in layout.reserved { XCTAssertEqual(Self.foreignPixels(pixels, in: band), 0) }
+        XCTAssertEqual(CountdownTests.count(CuePicture.paper, in: pixels, detail), 0)
+    }
+
+    func testShadingSwapsTheCloseUpColorsAndWarningOnly() throws {
+        let track = BaselineTests.syntheticTrack()
+        let timeline = ClipTimeline(duration: track.seconds, markers: MusicMarkers(detectedMusicEnd: 16), target: .musicEnd)
+        var look = CueAppearance()
+        look.zoom = .five
+        look.playheadMode = .centered
+        look.detailColor = CueColor(0.4, 0.7, 0.9)
+        let detail = try XCTUnwrap(look.layout.detail)
+        let left = CGRect(x: detail.minX + 30, y: detail.midY + 4, width: detail.width / 2 - 60, height: 6)
+        let right = left.offsetBy(dx: detail.width / 2, dy: 0)
+        for warning in [CountdownWarning.off, .five] {
+            look.warning = warning
+            look.solidRedAt = .oneSecond
+            let color = warning == .off ? look.detailColor! : CueColor.warningRed
+            var fullTrack: [UInt8]?
+            for shading in CloseUpShading.allCases {
+                look.closeUpShading = shading
+                let image = Self.render(track, timeline: timeline, position: 375, label: CueLabel(), appearance: look)
+                let bright = shading == .playedBrighter ? left : right
+                let dim = shading == .playedBrighter ? right : left
+                XCTAssertGreaterThan(CountdownTests.count(color.cgColor, in: image, bright), 3_000)
+                XCTAssertGreaterThan(CountdownTests.count(color.dimmed.cgColor, in: image, dim), 3_000)
+                let overview = CountdownTests.region(image, look.layout.overview)
+                if let fullTrack { XCTAssertTrue(fullTrack == overview) }
+                fullTrack = overview
+            }
+        }
+    }
+
+    func testSwashTitleFitsAtTheLeftAnchorAndRemainsGrabbable() {
+        let track = BaselineTests.syntheticTrack()
+        let timeline = ClipTimeline(duration: track.seconds)
+        var look = CueAppearance()
+        look.titleFontName = "Zapfino"
+        look.safeZones = Self.zones(left: 10)
+        let layout = look.layout
+        let label = CueLabel(text: "f")
+        let (line, box) = CuePicture.caption(label, layout: layout)
+        let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+        XCTAssertLessThan(ink.minX, -20)
+        XCTAssertGreaterThanOrEqual(box.width, ink.width)
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.minX + 2, y: box.midY), label: label,
+                                            layout: layout), .title)
+        let custom = Self.render(track, timeline: timeline, position: 0, label: label, appearance: look)
+        for band in layout.reserved { XCTAssertEqual(Self.foreignPixels(custom, in: band), 0) }
+        XCTAssertGreaterThan(Self.foreignPixels(custom, in: box), 50)
+    }
+
+    func testSelectedFontsDrawTheCaptionClockSectionsTicksAndSlate() throws {
+        let track = BaselineTests.syntheticTrack()
+        let label = CueLabel(text: "Test title")
+        let timeline = ClipTimeline(duration: track.seconds, trim: TrimSettings(preRoll: 1))
+        var look = CueAppearance()
+        let standard = Self.render(track, timeline: timeline, position: 25, label: label, appearance: look)
+        let defaultSlate = Self.render(track, timeline: timeline, position: 0, label: label, appearance: look)
+        look.titleFontName = "Georgia"
+        look.clockFontName = "HelveticaNeue"
+        let layout = look.layout
+        let custom = Self.render(track, timeline: timeline, position: 25, label: label, appearance: look)
+        let customSlate = Self.render(track, timeline: timeline, position: 0, label: label, appearance: look)
+        XCTAssertFalse(defaultSlate == customSlate)
+        for area in [CuePicture.caption(label, layout: layout).1, try XCTUnwrap(layout.extent(of: .elapsedClock)),
+                     CGRect(x: layout.contentMinX, y: layout.overviewLabelBaseline, width: 280, height: 28),
+                     CGRect(x: layout.contentMinX, y: try XCTUnwrap(layout.tickLabelBaseline), width: 280, height: 25)] {
+            XCTAssertFalse(CountdownTests.region(standard, area) == CountdownTests.region(custom, area))
+        }
+        look.showTitle = false
+        XCTAssertTrue(Self.render(track, timeline: timeline, position: 0, label: label, appearance: look)
+                      == Self.render(track, timeline: timeline, position: 0, label: CueLabel(text: "Other title"), appearance: look))
+        look.showTitle = true
+        look.titleFontName = "WaveformCue-Unavailable"
+        look.clockFontName = "Georgia" // This face cannot hold the clock digits on a fixed grid.
+        XCTAssertTrue(standard == Self.render(track, timeline: timeline, position: 25, label: label, appearance: look))
+    }
 
     func testTimelineEntryAt25MatchesFrameEntryAndBaseline() {
         let track = BaselineTests.syntheticTrack()

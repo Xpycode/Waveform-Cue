@@ -239,11 +239,11 @@ final class CountdownTests: XCTestCase {
         let layout = appearance.layout
         let timeline = Self.timeline(track, appearance)
         let label = CueLabel(text: "Countdown")
-        let full = 0..<750
+        let full = CuePicture.overviewRange(timeline)
         let endX = layout.overview.minX + layout.overview.width * 650 / 750   // 1593.6
         let y = layout.overview.midY
-        let closeUp = CuePicture.closeUp(frame: 640, total: 750, zoom: .auto)
-        XCTAssertEqual(closeUp, 500..<750)
+        let closeUp = CuePicture.closeUp(timeline: timeline, position: 640, appearance: appearance)
+        XCTAssertEqual(closeUp.visible, 20...30)
         func hit(_ x: CGFloat, _ y: CGFloat) -> CuePicture.HitTarget {
             CuePicture.hitTarget(at: CGPoint(x: x, y: y), label: label, layout: layout, timeline: timeline, closeUp: closeUp)
         }
@@ -276,7 +276,7 @@ final class CountdownTests: XCTestCase {
                                                        timeline: timeline, layout: layout), 0)
         XCTAssertEqual(CuePicture.draggedMarkerSeconds(at: CGPoint(x: 5000, y: y), in: full,
                                                        timeline: timeline, layout: layout), 30)
-        XCTAssertEqual(CuePicture.draggedMarkerSeconds(at: CGPoint(x: detailEnd, y: detail.midY), in: closeUp,
+        XCTAssertEqual(CuePicture.draggedMarkerSeconds(at: CGPoint(x: detailEnd, y: detail.midY), in: closeUp.visible,
                                                        timeline: timeline, layout: layout), 26, accuracy: 1e-9)
     }
 }

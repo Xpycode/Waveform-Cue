@@ -18,6 +18,7 @@ final class MonitorView: NSView {
     }
     var cueAppearance: CueAppearance {
         didSet {
+            guard oldValue != cueAppearance else { return }
             // One layout per appearance change, shared by drawing, seek, scrub and title drag.
             let newLayout = cueAppearance.layout
             if newLayout != layout {
@@ -69,11 +70,12 @@ final class MonitorView: NSView {
     }
 
     private func updateOverview() {
-        guard let track, trimDrag == nil, let timeline else {
-            path = CuePicture.waveform(track?.peaks ?? [], in: layout.overview)
+        guard let track, let timeline, layout.showFullTrack else {
+            path = CGMutablePath()
             return
         }
-        path = CuePicture.overviewPath(track, layout: layout, timeline: timeline)
+        path = trimDrag == nil ? CuePicture.overviewPath(track, layout: layout, timeline: timeline)
+                               : CuePicture.overviewPath(track, layout: layout)
     }
     var label = CueLabel() { didSet { needsDisplay = true } }
     var frameNumber = 0 { didSet { if oldValue != frameNumber { needsDisplay = true } } }
@@ -88,9 +90,9 @@ final class MonitorView: NSView {
     private var hovered = false
     private var labelOrigin: CGPoint?
     private var down: CGPoint?
-    private var scrubRange: Range<Int>?
-    private var heldDetail: Range<Int>?
-    private var markerDrag: (kind: MarkerKind, range: Range<Int>)?
+    private var scrubRange: ClosedRange<Double>?
+    private var heldDetail: CloseUpWindow?
+    private var markerDrag: (kind: MarkerKind, range: ClosedRange<Double>)?
     private var trimDrag: (edge: TrimEdge, original: TrimSettings, down: CGPoint)?
     private var hoverTracking: NSTrackingArea?
     override var acceptsFirstResponder: Bool { true }
@@ -130,10 +132,10 @@ final class MonitorView: NSView {
             } else {
                 CuePicture.draw(in: context, rect: picture, track: track, path: path, timeline: timeline,
                                 layout: layout, position: frameNumber, label: label, appearance: cueAppearance,
-                                heldRange: heldDetail, loudness: loudness)
+                                holding: heldDetail, loudness: loudness)
             }
             if cueAppearance.showGuides { drawGuides(in: context, picture: picture) }
-            if editingEnabled, onTrimChanged != nil { drawTrimHandles(in: context, picture: picture, timeline: timeline) }
+            if editingEnabled, layout.showFullTrack, onTrimChanged != nil { drawTrimHandles(in: context, picture: picture, timeline: timeline) }
         } else {
             NSColor(cgColor: CuePicture.rgb(0.047, 0.067, 0.076))?.setFill()
             picture.fill()
@@ -206,7 +208,8 @@ final class MonitorView: NSView {
         defer { context.restoreGState() }
         var edges: [(TrimEdge, CGFloat, Bool)]
         if trimDrag != nil, timeline.duration > 0 {
-            func x(_ seconds: Double) -> CGFloat { overview.minX + overview.width * CGFloat(seconds / timeline.duration) }
+            let axis = CuePicture.overviewRange(ClipTimeline(duration: timeline.duration))
+            func x(_ seconds: Double) -> CGFloat { overview.minX + overview.width * CGFloat(seconds / axis.upperBound) }
             let lo = x(timeline.sourceRange.lowerBound), hi = x(timeline.sourceRange.upperBound)
             NSColor(white: 0, alpha: 0.6).setFill()
             CGRect(x: overview.minX, y: overview.minY, width: max(0, lo - overview.minX), height: overview.height).fill()
@@ -234,11 +237,9 @@ final class MonitorView: NSView {
         return false
     }
 
-    /// The close-up window on screen, on the 25 base of the trimmed music.
-    private func closeUpRange() -> Range<Int> {
-        guard let timeline else { return 0..<1 }
-        let playhead = Int(CuePicture.playheadFrame(timeline: timeline, position: frameNumber))
-        return heldDetail ?? CuePicture.closeUp(frame: playhead, total: timeline.clockFrames, zoom: cueAppearance.zoom)
+    /// Keep the starting interval under the pointer throughout a gesture, including end zoom.
+    private func closeUpWindow(_ timeline: ClipTimeline) -> CloseUpWindow {
+        heldDetail ?? CuePicture.closeUp(timeline: timeline, position: frameNumber, appearance: cueAppearance)
     }
 
     /// Click precedence: title, then a marker, then a trim handle (only once `onTrimChanged` is
@@ -246,7 +247,7 @@ final class MonitorView: NSView {
     /// the music.
     private func hitTarget(_ p: CGPoint) -> CuePicture.HitTarget {
         guard let timeline else { return .none }
-        return CuePicture.hitTarget(at: p, label: label, layout: layout, timeline: timeline, closeUp: closeUpRange(),
+        return CuePicture.hitTarget(at: p, label: label, layout: layout, timeline: timeline, closeUp: closeUpWindow(timeline),
                                     trimHandles: onTrimChanged != nil)
     }
 
@@ -282,10 +283,11 @@ final class MonitorView: NSView {
             return
         case .marker(let kind, let onCloseUp):
             if onCloseUp {
-                heldDetail = closeUpRange()
-                markerDrag = (kind, heldDetail!)
+                let window = closeUpWindow(timeline)
+                heldDetail = window
+                markerDrag = (kind, window.visible)
             } else {
-                markerDrag = (kind, 0..<timeline.clockFrames)
+                markerDrag = (kind, CuePicture.overviewRange(timeline))
             }
             return
         case .trim(let edge):
@@ -294,10 +296,11 @@ final class MonitorView: NSView {
             needsDisplay = true
             return
         case .overview:
-            scrubRange = 0..<timeline.clockFrames
+            scrubRange = CuePicture.overviewRange(timeline)
         case .detail:
-            heldDetail = closeUpRange()
-            scrubRange = heldDetail
+            let window = closeUpWindow(timeline)
+            heldDetail = window
+            scrubRange = window.visible
         case .none:
             break
         }
@@ -342,7 +345,7 @@ final class MonitorView: NSView {
         needsDisplay = true
         onScrubChanged?(false)
     }
-    private func dragMarker(_ drag: (kind: MarkerKind, range: Range<Int>), to p: CGPoint) {
+    private func dragMarker(_ drag: (kind: MarkerKind, range: ClosedRange<Double>), to p: CGPoint) {
         guard let timeline else { return }
         let seconds = CuePicture.draggedMarkerSeconds(at: p, in: drag.range, timeline: timeline, layout: layout)
         var edited = effectiveMarkers
@@ -353,7 +356,7 @@ final class MonitorView: NSView {
     private func scrub(_ p: CGPoint) {
         guard let scrubRange, let timeline else { return }
         // A clock frame of the trimmed music, as a timeline position (the same frame untrimmed).
-        onSeek?(timeline.position(ofClockFrame: CuePicture.scrubFrame(at: p, in: scrubRange, layout: layout)))
+        onSeek?(timeline.position(ofClockFrame: CuePicture.scrubFrame(at: p, in: scrubRange, timeline: timeline, layout: layout)))
     }
     private func file(_ info: NSDraggingInfo) -> URL? {
         let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],

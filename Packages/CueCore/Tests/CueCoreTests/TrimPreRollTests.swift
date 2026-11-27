@@ -214,9 +214,10 @@ final class TrimPreRollTests: XCTestCase {
         let track = BaselineTests.syntheticTrack()
         let overview = layout.overview
         let plain = ClipTimeline(duration: track.seconds)
+        let window = CuePicture.closeUp(timeline: plain, position: 0, appearance: CueAppearance())
         func hit(_ point: CGPoint, _ timeline: ClipTimeline = plain, handles: Bool = true) -> CuePicture.HitTarget {
             CuePicture.hitTarget(at: point, label: CueLabel(), layout: layout, timeline: timeline,
-                                 closeUp: 0..<125, trimHandles: handles)
+                                 closeUp: window, trimHandles: handles)
         }
         XCTAssertEqual(hit(CGPoint(x: overview.minX - 20, y: overview.midY)), .trim(.inPoint))
         XCTAssertEqual(hit(CGPoint(x: overview.minX + 4, y: overview.midY)), .trim(.inPoint))
@@ -233,7 +234,7 @@ final class TrimPreRollTests: XCTestCase {
         let label = CueLabel(text: "Title")
         let box = CuePicture.caption(label, layout: layout).1
         XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), label: label, layout: layout,
-                                            timeline: plain, closeUp: 0..<125, trimHandles: true), .title)
+                                            timeline: plain, closeUp: window, trimHandles: true), .title)
     }
 
     func testDraggedTrimIsRelativeSnappedAndClamped() {

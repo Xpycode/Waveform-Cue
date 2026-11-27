@@ -473,7 +473,7 @@ enum Preview {
                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: flags)!
         let layout = appearance.layout
         CuePicture.draw(in: ctx, rect: CGRect(origin: .zero, size: CuePicture.size), track: track,
-                        path: CuePicture.overviewPath(track, layout: layout), timeline: timeline,
+                        path: CuePicture.overviewPath(track, layout: layout, timeline: timeline), timeline: timeline,
                         layout: layout, position: position, label: label, appearance: appearance)
         return Array(UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self), count: 7680 * 1080))
     }

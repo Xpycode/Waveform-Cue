@@ -9,6 +9,38 @@ final class CloseUpWindowTests: XCTestCase {
         zoom == .auto ? Double(zoom.frameCount(for: frames)) / 25 : Double(zoom.rawValue)
     }
 
+    func testLegacyFieldWindowSelectsTheSameFiveMillisecondPeakBuckets() {
+        let timeline = ClipTimeline(duration: 30, standard: TimelineRate.fields50)
+        var look = CueAppearance()
+        look.zoom = .five
+        // The upper bound of field 127 is 5.06 s. One ULP more selects an extra peak bucket.
+        for field in 0..<timeline.positionCount {
+            let lowerFrame = min(max(0, Double(field) / 2 - 62), 625)
+            let window = CuePicture.closeUp(timeline: timeline, position: field, appearance: look)
+            XCTAssertEqual(window.visible.lowerBound, lowerFrame / 25)
+            XCTAssertEqual(window.visible.upperBound, (lowerFrame + 125) / 25)
+        }
+    }
+
+    func testPicturePassesTheEffectiveSourceTargetAndEachFieldToTheInterval() {
+        let timeline = ClipTimeline(duration: 30, trim: TrimSettings(inPoint: 3.28, outPoint: 23, preRoll: 1),
+                                    markers: MusicMarkers(detectedMusicEnd: 17.21), target: .musicEnd, standard: TimelineRate.fields50)
+        var look = CueAppearance()
+        look.zoom = .five
+        look.endZoom = .two
+        for mode in PlayheadMode.allCases {
+            look.playheadMode = mode
+            for field in stride(from: 710, through: 600, by: -1) {
+                let expected = CloseUpWindow.interval(playhead: 3.28 + Double(field - 50) / 50,
+                                                      clip: 3.28...23, target: 17.21, startingWidth: 5,
+                                                      mode: mode, endZoom: .two)
+                let result = CuePicture.closeUp(timeline: timeline, position: field, appearance: look)
+                XCTAssertEqual(result.visible.lowerBound, expected.visible.lowerBound, accuracy: tolerance)
+                XCTAssertEqual(result.visible.upperBound, expected.visible.upperBound, accuracy: tolerance)
+            }
+        }
+    }
+
     func testCenteredFiveSecondWindowHasBlankSpaceAtTrimBoundaries() {
         let clip = 8.0...12.0
         let first = CloseUpWindow.interval(playhead: 8, clip: clip, target: 12,

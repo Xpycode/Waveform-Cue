@@ -184,7 +184,7 @@ public struct CueAppearance: Codable, Sendable, Equatable {
     /// The picture geometry for this appearance. Compute it once per appearance change and
     /// share it between the preview, hit-testing and the export.
     public var layout: CueLayout {
-        CueLayout(appearance: self, clockPosition: clockPosition, safeZones: safeZones)
+        CueLayout(appearance: self)
     }
 
     // Build 4 stored only the clocks under this key.

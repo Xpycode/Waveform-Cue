@@ -1,8 +1,7 @@
 import CoreGraphics
 
 /// Geometry of one 1920 × 1080 cue picture, computed from the zoom window, the clock sizes, the
-/// clock position and the safe zones (spec F). Pure arithmetic: no fonts are loaded and nothing is
-/// drawn, so the preview, the export, hit-testing and the guides can share one value.
+/// clock position and the safe zones. Measured text and visible groups determine the spacing, so the preview, the export, hit-testing and the guides can share one value.
 ///
 /// Coordinates are Core Graphics picture points with a bottom-left origin, like `CuePicture`.
 ///
@@ -95,12 +94,14 @@ public struct CueLayout: Sendable, Equatable {
 
     // MARK: Inputs
 
-    // `ZoomWindow` and `ClockSize` are not declared Sendable yet, so their raw values are stored.
-    private let zoomRaw: Int
+    let typography: PictureTypography
+    public let zoom: ZoomWindow
+    public let showTitle: Bool
+    public let showFullTrack: Bool
+    public let showElapsed: Bool
+    public let showRemaining: Bool
     private let requestedRaw: [String]
     private let sizeRaw: [String]
-
-    public var zoom: ZoomWindow { ZoomWindow(rawValue: zoomRaw)! }
     public let clockPosition: ClockPosition
     public let insets: SafeZones.Insets
     /// The clock sizes the appearance asked for, before any give-way.
@@ -147,8 +148,8 @@ public struct CueLayout: Sendable, Equatable {
     public var tickLabelBaseline: CGFloat? { detail.map { $0.minY - Metrics.tickLabelOffset } }
     /// Top of the close-up cursor triangle.
     public var cursorTriangleTop: CGFloat? { detail.map { $0.maxY + Metrics.cursorTriangleRise } }
-    public var elapsedLabelBaseline: CGFloat { Self.labelBaseline(clockBaseline, elapsedSize) }
-    public var remainingLabelBaseline: CGFloat { Self.labelBaseline(clockBaseline, remainingSize) }
+    public var elapsedLabelBaseline: CGFloat { clockBaseline + typography.clockLabelRise(elapsedSize.points) }
+    public var remainingLabelBaseline: CGFloat { clockBaseline + typography.clockLabelRise(remainingSize.points) }
     /// Height of the title box for a given point size (build 10: size + 22).
     public static func titleBoxHeight(_ size: CGFloat) -> CGFloat { size + Metrics.titleBoxPadding }
 
@@ -172,22 +173,26 @@ public struct CueLayout: Sendable, Equatable {
         let m = Metrics.self
         switch element {
         case .title:
+            guard showTitle else { return nil }
             return titleArea.insetBy(dx: -m.titleShadowSpread, dy: 0)
         case .overview:
+            guard showFullTrack else { return nil }
             return CGRect(x: overview.minX - m.cursorOverhang, y: overview.minY - m.overviewBelow,
                           width: overview.width + 2 * m.cursorOverhang,
-                          height: overview.height + m.overviewBelow + m.overviewAbove)
+                          height: overview.height + m.overviewBelow + typography.overviewAbove)
         case .detail:
             return detail.map {
-                CGRect(x: $0.minX - m.cursorTriangleHalfWidth, y: $0.minY - m.detailBelow,
+                CGRect(x: $0.minX - m.cursorTriangleHalfWidth, y: $0.minY - typography.detailBelow,
                        width: $0.width + 2 * m.cursorTriangleHalfWidth,
-                       height: $0.height + m.detailBelow + m.detailAbove)
+                       height: $0.height + typography.detailBelow + typography.detailAbove)
             }
         case .elapsedClock, .remainingClock:
-            let size = element == .elapsedClock ? elapsedSize : remainingSize
-            let width = max(Self.clockWidth(size), m.clockLabelSize * 5)
-            let bottom = clockBaseline - size.points * m.digitDescent - m.antialias
-            let top = Self.labelBaseline(clockBaseline, size) + m.clockLabelSize * m.labelAscent + m.antialias
+            let right = element == .remainingClock
+            guard right ? showRemaining : showElapsed else { return nil }
+            let size = right ? remainingSize : elapsedSize
+            let width = typography.clockWidth(size, right: right)
+            let bottom = clockBaseline - size.points * typography.clockUnit.descent - m.antialias
+            let top = clockBaseline + typography.clockLabelRise(size.points) + m.clockLabelSize * typography.titleUnit.ascent + m.antialias
             let x = element == .elapsedClock ? contentMinX : contentMaxX - width
             return CGRect(x: x, y: bottom, width: width, height: top - bottom)
         }
@@ -202,17 +207,30 @@ public struct CueLayout: Sendable, Equatable {
 
     // MARK: Init
 
-    public init(appearance: CueAppearance, clockPosition: ClockPosition = .below, safeZones: SafeZones = .none) {
-        self.init(zoom: appearance.zoom, elapsed: appearance.elapsed.size, remaining: appearance.remaining.size,
-                  clockPosition: clockPosition, safeZones: safeZones)
-    }
-
     public init(zoom: ZoomWindow = .auto, elapsed: ClockSize = .medium, remaining: ClockSize = .medium,
                 clockPosition: ClockPosition = .below, safeZones: SafeZones = .none) {
+        var appearance = CueAppearance()
+        appearance.zoom = zoom
+        appearance.elapsed.size = elapsed
+        appearance.remaining.size = remaining
+        self.init(appearance: appearance, clockPosition: clockPosition, safeZones: safeZones)
+    }
+
+    public init(appearance: CueAppearance, clockPosition overridePosition: ClockPosition? = nil,
+                safeZones overrideZones: SafeZones? = nil) {
         typealias M = Metrics
-        zoomRaw = zoom.rawValue
+        zoom = appearance.zoom
+        let clockPosition = overridePosition ?? appearance.clockPosition
         self.clockPosition = clockPosition
-        insets = safeZones.insets
+        insets = (overrideZones ?? (appearance.safeZonesEnabled ? appearance.safeZones : .none)).insets
+        showTitle = appearance.showTitle
+        showFullTrack = appearance.showFullTrack
+        showElapsed = appearance.showElapsed
+        showRemaining = appearance.showRemaining
+        let fonts: PictureTypography = appearance.titleFontName == nil && appearance.clockFontName == nil
+            ? .standard : PictureTypography(titleName: appearance.titleFontName, clockName: appearance.clockFontName)
+        typography = fonts
+        let elapsed = appearance.elapsed.size, remaining = appearance.remaining.size
         requestedRaw = [elapsed.rawValue, remaining.rawValue]
 
         // Bands, rounded outward to whole pixels.
@@ -239,8 +257,13 @@ public struct CueLayout: Sendable, Equatable {
         // Horizontal: the clock pair must fit side by side; only smaller clocks help.
         var eSize = elapsed, rSize = remaining
         var horizontalFit = true
-        while Self.clockWidth(eSize) + Self.clockWidth(rSize) + M.clockPairGap > safeFrame.width {
-            guard Self.stepLarger(&eSize, &rSize) else { horizontalFit = false; break }
+        func clocksWidth(_ elapsed: ClockSize, _ remaining: ClockSize) -> CGFloat {
+            (appearance.showElapsed ? fonts.clockWidth(elapsed, right: false) : 0)
+                + (appearance.showRemaining ? fonts.clockWidth(remaining, right: true) : 0)
+                + (appearance.showElapsed && appearance.showRemaining ? M.clockPairGap : 0)
+        }
+        while clocksWidth(eSize, rSize) > safeFrame.width {
+            guard Self.stepLarger(&eSize, &rSize, appearance: appearance) else { horizontalFit = false; break }
         }
 
         // Vertical: find the first give-way stage that fits.
@@ -249,9 +272,12 @@ public struct CueLayout: Sendable, Equatable {
         var verticalFit = true
         let available = highY - lowY
         while true {
-            plan = Stack(zoom: zoom, position: clockPosition, elapsed: eSize, remaining: rSize, title: titleSize)
+            plan = Stack(appearance: appearance, fonts: fonts, position: clockPosition, elapsed: eSize, remaining: rSize, title: titleSize)
             let needed = plan.span - available
             if needed <= 0 {
+                if !showTitle || !showFullTrack || (!showElapsed && !showRemaining) {
+                    plan.expandWaveform(by: (-needed).rounded(.down))
+                }
                 plan.top = Self.offsetTop(span: plan.span, low: lowY, high: highY)
                 break
             }
@@ -272,16 +298,15 @@ public struct CueLayout: Sendable, Equatable {
                 plan.shrinkGaps(by: gapShrink)
                 break
             }
-            if Self.stepLarger(&eSize, &rSize) { continue }
-            let rest = shrink - plan.waveformCapacity - plan.gapCapacity
-            let reduced = M.titleNaturalSize - rest.rounded(.up)
-            if titleSize == M.titleNaturalSize, reduced >= M.titleMinimumSize {
-                titleSize = reduced
+            if Self.stepLarger(&eSize, &rSize, appearance: appearance) { continue }
+            // Custom ascenders and descenders can release several picture points per font point.
+            if showTitle && titleSize > M.titleMinimumSize {
+                titleSize -= 1
                 continue
             }
             // Nothing left to give: lay out at the minimums and report the failure.
             titleSize = M.titleMinimumSize
-            plan = Stack(zoom: zoom, position: clockPosition, elapsed: eSize, remaining: rSize, title: titleSize)
+            plan = Stack(appearance: appearance, fonts: fonts, position: clockPosition, elapsed: eSize, remaining: rSize, title: titleSize)
             plan.top = highY
             plan.shrinkWaveforms(by: plan.waveformCapacity)
             plan.shrinkGaps(by: plan.gapCapacity)
@@ -304,9 +329,10 @@ public struct CueLayout: Sendable, Equatable {
     }
 
     /// Steps the larger clock (both when equal) down one size. False when both are Small.
-    private static func stepLarger(_ a: inout ClockSize, _ b: inout ClockSize) -> Bool {
+    private static func stepLarger(_ a: inout ClockSize, _ b: inout ClockSize, appearance: CueAppearance) -> Bool {
         let all = ClockSize.allCases
-        let ia = all.firstIndex(of: a)!, ib = all.firstIndex(of: b)!
+        let ia = appearance.showElapsed ? all.firstIndex(of: a)! : -1
+        let ib = appearance.showRemaining ? all.firstIndex(of: b)! : -1
         let largest = max(ia, ib)
         guard largest > 0 else { return false }
         if ia == largest { a = all[ia - 1] }
@@ -331,6 +357,7 @@ private struct Stack {
     enum Segment { case title, overview, detail, clocks, gap(Int) }
 
     let zoom: ZoomWindow
+    let fonts: PictureTypography
     let order: [Segment]
     let titleHeight: CGFloat
     let clockRise: CGFloat   // clock block top above the baseline
@@ -340,13 +367,15 @@ private struct Stack {
     var gaps: [CGFloat]
     var top: CGFloat = 0
 
-    init(zoom: ZoomWindow, position: ClockPosition, elapsed: ClockSize, remaining: ClockSize, title: CGFloat) {
-        self.zoom = zoom
+    init(appearance: CueAppearance, fonts: PictureTypography, position: ClockPosition, elapsed: ClockSize,
+         remaining: ClockSize, title: CGFloat) {
+        zoom = appearance.zoom
+        self.fonts = fonts
         let hasDetail = zoom != .off
-        titleHeight = CueLayout.titleBoxHeight(title)
-        let largest = max(elapsed.points, remaining.points)
-        clockRise = largest * M.clockLabelRise + M.clockLabelGap + M.clockLabelSize * M.labelAscent + M.antialias
-        clockDrop = largest * M.digitDescent + M.antialias
+        titleHeight = fonts.titleBoxHeight(title)
+        let largest = max(appearance.showElapsed ? elapsed.points : 0, appearance.showRemaining ? remaining.points : 0)
+        clockRise = fonts.clockLabelRise(largest) + M.clockLabelSize * fonts.titleUnit.ascent + M.antialias
+        clockDrop = largest * fonts.clockUnit.descent + M.antialias
         let natural = CueLayout.Metrics.naturalOverview
         overviewHeight = hasDetail ? natural.height : natural.maxY - M.naturalDetail.minY
         detailHeight = hasDetail ? M.naturalDetail.height : 0
@@ -357,16 +386,31 @@ private struct Stack {
         let overviewBottom = (hasDetail ? natural.minY : M.naturalDetail.minY) - M.overviewBelow
         let detailTop = M.naturalDetail.maxY + M.detailAbove
         let detailBottom = M.naturalDetail.minY - M.detailBelow
-        let clockTop = M.naturalClockBaseline + clockRise
+        let clockTop = M.naturalClockBaseline + largest * M.clockLabelRise + M.clockLabelGap
+            + M.clockLabelSize * M.labelAscent + M.antialias
         let waveBottom = hasDetail ? detailBottom : overviewBottom
         // gap 0: title ↔ upper group, 1: waveform group ↔ clocks, 2: full track ↔ close-up.
         gaps = [titleBottom - overviewTop,
                 waveBottom - clockTop,
                 hasDetail ? overviewBottom - detailTop : 0]
-        let waves: [Segment] = hasDetail ? [.overview, .gap(2), .detail] : [.overview]
-        order = position == .below
-            ? [.title, .gap(0)] + waves + [.gap(1), .clocks]
-            : [.title, .gap(0), .clocks, .gap(1)] + waves
+        var waves: [Segment] = appearance.showFullTrack ? [.overview] : []
+        if hasDetail {
+            if appearance.showFullTrack { waves.append(.gap(2)) }
+            waves.append(.detail)
+        }
+        let hasClocks = appearance.showElapsed || appearance.showRemaining
+        var body = waves
+        if hasClocks {
+            let gap: [Segment] = waves.isEmpty ? [] : [.gap(1)]
+            body = position == .below ? waves + gap + [.clocks] : [.clocks] + gap + waves
+        }
+        order = appearance.showTitle ? [.title] + (body.isEmpty ? [] : [.gap(0)]) + body : body
+        if !appearance.showFullTrack { overviewHeight = 0 }
+    }
+
+    mutating func expandWaveform(by amount: CGFloat) {
+        if detailHeight > 0 { detailHeight += amount }
+        else if overviewHeight > 0 { overviewHeight += amount }
     }
 
     private var minimumOverview: CGFloat { zoom == .off ? M.minimumOverviewOffHeight : M.minimumOverviewHeight }
@@ -374,14 +418,16 @@ private struct Stack {
     private var overviewCapacity: CGFloat { max(0, overviewHeight - minimumOverview) }
     var waveformCapacity: CGFloat { detailCapacity + overviewCapacity }
     var gapCapacity: CGFloat { usedGaps.reduce(0) { $0 + max(0, gaps[$1] - M.minimumGap) } }
-    private var usedGaps: [Int] { zoom == .off ? [0, 1] : [0, 1, 2] }
+    private var usedGaps: [Int] {
+        order.compactMap { if case .gap(let i) = $0 { return i }; return nil }
+    }
 
     var span: CGFloat {
         order.reduce(0) { total, segment in
             switch segment {
             case .title: return total + titleHeight
-            case .overview: return total + M.overviewBelow + overviewHeight + M.overviewAbove
-            case .detail: return total + M.detailBelow + detailHeight + M.detailAbove
+            case .overview: return total + M.overviewBelow + overviewHeight + fonts.overviewAbove
+            case .detail: return total + fonts.detailBelow + detailHeight + fonts.detailAbove
             case .clocks: return total + clockRise + clockDrop
             case .gap(let i): return total + gaps[i]
             }
@@ -390,6 +436,7 @@ private struct Stack {
 
     /// Gap 1 separates the bottom waveform's full extent (including ticks) from the clock labels.
     mutating func reclaimGapAboveClocks(upTo amount: CGFloat) -> CGFloat {
+        guard usedGaps.contains(1) else { return 0 }
         let reclaimed = min(amount, max(0, gaps[1] - M.minimumGap))
         gaps[1] -= reclaimed
         return reclaimed
@@ -423,13 +470,13 @@ private struct Stack {
             case .gap(let i):
                 y -= gaps[i]
             case .overview:
-                let maxY = (y - M.overviewAbove).rounded()
+                let maxY = (y - fonts.overviewAbove).rounded()
                 overview = CGRect(x: x, y: maxY - overviewHeight, width: width, height: overviewHeight)
                 y = overview.minY - M.overviewBelow
             case .detail:
-                let maxY = (y - M.detailAbove).rounded()
+                let maxY = (y - fonts.detailAbove).rounded()
                 detail = CGRect(x: x, y: maxY - detailHeight, width: width, height: detailHeight)
-                y = maxY - detailHeight - M.detailBelow
+                y = maxY - detailHeight - fonts.detailBelow
             case .clocks:
                 baseline = (y - clockRise).rounded()
                 y = baseline - clockDrop

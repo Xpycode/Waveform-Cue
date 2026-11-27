@@ -106,6 +106,55 @@ final class CueLayoutTests: XCTestCase {
         XCTAssertEqual(layout.insets, SafeZones.evsOSDInsets)
     }
 
+    func testHiddenGroupsReturnSpaceToTheWaveform() throws {
+        var look = CueAppearance()
+        look.safeZones = zones(top: 11, bottom: 11)
+        look.elapsed.size = .extraLarge
+        look.remaining.size = .extraLarge
+        let visible = look.layout
+        for setting in [\CueAppearance.showTitle, \.showFullTrack] {
+            var hidden = look
+            hidden[keyPath: setting] = false
+            XCTAssertGreaterThan(try XCTUnwrap(hidden.layout.detail).height, try XCTUnwrap(visible.detail).height)
+        }
+        look.safeZones = zones(left: 30, right: 30)
+        let pair = look.layout
+        look.showElapsed = false
+        let single = look.layout
+        XCTAssertNil(single.extent(of: .elapsedClock))
+        XCTAssertEqual(single.remainingSize, .extraLarge)
+        XCTAssertNotEqual(pair.remainingSize, single.remainingSize)
+        look.showRemaining = false
+        XCTAssertGreaterThan(try XCTUnwrap(look.layout.detail).height, try XCTUnwrap(single.detail).height)
+    }
+
+    func testTallTitleFindsAFittingPointSizeBetweenItsLimits() {
+        var look = CueAppearance()
+        look.titleFontName = "Zapfino"
+        look.zoom = .five
+        look.elapsed.size = .small
+        look.remaining.size = .small
+        look.safeZones = zones(top: 16, bottom: 16)
+        let layout = look.layout
+        XCTAssertTrue(layout.fits)
+        XCTAssertGreaterThanOrEqual(layout.titleSize, M.titleMinimumSize)
+        XCTAssertLessThan(layout.titleSize, M.titleNaturalSize)
+        let track = BaselineTests.syntheticTrack()
+        let pixels = RenderTests.render(track, timeline: ClipTimeline(duration: track.seconds), position: 0,
+                                        label: CueLabel(text: "Swash"), appearance: look)
+        for band in layout.reserved { XCTAssertEqual(RenderTests.foreignPixels(pixels, in: band), 0) }
+    }
+
+    func testDisabledSafeZonesRestoreRoomWithoutLosingTheReserves() {
+        var look = CueAppearance()
+        look.safeZones = zones(top: 30, bottom: 30, left: 30, right: 30)
+        XCTAssertFalse(look.layout.fits)
+        look.safeZonesEnabled = false
+        XCTAssertTrue(look.layout.fits)
+        XCTAssertTrue(look.layout.reserved.isEmpty)
+        XCTAssertEqual(look.safeZones.insets.top, 30)
+    }
+
     // MARK: Bands
 
     func testReservedBandsInPixels() {
