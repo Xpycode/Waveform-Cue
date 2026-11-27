@@ -335,6 +335,41 @@ final class QueueManagerTests: XCTestCase {
         await manager.waitUntilIdle()
     }
 
+    func testStartQueueFailsJobWithTrimUnderOneSecond() async {
+        let exporter = ControlledExporter()
+        let manager = makeManager(exporter)
+        var short = job("Short")
+        short.peaks = PeaksSummary(seconds: 10, overview: [0.5])
+        short.trim = TrimSettings(inPoint: 4, outPoint: 4.6)
+        XCTAssertEqual(QueueManager.blockingReason(for: short), ClipTimeline.trimTooShortMessage)
+        // Without a known duration the in and out points alone decide.
+        var unknown = job("Unknown")
+        unknown.trim = TrimSettings(inPoint: 1, outPoint: 1.5)
+        XCTAssertEqual(QueueManager.blockingReason(for: unknown), "Trim range too short")
+        // Exactly one second, an in point near the end of a long source, fades and pre-roll pass.
+        var oneSecond = job("OneSecond")
+        oneSecond.peaks = PeaksSummary(seconds: 10, overview: [0.5])
+        oneSecond.trim = TrimSettings(inPoint: 4, outPoint: 5, fadeIn: 2, preRoll: 10)
+        XCTAssertNil(QueueManager.blockingReason(for: oneSecond))
+        var tail = job("Tail")
+        tail.peaks = PeaksSummary(seconds: 10, overview: [0.5])
+        tail.trim = TrimSettings(inPoint: 9.5)
+        XCTAssertEqual(QueueManager.blockingReason(for: tail), ClipTimeline.trimTooShortMessage)
+        // An untrimmed source shorter than a second still exports, as in build 10.
+        var tiny = job("Tiny")
+        tiny.peaks = PeaksSummary(seconds: 0.4, overview: [0.5])
+        tiny.trim = TrimSettings(preRoll: 2)
+        XCTAssertNil(QueueManager.blockingReason(for: tiny))
+
+        manager.add([short, oneSecond])
+        manager.start()
+        await eventually("OneSecond runs") { exporter.calls.count == 1 }
+        XCTAssertEqual(exporter.calls[0].job.id, oneSecond.id)
+        XCTAssertEqual(status(manager, short.id), .failed(reason: ClipTimeline.trimTooShortMessage, log: ""))
+        exporter.succeed(0)
+        await manager.waitUntilIdle()
+    }
+
     func testExportSelectedRunsOnlyThoseJobs() async {
         let exporter = ControlledExporter()
         let manager = makeManager(exporter)

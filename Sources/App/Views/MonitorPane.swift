@@ -15,11 +15,14 @@ struct MonitorPane: View {
                                  label: model.label,
                                  appearance: model.appearance,
                                  markers: model.selectedMarkers,
+                                 trim: model.selectedTrim,
+                                 loudness: model.selectedJob?.loudness,
                                  editingEnabled: model.canEdit,
                                  placeholder: model.placeholder)
+            // Slider positions are the preview timeline's: the slate, then the trimmed music.
             TransportRepresentable(model: model,
                                    frame: model.frame,
-                                   frames: model.track?.frames ?? 0,
+                                   frames: model.positionCount,
                                    isPlaying: model.isPlaying,
                                    isEnabled: model.canPlay)
                 .frame(height: 30)
