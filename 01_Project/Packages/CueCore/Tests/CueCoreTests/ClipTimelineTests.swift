@@ -235,12 +235,12 @@ final class ClipTimelineTests: XCTestCase {
         XCTAssertFalse(timeline.clocks(at: 249).isPastTarget)
     }
 
-    func testMarkerBeforeInPointHoldsAtZero() {
+    func testMarkerBeforeInPointCountsToFileEnd() {
         let markers = MusicMarkers(detectedMusicEnd: 5)
         let timeline = ClipTimeline(duration: 30, trim: TrimSettings(inPoint: 10), markers: markers, target: .musicEnd)
-        XCTAssertEqual(timeline.targetClockFrames, 0)
-        XCTAssertEqual(timeline.clocks(at: 0).remaining, 0)
-        XCTAssertTrue(timeline.clocks(at: 0).isPastTarget)
+        XCTAssertNil(timeline.musicEndMarker)
+        XCTAssertEqual(timeline.targetClockFrames, timeline.clockFrames)
+        XCTAssertFalse(timeline.clocks(at: 0).isPastTarget)
     }
 
     // MARK: - 50 Hz

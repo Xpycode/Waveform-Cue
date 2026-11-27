@@ -30,7 +30,7 @@ public struct TrackAnalysis: Codable, Sendable, Equatable, Hashable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         seconds = try c.decode(Double.self, forKey: .seconds)
         let bytes = [UInt8](try c.decode(Data.self, forKey: .detailPeaks))
-        guard seconds.isFinite, seconds > 0, !bytes.isEmpty, bytes.count % 4 == 0 else {
+        guard seconds.isFinite, seconds > 0, seconds <= TrimSettings.maximumSeconds, !bytes.isEmpty, bytes.count % 4 == 0 else {
             throw DecodingError.dataCorruptedError(forKey: .detailPeaks, in: c,
                                                    debugDescription: "Stored waveform peaks are unusable.")
         }
@@ -103,16 +103,36 @@ public struct AudioTrack: Sendable {
 
     /// Rebuilds a track from stored analysis without decoding or re-analysing. The overview
     /// peaks are derived exactly as `read` derives them.
-    public init(url: URL, analysis: TrackAnalysis, audio: PreparedAudio? = nil) {
+    public init(url: URL, analysis: TrackAnalysis) {
+        self.init(url: url, pcm: nil, seconds: analysis.seconds, detailPeaks: analysis.detailPeaks,
+                  peaks: Self.reducePeaks(analysis.detailPeaks[...], columns: 1600),
+                  markers: analysis.markers, absolutePeak: analysis.absolutePeak)
+    }
+
+    /// Stored analysis joined to freshly decoded audio. Throws when the audio's length no longer
+    /// matches the analysed duration, which means the source file changed after it was added.
+    public init(url: URL, analysis: TrackAnalysis, audio: PreparedAudio) throws {
+        try Self.verifyLength(of: audio, matches: analysis.seconds)
         self.init(url: url, pcm: audio, seconds: analysis.seconds, detailPeaks: analysis.detailPeaks,
                   peaks: Self.reducePeaks(analysis.detailPeaks[...], columns: 1600),
                   markers: analysis.markers, absolutePeak: analysis.absolutePeak)
     }
 
     /// The same track with its decoded PCM (for example from `JobWorkspace.acquire`).
-    public func attaching(_ audio: PreparedAudio) -> AudioTrack {
-        AudioTrack(url: url, pcm: audio, seconds: seconds, detailPeaks: detailPeaks, peaks: peaks,
-                   markers: markers, absolutePeak: absolutePeak)
+    /// Throws when the audio's length does not match this track's analysed duration.
+    public func attaching(_ audio: PreparedAudio) throws -> AudioTrack {
+        try Self.verifyLength(of: audio, matches: seconds)
+        return AudioTrack(url: url, pcm: audio, seconds: seconds, detailPeaks: detailPeaks, peaks: peaks,
+                          markers: markers, absolutePeak: absolutePeak)
+    }
+
+    static let sourceChangedMessage = "The source file has changed since it was added. Remove it from the queue and add it again."
+
+    /// One video frame: the most the decoded length may differ from the analysed duration.
+    private static func verifyLength(of audio: PreparedAudio, matches seconds: Double) throws {
+        let file = try AVAudioFile(forReading: audio.url)
+        let decoded = Double(file.length) / file.processingFormat.sampleRate
+        guard abs(decoded - seconds) <= 1.0 / Double(fps) else { throw CueError(sourceChangedMessage) }
     }
 
     /// Decodes `url` to a temporary CAF and analyses it.

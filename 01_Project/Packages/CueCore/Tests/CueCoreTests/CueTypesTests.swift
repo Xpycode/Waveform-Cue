@@ -115,4 +115,18 @@ final class CueTypesTests: XCTestCase {
         XCTAssertFalse(TrimSettings(preRoll: 2).isIdentity)
         XCTAssertEqual(AudioLayout.eight.trackCount, 8)
     }
+
+    func testHugeStoredValuesAreClampedNotTrapped() throws {
+        let trim = try decode(TrimSettings.self,
+                              #"{"inPoint": 1e18, "outPoint": 1e18, "fadeIn": 1e18, "fadeOut": 1e300, "preRoll": 1e18}"#)
+        XCTAssertEqual(trim.preRoll, TrimSettings.maximumSeconds)
+        XCTAssertEqual(trim.fadeIn, TrimSettings.maximumSeconds)
+        XCTAssertEqual(trim.inPoint, TrimSettings.maximumSeconds)
+        let timeline = ClipTimeline(duration: 60, trim: trim)
+        XCTAssertGreaterThan(timeline.preRollFrames, 0)
+        _ = timeline.audioFilters()
+
+        let peaks = Data(count: 4).base64EncodedString()
+        XCTAssertThrowsError(try decode(TrackAnalysis.self, #"{"seconds": 1e18, "detailPeaks": "\#(peaks)"}"#))
+    }
 }

@@ -8,6 +8,26 @@ public final class PreparedAudio: Sendable {
     public let url: URL
     public static let sessionDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("WaveformCue-" + UUID().uuidString, isDirectory: true)
+    static let sessionPrefix = "WaveformCue-"
+
+    /// Deletes decoded-audio folders that earlier launches left behind (a crash skips the quit-time
+    /// cleanup). Only directories named `WaveformCue-*` in the temporary directory are touched,
+    /// never the current session's.
+    public static func removeStaleSessionDirectories() {
+        removeStaleSessionDirectories(in: FileManager.default.temporaryDirectory, keeping: sessionDirectory)
+    }
+
+    static func removeStaleSessionDirectories(in base: URL, keeping current: URL) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: [.isDirectoryKey],
+                                                        options: []) else { return }
+        for entry in entries where entry.lastPathComponent.hasPrefix(sessionPrefix) {
+            guard entry.lastPathComponent != current.lastPathComponent,
+                  (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            try? fm.removeItem(at: entry)
+        }
+    }
+
     public static var encoder: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ffmpeg") }
 
     init(url: URL) { self.url = url }

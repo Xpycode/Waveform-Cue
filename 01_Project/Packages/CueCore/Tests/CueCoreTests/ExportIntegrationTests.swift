@@ -576,4 +576,10 @@ enum FFmpegRun {
         }
         return [UInt8](result.stdout)
     }
+
+    func testUnknownFreeSpaceIsNotZero() {
+        XCTAssertNil(DiskSpace.availableBytes(important: nil, plain: nil))
+        XCTAssertEqual(DiskSpace.availableBytes(important: nil, plain: 7), 7)
+        XCTAssertEqual(DiskSpace.availableBytes(important: 9, plain: 7), 9)
+    }
 }

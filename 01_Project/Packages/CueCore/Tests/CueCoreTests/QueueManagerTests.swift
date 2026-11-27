@@ -1020,4 +1020,20 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertEqual(sleep.begins, 1)
         XCTAssertEqual(sleep.ends, 1)
     }
+
+    func testWillStartJobEditReachesTheExporter() async {
+        let exporter = ControlledExporter()
+        let manager = makeManager(exporter)
+        let a = job("A")
+        manager.add(a)
+        manager.willStartJob = { [unowned manager] id in
+            manager.update(id) { $0.labelText = "edited in hook" }
+        }
+        manager.start()
+        await eventually("export call") { exporter.calls.count == 1 }
+        guard exporter.calls.count == 1 else { return }
+        XCTAssertEqual(exporter.calls[0].job.labelText, "edited in hook")
+        exporter.succeed(0)
+        await manager.waitUntilIdle()
+    }
 }

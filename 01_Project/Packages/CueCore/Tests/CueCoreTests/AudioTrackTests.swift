@@ -188,7 +188,7 @@ final class AudioTrackTests: XCTestCase {
         XCTAssertEqual(restored.absolutePeak, analysed.absolutePeak)
         XCTAssertEqual(restored.peaks(in: 1..<2, columns: 50), analysed.peaks(in: 1..<2, columns: 50))
 
-        let attached = restored.attaching(pcm)
+        let attached = try restored.attaching(pcm)
         XCTAssertTrue(attached.isDecoded)
         XCTAssertTrue(attached.pcm === pcm)
         XCTAssertEqual(attached.peaks, analysed.peaks)
@@ -217,5 +217,45 @@ final class AudioTrackTests: XCTestCase {
         XCTAssertEqual(track.markers, .none)
         XCTAssertEqual(track.absolutePeak, 0)
         XCTAssertFalse(track.isDecoded)
+    }
+
+    func testAttachingAudioOfADifferentLengthThrows() throws {
+        let dir = try TestAudio.temporaryDirectory("changed")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let source = dir.appendingPathComponent("c.wav")
+        let original = try TestAudio.writeCAF(seconds: 4, to: dir.appendingPathComponent("a.caf")) { _ in 0.2 }
+        let analysis = try AudioTrack.analyse(source, audio: original).analysis
+        let longer = try TestAudio.writeCAF(seconds: 5, to: dir.appendingPathComponent("b.caf")) { _ in 0.2 }
+        let nearly = try TestAudio.writeCAF(seconds: 4.02, to: dir.appendingPathComponent("c.caf")) { _ in 0.2 }
+
+        XCTAssertThrowsError(try AudioTrack(url: source, analysis: analysis, audio: longer)) {
+            XCTAssertTrue(($0 as? CueError)?.message.contains("remove") == true
+                          || ($0 as? CueError)?.message.contains("Remove") == true)
+        }
+        XCTAssertThrowsError(try AudioTrack(url: source, analysis: analysis).attaching(longer))
+        XCTAssertNoThrow(try AudioTrack(url: source, analysis: analysis, audio: nearly))
+        XCTAssertNoThrow(try AudioTrack(url: source, analysis: analysis, audio: original))
+    }
+
+    func testRemoveStaleSessionDirectoriesKeepsEverythingElse() throws {
+        let base = try TestAudio.temporaryDirectory("stale")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let fm = FileManager.default
+        func directory(_ name: String) throws -> URL {
+            let url = base.appendingPathComponent(name, isDirectory: true)
+            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+            return url
+        }
+        let stale = try directory("WaveformCue-AAAA")
+        let current = try directory("WaveformCue-CURRENT")
+        let other = try directory("OtherApp-AAAA")
+        let nearMiss = try directory("WaveformCue")
+        let file = base.appendingPathComponent("WaveformCue-file")
+        fm.createFile(atPath: file.path, contents: Data())
+
+        PreparedAudio.removeStaleSessionDirectories(in: base, keeping: current)
+
+        XCTAssertFalse(fm.fileExists(atPath: stale.path))
+        for kept in [current, other, nearMiss, file] { XCTAssertTrue(fm.fileExists(atPath: kept.path), kept.lastPathComponent) }
     }
 }

@@ -134,6 +134,9 @@ public struct TrimSettings: Codable, Sendable, Equatable, Hashable {
     }
 
     public static let none = TrimSettings()
+    /// Longest time value accepted from stored data (24 hours), so later `Int` conversions of
+    /// seconds, frames and samples cannot overflow.
+    public static let maximumSeconds = 86_400.0
     /// Fade lengths offered in the Job tab.
     public static let fadeChoices: [Double] = [0, 0.5, 1, 2, 5]
     /// Pre-roll lengths offered in the Job tab (0 is Off).
@@ -146,11 +149,12 @@ public struct TrimSettings: Codable, Sendable, Equatable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        inPoint = (try? c.decodeIfPresent(Double.self, forKey: .inPoint)) ?? nil
-        outPoint = (try? c.decodeIfPresent(Double.self, forKey: .outPoint)) ?? nil
-        fadeIn = max(0, (try? c.decodeIfPresent(Double.self, forKey: .fadeIn)) ?? 0)
-        fadeOut = max(0, (try? c.decodeIfPresent(Double.self, forKey: .fadeOut)) ?? 0)
-        preRoll = max(0, (try? c.decodeIfPresent(Double.self, forKey: .preRoll)) ?? 0)
+        let limit = Self.maximumSeconds
+        inPoint = ((try? c.decodeIfPresent(Double.self, forKey: .inPoint)) ?? nil).map { min(limit, max(-limit, $0)) }
+        outPoint = ((try? c.decodeIfPresent(Double.self, forKey: .outPoint)) ?? nil).map { min(limit, max(-limit, $0)) }
+        fadeIn = min(limit, max(0, (try? c.decodeIfPresent(Double.self, forKey: .fadeIn)) ?? 0))
+        fadeOut = min(limit, max(0, (try? c.decodeIfPresent(Double.self, forKey: .fadeOut)) ?? 0))
+        preRoll = min(limit, max(0, (try? c.decodeIfPresent(Double.self, forKey: .preRoll)) ?? 0))
     }
 }
 

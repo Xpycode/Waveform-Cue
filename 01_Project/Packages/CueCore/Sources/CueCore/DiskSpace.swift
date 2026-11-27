@@ -30,7 +30,16 @@ public enum DiskSpace {
         preset.estimatedBytes(duration: timeline.outputSeconds, layout: layout) + max(0, pendingCAFBytes)
     }
 
-    /// The volume of `folder`, read from the file system.
+    /// The volume reported neither free-space value; `preflight` lets the export try.
+    struct FreeSpaceUnknown: Error {}
+
+    /// The larger of the reported free-space values, or nil when the volume reported neither.
+    static func availableBytes(important: Int64?, plain: Int64?) -> Int64? {
+        [important, plain].compactMap { $0 }.max()
+    }
+
+    /// The volume of `folder`, read from the file system. Throws `FreeSpaceUnknown` when the
+    /// volume reports no free-space value at all.
     public static func volume(of folder: URL) throws -> Volume {
         let keys: Set<URLResourceKey> = [.volumeLocalizedNameKey, .volumeNameKey,
                                          .volumeAvailableCapacityForImportantUsageKey,
@@ -38,10 +47,11 @@ public enum DiskSpace {
         let values = try folder.resourceValues(forKeys: keys)
         let name = values.volumeLocalizedName ?? values.volumeName ?? folder.path
         // "Important usage" includes purgeable space; network volumes may report only the plain value.
-        let important = values.volumeAvailableCapacityForImportantUsage ?? 0
-        let plain = Int64(values.volumeAvailableCapacity ?? 0)
+        let important = values.volumeAvailableCapacityForImportantUsage
+        let plain = values.volumeAvailableCapacity.map(Int64.init)
+        guard let available = availableBytes(important: important, plain: plain) else { throw FreeSpaceUnknown() }
         let identifier = values.volumeIdentifier.map { String(describing: $0) }
-        return Volume(name: name, availableBytes: max(important, plain), identifier: identifier)
+        return Volume(name: name, availableBytes: available, identifier: identifier)
     }
 
     /// Whether two locations are on the same volume. Missing paths are judged by their nearest

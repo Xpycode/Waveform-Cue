@@ -140,6 +140,10 @@ public final class QueueManager {
     @ObservationIgnored
     public var outputNamer: (_ job: CueJob, _ folder: URL, _ isTaken: (URL) -> Bool) -> URL = QueueManager.defaultOutputName
 
+    /// Called on the main actor just before the queue checks and copies a job to export it, so the
+    /// app can commit an edit in progress on that job first.
+    @ObservationIgnored public var willStartJob: ((UUID) -> Void)?
+
     @ObservationIgnored private let store: QueueStore
     @ObservationIgnored private let exporter: any JobExporting
     @ObservationIgnored private let sleep: any SleepPreventing
@@ -452,6 +456,7 @@ public final class QueueManager {
     }
 
     private func run(_ id: UUID) async {
+        willStartJob?(id)
         guard let index = jobs.firstIndex(where: { $0.id == id }) else { return }
         guard fileExists(jobs[index].sourceURL) else {
             jobs[index].status = .failed(reason: Self.sourceNotFound, log: "")

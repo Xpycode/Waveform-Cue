@@ -112,7 +112,8 @@ public struct ClipTimeline: Sendable, Equatable, Hashable {
         musicFrames = Self.wholeFrames(length, rate: frameRate)
         clockFrames = Self.wholeFrames(length, rate: Self.clockRate)
 
-        if target == .musicEnd, let end = finite(markers.musicEnd) {
+        // A music end before the in point is treated as missing, as the marker is; the countdown then runs to the file end.
+        if target == .musicEnd, let end = finite(markers.musicEnd), end >= lower {
             let inRange = min(length, max(0, end - lower))
             targetClockFrames = min(clockFrames, max(0, Int(ceil(inRange * Double(Self.clockRate) - Self.epsilon))))
         } else {
