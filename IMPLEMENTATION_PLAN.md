@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 3/24; external acceptance: U1, X1, X2, X3, X4 open (G1 passed 2026-11-27).
+**Progress:** 3/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -69,7 +69,7 @@ Facts established while planning that change or sharpen the spec's technical not
 
 ---
 
-## Proposed control placement (gate U1 — awaiting confirmation)
+## Control placement (gate U1 — approved 2026-11-27)
 
 Per the UI changes protocol. Similar existing controls: `CueAppearanceSidebar` (AppKit grid of labelled pop-ups, colour wells and checkboxes, 318 pt, changes flow through its `changed` closure to `MonitorView.cueAppearance` and `CueAppearance.save()`), and the transport row and footer in `AppController.makeWindow()`.
 
@@ -105,7 +105,7 @@ Until U1 is confirmed, 1.7 may build the three-pane shell with single-track pari
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** 2026-11-27, "execute next steps": continue through ready waves. Gate U1 still blocks 2.3, 4.1, 4.2, 5.1. Pushes and app control keep their own authorization.
+- **Execution scope/limits:** 2026-11-27, "execute next steps": continue through ready waves. U1 approved 2026-11-27. Pushes and app control keep their own authorization.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` after each wave), `Info.plist`, `Packages/CueCore/Package.swift`, `Sources/CueCore/CueTypes.swift` after 0.3, `Scripts/`, Git, `IMPLEMENTATION_PLAN.md`, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
 - **Shared build resources:** parallel tasks run `swift test` with their own `--scratch-path` (the task's scratch folder) and a `--filter` for their own test class. Only the coordinator runs the full suite and `xcodebuild build`, using a `-derivedDataPath` outside the project.
 - **Interfaces to establish before dispatch:** the shared value types in 0.3, and the frozen signatures named in each task's Interface line.
@@ -331,7 +331,8 @@ Dependency graph (no cycles):
   - Gates: 0.1 and therefore every commit. Nothing may be committed before it.
   - While unavailable: no implementation starts; planning documents stay uncommitted on this Mac.
 
-- [ ] **U1**: Confirm the control placement proposed above
+- [x] **U1**: Confirm the control placement proposed above
+  - Result (2026-11-27): approved as proposed by the operator.
   - Requires: the operator's approval or changes
   - Gates: 2.3, 4.1, 4.2, 5.1, and any part of 1.7 beyond the parity layout
   - While unavailable: Wave 0, 1.1–1.6, the parity part of 1.7, 2.1, 2.2, 3.1, 3.2 and 4.3 can proceed.
@@ -369,7 +370,7 @@ Dependency graph (no cycles):
 
 ## Blocked Tasks
 
-- 2.3, 4.1, 4.2, 5.1 — waiting on U1.
+- None. U1 approved 2026-11-27.
 
 ---
 
