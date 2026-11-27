@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 10/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 11/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -223,13 +223,14 @@ Dependency graph (no cycles):
 
 ### Wave 2 (parallel — three tasks; file sets are disjoint)
 
-- [ ] **2.1**: Renderer and hit-testing read `CueLayout`
+- [x] **2.1**: Renderer and hit-testing read `CueLayout`
   - Depends on: 1.4
   - Owns: `CuePicture.swift`, `CueAppearance.swift` (in `CueCore`), `MonitorView.swift`, `RenderTests.swift`
   - Detail: `CueAppearance` gains `safeZones`, `clockPosition`, `countdownTarget`, `showGuides` with `decodeIfPresent` defaults that preserve saved build 10 appearances. `CuePicture.draw`, `caption`, `overviewRect` and `MonitorView` seek, scrub and title drag all take one `CueLayout`; the title's travel is clamped to the usable area. Add a draw entry point that takes a `ClipTimeline` position so 50 Hz field images can be rendered (the playhead and clocks move per field); the old `frame:` call forwards to it.
   - Interface: `CuePicture.draw(…, layout:, position:)`; `CueLayout` is computed once per appearance change and shared by preview and export.
   - Success: all 0.2 baseline hashes unchanged with safe zones None; a decoded-bitmap test shows only background colour inside each reserved band for several reserve settings; a click at a known picture point still seeks to the same frame (hit-test unit test on the mapping function).
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'BaselineTests|RenderTests'`
+  - Evidence (2026-11-27): 20 baseline hashes unchanged (not re-recorded) through both the old `frame:` call and the new timeline entry point; 11 `RenderTests`: build 10 appearance JSON decodes with new defaults; reserved bands contain only background pixels across EVS OSD, clocks Above, asymmetric custom, zoom Off and a 30 % bottom reserve (control test shows build 10 layout does intrude); 50 Hz odd positions differ from both neighbours; hit-test of view point (500, 416) seeks to frame 385 as in build 10. `MXFExport` computes the layout once; it still renders 25 fps (3.1 moves it to the timeline). Slate drawing and trimmed overview stay in 4.3; guides in 3.2.
 
 - [ ] **2.2**: Analysis integration and decoded-audio lifetime
   - Depends on: 1.2, 1.5
