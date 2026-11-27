@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 3/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 8/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -157,29 +157,32 @@ Dependency graph (no cycles):
 
 ### Wave 1 (parallel — seven tasks, all new files, disjoint ownership)
 
-- [ ] **1.1**: Presets, argument builder, timecode and filename template (spec C)
+- [x] **1.1**: Presets, argument builder, timecode and filename template (spec C)
   - Depends on / external gates: 0.3; none
   - Owns: `VideoStandard.swift`, `ExportPreset.swift`, `Timecode.swift`, `FilenameTemplate.swift` and their tests
   - Detail: `VideoStandard` (size, encode rate, interlaced, field order, `samplesPerFrame`). Four built-in presets with fixed IDs. `ffmpegArguments(audioPath:outputFrames:layout:timecode:gainDB:audioFilters:output:) -> [String]` following Planning findings (no `-top`, `pan`-based mono graph, explicit colour). `Timecode` parses and formats HH:MM:SS:FF at 25 and 50, and subtracts a pre-roll with wrap past midnight. `FilenameTemplate` expands `{name}`, `{preset}`, `{date}`, strips path separators and resolves collisions with ` 2`, ` 3`. Bitrate estimate per preset for disk preflight.
   - Interface: `ExportPreset.builtIn`, `ExportPreset.preset(for: PresetID)`, the argument builder, `Timecode`, `FilenameTemplate.resolve(…, exists:)`, `ExportPreset.formatReadout`.
   - Success: exact-array argument tests for each preset and each layout; timecode edge cases (invalid frames, wrap); template collision tests; MPEG-2 arguments equal build 10's except the audio graph.
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'ExportPresetTests|TimecodeTests|FilenameTemplateTests'`
+  - Evidence (2026-11-27): 24 tests (12 preset, 7 timecode, 5 filename); trial FFmpeg encodes of all four presets with lavfi frames: mono pcm_s24le tracks of equal length, `field_order=tt` for 1080i50. Fixed IDs `avci100-1080i50`, `avci100-1080p25`, `avci100-1080p50`, `mpeg2-50-1080p25`. Integration note for 3.1: both `ffmpegArguments` and `ClipTimeline.audioFilters()` add `aresample`/`apad`/`atrim`; pass only one set.
 
-- [ ] **1.2**: Music-end detector (spec D, analysis only)
+- [x] **1.2**: Music-end detector (spec D, analysis only)
   - Depends on: 0.3
   - Owns: `MusicEndDetector.swift`, `MusicEndDetectorTests.swift`
   - Detail: a pure function over absolute 5 ms bucket peaks: music end is the end of the last run of at least 50 ms above −60 dBFS; fade start uses peak − 40 dB; all-quiet returns `noMusic`; no silent tail returns the file end.
   - Interface: `MusicEndDetector.detect(peaks:bucketSeconds:duration:) -> MusicMarkers`
   - Success: synthetic cases pass: fade plus tail, isolated click in the tail ignored, no tail, all silence, very short track.
   - Backpressure: `swift test --package-path Packages/CueCore --filter MusicEndDetectorTests`
+  - Evidence (2026-11-27): 8 tests (fade plus tail, click ignored, exact 50 ms run, no tail, silence, very short, quiet track, clamping). A track shorter than one 50 ms run counts as music when loud (agent's call; spec silent).
 
-- [ ] **1.3**: `ClipTimeline` (spec E mapping)
+- [x] **1.3**: `ClipTimeline` (spec E mapping)
   - Depends on: 0.3
   - Owns: `ClipTimeline.swift`, `ClipTimelineTests.swift`
   - Detail: maps output position (at the encode rate, including field positions) to slate or source time; exposes output frame count, elapsed and remaining on the 25 base, countdown frames to file end or music end (holding at zero after the marker), marker positions in the trimmed range, whole-frame padding (1920 or 960 samples), and the audio filter chain (`atrim`, `afade`, `adelay`, `apad`, `atrim=end_sample`). With no trim and no pre-roll at 25p it reproduces today's `frames` and clocks exactly.
   - Interface: `ClipTimeline(duration:trim:markers:target:standard:)`, `outputFrames`, `position(at:)`, `clocks(at:)`, `audioFilters()`, `validate()` ("Trim range too short" under one second).
   - Success: identity case matches the baseline; pre-roll, trim, 50 Hz and short-track clamping tests pass.
   - Backpressure: `swift test --package-path Packages/CueCore --filter ClipTimelineTests`
+  - Evidence (2026-11-27): 25 tests; identity case equals `AudioTrack.frames`, clamped clocks and build 10's `-af` string for 13 durations. Rate supplied through `TimelineRateProviding` (`.fps25`, `.fields50`, `.fps50`); `VideoStandard` needs a conformance in 2.x/3.1. FFmpeg trial: exact sample count, silent pre-roll, correct fades.
 
 - [ ] **1.4**: `CueLayout` computation (spec F, geometry only)
   - Depends on: 0.3
@@ -189,13 +192,14 @@ Dependency graph (no cycles):
   - Success: with safe zones None and clocks below, every value equals today's constants (742/100, 361/265, baseline 100, 96 px margins, 55 px title inset); with reserves, no element rectangle intersects a reserved band; the give-way order and the does-not-fit case are tested.
   - Backpressure: `swift test --package-path Packages/CueCore --filter CueLayoutTests`
 
-- [ ] **1.5**: Loudness parsing and gain rule (spec E, pure part)
+- [x] **1.5**: Loudness parsing and gain rule (spec E, pure part)
   - Depends on: 0.3
   - Owns: `Loudness.swift`, `LoudnessTests.swift`
   - Detail: parse the `ebur128` summary (last `Summary:` block, `-inf` handled); badge rule (outside −23 ±1 LUFS or above −1 dBTP); gain = min(−23 − I, −1 − TP) with the achieved loudness reported.
   - Interface: `Loudness.parse(stderr:) -> LoudnessMeasurement?`, `Loudness.normalisation(for:) -> (gainDB, achievedLUFS, limitedByPeak)`, `Loudness.arguments(input:) -> [String]`
   - Success: tests on the captured 8.1 summary, a silent summary, a peak-limited case and garbage input.
   - Backpressure: `swift test --package-path Packages/CueCore --filter LoudnessTests`
+  - Evidence (2026-11-27): 11 tests on verbatim FFmpeg 8.1 captures. FFmpeg reports silence as `I: -70.0 LUFS` (the R 128 absolute gate), so ≤ −70 is stored as silence (`nil`).
 
 - [ ] **1.6**: Queue core (spec B, logic only)
   - Depends on: 0.3
@@ -205,13 +209,14 @@ Dependency graph (no cycles):
   - Success: state-transition, ordering, cancel, stop, retry, Apply to All, save-then-reload, corrupt-file recovery, legacy-fixture and pause tests pass.
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'QueueManagerTests|QueueStoreTests|CueJobTests'`
 
-- [ ] **1.7**: App Shell migration with single-track parity (spec A)
+- [x] **1.7**: App Shell migration with single-track parity (spec A)
   - Depends on / external gates: 0.2; U1 only for anything beyond the parity layout
   - Owns: all of `Sources/` (now the app target): new `Sources/App/**`; deletes `AppController.swift` and `main.swift`; `MonitorView.swift` and `CueAppearanceSidebar.swift` are moved, not edited beyond what hosting needs
   - Detail: `@main` SwiftUI app; `WindowGroup` with `.windowStyle(.hiddenTitleBar)`, `.toolbarRole(.editor)`, `.appAppearance`, dark by default with `AppAppearanceCommands`; `HSplitView` queue placeholder | monitor | inspector with `.autosaveSplitView`; `PaneToggleButton`s and flat toolbar buttons; `MonitorRepresentable` and `AppearanceSidebarRepresentable` with `@MainActor` coordinators; an `EditorModel` (`@MainActor @Observable`) carrying what `AppController` did: load, playback timer, seek, step, scrub, label and position, export beside source or to folder, cancel, reveal, the quit and close guards, the key monitor (which must still ignore keys while a text field or the inspector has focus), and opening a file from Finder or the Dock. Bottom status bar. No raw SwiftUI controls outside the toolbar.
   - Interface: `EditorModel` API used by 2.3 (`load(url:)`, `track`, `label`, `appearance`, `frame`, `isExporting`); `MainWindow` slots for the queue sidebar and the Job tab.
   - Success: spec A criteria 1–5 with one track; baseline hashes unchanged; Atlas screenshots show the three panes, flat toolbar, pane toggles remembered across relaunch, and play, scrub, frame-step, title drag and export working.
   - Backpressure: `xcodebuild … build`; then the coordinator runs the Atlas parity pass on the fresh build.
+  - Evidence (2026-11-27): `xcodebuild build` succeeded; baseline hashes unchanged (CueCore untouched). Atlas parity pass on the fresh build: hidden title bar, flat toolbar, three panes; play to end (500 frames), click-scrub to 250, Left Arrow to 249, title drag sets Custom, Space and arrows ignored while typing, export made a 20 s MPEG-2 4:2:2 1080p25 MXF with stereo PCM and TC 00:00:00:00, Show in Finder appeared, hidden queue remembered across relaunch. The pass found the transport row hidden behind the bottom bar (`.safeAreaInset` is ignored by the AppKit-backed `HSplitView`); fixed by stacking the bar under the split view and re-verified by screenshot. Deviations accepted: single `Window` scene; `AppAppearanceCommands` adds a top-level Appearance menu instead of a View entry; window title no longer shows the file name.
 
 ### Wave 2 (parallel — three tasks; file sets are disjoint)
 

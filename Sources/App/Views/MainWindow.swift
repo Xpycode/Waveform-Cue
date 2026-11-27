@@ -11,20 +11,24 @@ struct MainWindow: View {
     @AppStorage("WaveformCue.showInspector") private var showInspector = true
 
     var body: some View {
-        HSplitView {
-            if showQueue {
-                QueueSidebar()
-                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 360)
+        // The status bar is stacked under the split view rather than added with
+        // `.safeAreaInset`: HSplitView is AppKit-backed and ignores the inset, which
+        // hid the transport row behind the bar (Atlas parity pass, 2026-11-27).
+        VStack(spacing: 0) {
+            HSplitView {
+                if showQueue {
+                    QueueSidebar()
+                        .frame(minWidth: 200, idealWidth: 240, maxWidth: 360)
+                }
+                MonitorPane(model: model)
+                    .frame(minWidth: 400)
+                    .layoutPriority(1)
+                if showInspector {
+                    InspectorPane(model: model)
+                }
             }
-            MonitorPane(model: model)
-                .frame(minWidth: 400)
-                .layoutPriority(1)
-            if showInspector {
-                InspectorPane(model: model)
-            }
-        }
-        .autosaveSplitView(named: "WaveformCue.Main")
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            .autosaveSplitView(named: "WaveformCue.Main")
+            .frame(maxHeight: .infinity)
             StatusBar(model: model)
         }
         .background(Theme.primaryBackground)
