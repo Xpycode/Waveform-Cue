@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 14/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 15/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -252,13 +252,14 @@ Dependency graph (no cycles):
 
 ### Wave 3 (parallel — three tasks)
 
-- [ ] **3.1**: Preset-driven export engine (spec C; first AVC-Intra file from the app)
+- [x] **3.1**: Preset-driven export engine (spec C; first AVC-Intra file from the app)
   - Depends on: 1.1, 1.3, 2.1, 2.2
   - Owns: `MXFExport.swift`, new `Sources/App/Queue/MXFJobExporter.swift` (replaces `LegacyExportAdapter.swift`), `ExportIntegrationTests.swift`, `DiskSpace.swift`
   - Detail: `MXFExport.run(snapshot:preset:timeline:encoder:destination:progress:)`. Frame count and render rate come from the timeline (50 images per second for 1080i50 and 1080p50). Arguments come from the preset builder, including layout, timecode and normalisation gain. Disk preflight before spawning (estimated video plus audio plus the CAF; message names the volume, free and required space). Keep the hidden temporary file and atomic move, `F_SETNOSIGPIPE`, one whole-frame write per frame, and the last 1,500 characters of the log on failure. Do not parallelise rendering unless the 0.2 benchmark shows a 3-minute cue would miss the 3-minute target; if it would, stop and replan with the measured numbers.
   - Interface: `MXFJobExporter: JobExporting`.
   - Success: integration tests export a 4-second signal with each preset and assert via `ffprobe` or `ffmpeg -i` parsing: codec and profile, 10-bit 4:2:2, 1920 × 1080, `field_order=tt` for 1080i50, the RP2027 label bytes (`…31 02` for 1080i50, `…31 04` for 1080p25), no body partition for AVC-I, Rec. 709 tags, N mono 24-bit 48 kHz tracks of identical length with tracks 3+ digitally silent, the start timecode, and whole-frame padding. A decoded frame equals the preview bitmap for the same settings within codec tolerance. Measured export rate recorded under Operational Learnings.
   - Backpressure: `FFMPEG_EXECUTABLE=… swift test --package-path Packages/CueCore --filter ExportIntegrationTests`
+  - Evidence (2026-11-27): 12 `ExportIntegrationTests` with FFmpeg (benchmark skipped): each preset exports a 4.013 s signal; High 4:2:2 Intra 10-bit 1920 × 1080; `field_order=tt` for 1080i50; RP2027 `…31 02`/`…31 04` labels present (other absent); no body partition; bt709 tags; N mono 24-bit tracks of exactly `outputFrames × samplesPerFrame` samples, tracks 3+ zero, silent pre-roll and padding; start timecode incl. pre-roll shift; decoded frame vs preview mean error 0.10–0.13 (AVC-I), 0.76 (MPEG-2); bottom-first weave rejected. After merging 3.2 the worst 16×16 block rose to ~7.1 on every preset (thin marker lines), so the block limit is 9 for all with mean error unchanged. Full suite 201 tests, 0 failures. Found: FFmpeg 8.1 ignores `-color_primaries`/`-color_trc` for libx264 AVC-I; `setparams=…bt709` added to the AVC-I filter. App still exports through `LegacyExportAdapter`; switching to `MXFJobExporter(workspace:)` is coordinator wiring after 3.3.
 
 - [x] **3.2**: Markers, countdown target, clock position and guides in the picture (spec D and F rendering)
   - Depends on: 2.1, 2.2
@@ -378,6 +379,8 @@ Dependency graph (no cycles):
 - `~/ProgrammingProjects` is mode 700, so Atlas fixtures must be copied into the helper.
 - `CuePicture.draw` renders 254 frames/s at 1920 × 1080 in release on M4 Pro (`CUE_BENCH=1`, 500 frames, 180 s track). A 3-minute 1080i50 cue needs 9,000 images, about 35 s of rendering, so the 3-minute target needs no parallel rendering.
 - Render hashes match between debug and release builds.
+- Export rate (task 3.1, debug build, loaded machine): 30 s 1080i50 in 6.2 s (242 images/s, 4.8× real time); 30 s 1080p25 in 3.7 s. A 3-minute 1080i50 cue projects to about 37 s.
+- FFmpeg 8.1 ignores `-color_primaries`/`-color_trc` on libx264 AVC-I output; `setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709` in the filter chain fixes the tags. MPEG-2 keeps build 10's tags (primaries and transfer unknown).
 - This Mac is M4 Pro (label in `~/.config/directions/this-mac`; `~/.claude/this-mac` is absent). The app signs ad hoc, so the missing Apple Development certificate does not matter here.
 
 ## Blocked Tasks
