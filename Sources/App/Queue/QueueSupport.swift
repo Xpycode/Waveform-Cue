@@ -32,6 +32,29 @@ enum QueueSupport {
         JobAudioLifetime(workspace: JobWorkspace())
     }
 
+    /// Folders the restored queue writes to: each job's own folder (or its source's), the folder
+    /// of a destination already chosen, and the queue-wide override.
+    @MainActor
+    static func exportFolders(of queue: QueueManager) -> [URL] {
+        var folders = queue.jobs.flatMap { job -> [URL] in
+            [job.destinationFolder.map { URL(fileURLWithPath: $0) } ?? job.sourceURL.deletingLastPathComponent(),
+             job.outputURL?.deletingLastPathComponent()].compactMap { $0 }
+        }
+        if let override = queue.destinationOverride { folders.append(override) }
+        return folders
+    }
+
+    /// At launch, off the main thread: claims this session's CAF folder, deletes CAF folders left
+    /// by earlier launches that crashed, and hidden partial MXFs older than ten minutes in
+    /// `exportFolders`.
+    static func removeLeftovers(exportFolders: [URL]) {
+        Task.detached(priority: .utility) {
+            try? JobWorkspace.claimSessionDirectory()
+            JobWorkspace.removeStaleSessionDirectories()
+            JobWorkspace.removeStaleExportTemps(in: exportFolders, olderThan: 600)
+        }
+    }
+
     /// The job's filename template resolved with `FilenameTemplate.resolve` in `folder`.
     static func outputName(for job: CueJob, in folder: URL, isTaken: (URL) -> Bool) -> URL {
         let name = FilenameTemplate.resolve(job.filenameTemplate, name: job.sourceName,
@@ -87,5 +110,35 @@ enum AudioIngest {
 
     private static func isDirectory(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+    }
+}
+
+/// FFmpeg processes this app started (decodes, loudness passes, exports), found by listing the
+/// app's child processes, so quitting can wait until they have gone.
+enum EncoderProcesses {
+    /// PIDs of running children whose executable is named `ffmpeg`.
+    static func running() -> [pid_t] {
+        var pids = [pid_t](repeating: 0, count: 256)
+        let count = pids.withUnsafeMutableBytes { buffer in
+            proc_listchildpids(getpid(), buffer.baseAddress, Int32(buffer.count))
+        }
+        guard count > 0 else { return [] }
+        return pids.prefix(Int(min(count, Int32(pids.count)))).filter { pid in
+            guard pid > 0 else { return false }
+            var path = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+            // A child that has exited (a zombie not yet reaped) has no path any more.
+            guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return false }
+            return URL(fileURLWithPath: String(cString: path)).lastPathComponent == "ffmpeg"
+        }
+    }
+
+    static func anyRunning() -> Bool { !running().isEmpty }
+
+    /// Polls until no FFmpeg child is left, or `timeout` seconds have passed.
+    static func waitUntilNoneRunning(timeout: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while anyRunning(), Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
     }
 }

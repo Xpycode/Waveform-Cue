@@ -196,15 +196,17 @@ public final class QueueManager {
     /// The running job's settings are locked; every other job stays editable.
     public func isLocked(_ id: UUID) -> Bool { job(id)?.status.isActive ?? false }
 
-    /// Overall progress of the current run (0…1), or `nil` when idle.
+    /// Overall progress of the current run (0…1), or `nil` when idle. A Paused job is still
+    /// owed to the run (it returns to Pending on resume), so it counts as not started rather
+    /// than finished; the bar never reaches 100 % and then goes back.
     public var overallProgress: Double? {
         guard isRunning, !runJobIDs.isEmpty else { return nil }
         let total = runJobIDs.reduce(0.0) { sum, id in
             guard let status = job(id)?.status else { return sum + 1 }
             switch status {
-            case .done, .failed, .cancelled, .paused: return sum + 1
+            case .done, .failed, .cancelled: return sum + 1
             case .exporting(let p): return sum + p
-            case .pending, .preparing: return sum
+            case .pending, .preparing, .paused: return sum
             }
         }
         return min(1, total / Double(runJobIDs.count))
@@ -422,6 +424,7 @@ public final class QueueManager {
             if let newFolder, !overrideWasUnwritable { jobs[index].destinationFolder = newFolder.path }
             jobs[index].outputPath = nil
             jobs[index].status = .pending
+            enlistInRun(jobs[index].id)
         }
         unwritableFolders.removeAll { Self.folderKey($0) == key }
         persist()

@@ -8,8 +8,8 @@ import Foundation
 /// An in-flight decode counts as live, because its file is already being written.
 ///
 /// Concurrent `acquire` calls for one job share a single decode. Releasing a job while it decodes
-/// cancels FFmpeg; the waiting `acquire` calls throw `CancellationError` and the partial file is
-/// deleted. Cancelling a task that waits in `acquire` releases that job in the same way, since
+/// cancels FFmpeg and returns only once FFmpeg has stopped and the partial file is deleted (until
+/// then the decode still counts as live); the waiting `acquire` calls throw `CancellationError`. Cancelling a task that waits in `acquire` releases that job in the same way, since
 /// one job has one owner.
 public actor JobWorkspace {
     /// Where the CAFs are written.
@@ -24,11 +24,14 @@ public actor JobWorkspace {
 
     private var slots: [UUID: Slot] = [:]
     private var generation: UInt64 = 0
+    /// Cancelled decodes whose FFmpeg has not stopped yet (their partial CAF may still exist).
+    private var stopping = 0
 
     /// Highest number of CAFs that existed at once since this workspace was made.
     public private(set) var peakLiveCount = 0
-    /// Number of jobs holding (or decoding) a CAF now.
-    public var liveCount: Int { slots.count }
+    /// Number of CAFs that may exist now: jobs holding (or decoding) one, plus cancelled decodes
+    /// still stopping.
+    public var liveCount: Int { slots.count + stopping }
     /// Jobs holding (or decoding) a CAF now.
     public var liveJobs: Set<UUID> { Set(slots.keys) }
 
@@ -58,24 +61,33 @@ public actor JobWorkspace {
                 try PreparedAudio.decode(source, encoder: encoder, into: directory)
             }
             slots[job] = .decoding(task, generation: generation)
-            peakLiveCount = max(peakLiveCount, slots.count)
+            peakLiveCount = max(peakLiveCount, liveCount)
             return try await wait(for: task, job: job, generation: generation)
         }
     }
 
-    /// Deletes the job's CAF now, or cancels its decode. Does nothing for a job without one.
-    /// A track still holding the released `PreparedAudio` points at a deleted file afterwards.
-    public func release(_ job: UUID) {
+    /// Deletes the job's CAF now, or cancels its decode and waits until FFmpeg has stopped and
+    /// the partial file is gone. Does nothing for a job without one. A track still holding the
+    /// released `PreparedAudio` points at a deleted file afterwards.
+    public func release(_ job: UUID) async {
         switch slots.removeValue(forKey: job) {
-        case .ready(let audio)?: audio.remove()
-        case .decoding(let task, _)?: task.cancel()
-        case nil: break
+        case .ready(let audio)?:
+            audio.remove()
+        case .decoding(let task, _)?:
+            task.cancel()
+            stopping += 1
+            if case .success(let audio) = await task.result { audio.remove() }
+            stopping -= 1
+        case nil:
+            break
         }
     }
 
-    /// Releases every job, for example when the queue window closes.
-    public func releaseAll() {
-        for job in Array(slots.keys) { release(job) }
+    /// Releases every job (quit), waiting for every cancelled decode to stop.
+    public func releaseAll() async {
+        await withTaskGroup(of: Void.self) { group in
+            for job in Array(slots.keys) { group.addTask { await self.release(job) } }
+        }
     }
 
     private func wait(for task: Task<PreparedAudio, Error>, job: UUID, generation: UInt64) async throws -> PreparedAudio {
@@ -101,8 +113,79 @@ public actor JobWorkspace {
         }
     }
 
-    private func abandon(_ job: UUID, generation: UInt64) {
+    private func abandon(_ job: UUID, generation: UInt64) async {
         guard case .decoding(_, let current)? = slots[job], current == generation else { return }
-        release(job)
+        await release(job)
+    }
+}
+
+// MARK: - Leftovers from earlier launches
+
+extension JobWorkspace {
+    /// Prefix of every session folder of decoded CAFs (`PreparedAudio.sessionDirectory`).
+    public nonisolated static let sessionDirectoryPrefix = "WaveformCue-"
+    /// Prefix of the hidden files `MXFExport` writes beside a destination (the partial MXF and
+    /// the writability probe).
+    public nonisolated static let exportTempPrefix = ".waveform-cue-"
+    /// The file in a session folder naming the process that owns it.
+    nonisolated static let ownerFileName = "owner.pid"
+
+    /// Marks `directory` (the current session folder, created if needed) as owned by this
+    /// process, so another instance's launch cleanup leaves it alone.
+    public nonisolated static func claimSessionDirectory(_ directory: URL = PreparedAudio.sessionDirectory,
+                                                         pid: Int32 = getpid()) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try String(pid).write(to: directory.appendingPathComponent(ownerFileName), atomically: true, encoding: .utf8)
+    }
+
+    /// Deletes session folders of decoded CAFs (`WaveformCue-*`) in `root` left by earlier
+    /// launches that crashed or were killed. Keeps `current` and any folder whose owner process
+    /// is still running (a second instance). Returns the folders deleted.
+    @discardableResult
+    public nonisolated static func removeStaleSessionDirectories(
+        in root: URL = FileManager.default.temporaryDirectory,
+        keeping current: URL = PreparedAudio.sessionDirectory,
+        isRunning: (Int32) -> Bool = JobWorkspace.processIsRunning) -> [URL] {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
+        let keep = current.standardizedFileURL.path
+        var removed: [URL] = []
+        for entry in entries where entry.lastPathComponent.hasPrefix(sessionDirectoryPrefix) {
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true,
+                  entry.standardizedFileURL.path != keep else { continue }
+            let owner = (try? String(contentsOf: entry.appendingPathComponent(ownerFileName), encoding: .utf8))
+                .flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            if let owner, owner != getpid(), isRunning(owner) { continue }
+            if (try? fm.removeItem(at: entry)) != nil { removed.append(entry) }
+        }
+        return removed
+    }
+
+    /// Deletes hidden partial exports (`.waveform-cue-*`) older than `age` in `folders`: an
+    /// export that is still writing keeps touching its file, so only a crashed one is removed.
+    /// Missing or unreadable folders are skipped. Returns the files deleted.
+    @discardableResult
+    public nonisolated static func removeStaleExportTemps(in folders: [URL], olderThan age: TimeInterval = 600,
+                                                          now: Date = Date()) -> [URL] {
+        let fm = FileManager.default
+        var seen: Set<String> = []
+        var removed: [URL] = []
+        for folder in folders where seen.insert(folder.standardizedFileURL.path).inserted {
+            guard let entries = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [
+                .contentModificationDateKey, .isRegularFileKey]) else { continue }
+            for entry in entries where entry.lastPathComponent.hasPrefix(exportTempPrefix) {
+                guard let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                      values.isRegularFile == true,
+                      let modified = values.contentModificationDate, now.timeIntervalSince(modified) > age else { continue }
+                if (try? fm.removeItem(at: entry)) != nil { removed.append(entry) }
+            }
+        }
+        return removed
+    }
+
+    /// Whether a process with `pid` exists (`kill(pid, 0)`; EPERM means it exists under another user).
+    public nonisolated static func processIsRunning(_ pid: Int32) -> Bool {
+        guard pid > 0 else { return false }
+        return kill(pid, 0) == 0 || errno == EPERM
     }
 }

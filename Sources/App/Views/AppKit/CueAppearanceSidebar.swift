@@ -88,7 +88,7 @@ final class CueAppearanceSidebar: NSView {
         safeZonePreset.addItems(withTitles: SafeZonePreset.allCases.map { $0.title })
         safeZonePreset.setAccessibilityLabel("Overlay safe zones")
         safeZonePreset.toolTip = "Keep the picture free where a server overlay draws."
-        showGuides.toolTip = "Draw the safe zones in the preview and in the exported file."
+        showGuides.toolTip = "Draw the safe zones in the preview only. They are never part of the exported file."
         showGuides.setAccessibilityLabel("Show safe-zone guides")
         roomMessage.font = .systemFont(ofSize: 11)
         roomMessage.textColor = .systemRed

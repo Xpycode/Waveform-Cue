@@ -100,7 +100,9 @@ public enum MXFExport {
     /// (`JobExportError.failed` naming the volume, free and required space). FFmpeg writes a
     /// hidden temporary file beside the destination, which is moved into place only on
     /// success; an existing file at `destination` is never replaced. An encoder failure throws
-    /// `JobExportError.failed` with the last 1,500 characters of the log. Cancelling the
+    /// `JobExportError.failed` with the last 1,500 characters of the log, unless the folder can
+    /// no longer be written (checked again after an encoder or move failure), which throws
+    /// `JobExportError.destinationUnwritable`. Cancelling the
     /// calling task stops rendering and FFmpeg and throws `CancellationError`.
     public static func run(snapshot: Snapshot, preset: ExportPreset, timeline: ClipTimeline, encoder: URL,
                            destination: URL, volume: (URL) throws -> DiskSpace.Volume = DiskSpace.volume(of:),
@@ -178,6 +180,9 @@ public enum MXFExport {
         task.waitUntilExit()
         try Task.checkCancellation()
         guard !brokenPipe, task.terminationStatus == 0 else {
+            // A folder that became unwritable while encoding (ejected, permissions changed)
+            // pauses the queue like the preflight does, instead of failing the job.
+            try DiskSpace.probeWritable(folder)
             let reason = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
             throw JobExportError.failed(reason: "MXF encoding failed.", log: String(reason.suffix(logTailLength)))
         }
@@ -187,6 +192,9 @@ public enum MXFExport {
             try fm.moveItem(at: temp, to: destination)
         } catch let error as CocoaError where error.code == .fileWriteFileExists {
             throw collision(destination)
+        } catch {
+            try DiskSpace.probeWritable(folder)
+            throw error
         }
         progress(1)
     }

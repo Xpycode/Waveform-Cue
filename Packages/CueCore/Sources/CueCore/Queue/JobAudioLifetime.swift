@@ -35,6 +35,9 @@ public final class JobAudioLifetime {
     private var held: Set<UUID> = []
     private var chain: Task<Void, Never>?
     private var chainGeneration = 0
+    /// Workspace requests in flight, so `releaseAll` can stop the ones that have not reached it yet.
+    private var requests: [UInt64: Task<PreparedAudio, Error>] = [:]
+    private var nextRequest: UInt64 = 0
 
     public init(workspace: JobWorkspace, capacity: Int = 2) {
         self.workspace = workspace
@@ -77,11 +80,15 @@ public final class JobAudioLifetime {
         held.insert(job)
         let workspace = self.workspace
         let decode = Task { try await workspace.acquire(for: job, source: source) }
+        nextRequest += 1
+        let request = nextRequest
+        requests[request] = decode
         let result = await withTaskCancellationHandler {
             await decode.result
         } onCancel: {
             Task { @MainActor [weak self] in self?.callerCancelled(job, role: role) }
         }
+        requests[request] = nil
         switch result {
         case .success(let audio):
             guard entitled.contains(job) else {
@@ -109,11 +116,18 @@ public final class JobAudioLifetime {
         if roles[.running] == job { assign(.running, to: nil) }
     }
 
-    /// Clears every role and deletes every CAF (quit).
+    /// Clears every role and deletes every CAF (quit). Returns once every decode has stopped
+    /// (FFmpeg terminated, partial files deleted), including requests that had not yet reached
+    /// the workspace. With no role left, no new decode can start.
     public func releaseAll() async {
         roles = [:]
         recompute()
-        await chain?.value
+        let pending = Array(requests.values)
+        for request in pending { request.cancel() }
+        await settle()
+        await workspace.releaseAll()
+        for request in pending { _ = await request.result }
+        // A request that got its audio just before being cancelled hands it back here.
         await workspace.releaseAll()
         held = []
     }

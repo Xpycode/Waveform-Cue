@@ -163,6 +163,32 @@ final class ExportIntegrationTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: locked.path), [])
     }
 
+    /// Spec error states: a folder that becomes unwritable while encoding pauses (it throws
+    /// `destinationUnwritable`), whether the encoder fails or only the move into place does.
+    func testFolderLockedDuringEncodingThrowsDestinationUnwritable() throws {
+        let dir = try TestAudio.temporaryDirectory("export-locked-midway")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let track = try Self.fakeTrack(seconds: 1, in: dir)
+        let bodies = [
+            "encoder fails": "cat > /dev/null; chmod 555 \"$(dirname \"$last\")\"; exit 1",
+            "move fails": "cat > /dev/null; printf x > \"$last\"; chmod 555 \"$(dirname \"$last\")\"; exit 0",
+        ]
+        for (name, body) in bodies.sorted(by: { $0.key < $1.key }) {
+            let folder = dir.appendingPathComponent(name.replacingOccurrences(of: " ", with: "-"), isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+            let tool = try Self.script("for last; do :; done\n" + body, in: dir, name: "\(folder.lastPathComponent).sh")
+            XCTAssertThrowsError(try MXFExport.run(
+                snapshot: MXFExport.Snapshot(track: track, label: CueLabel()), preset: .mpeg2_1080p25,
+                timeline: MXFExport.timeline(for: track, preset: .mpeg2_1080p25), encoder: tool,
+                destination: folder.appendingPathComponent("out.mxf"), volume: Self.roomy, progress: { _ in }), name) { error in
+                guard case JobExportError.destinationUnwritable(let reported, _) = error else { return XCTFail("\(name): \(error)") }
+                XCTAssertEqual(reported.standardizedFileURL.path, folder.standardizedFileURL.path, name)
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("out.mxf").path), name)
+        }
+    }
+
     // MARK: - Process handling with stand-in encoders (no FFmpeg)
 
     func testEncoderFailureKeepsLast1500CharactersOfLog() throws {

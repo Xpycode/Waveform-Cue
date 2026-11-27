@@ -974,6 +974,51 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertEqual(makeManager(ControlledExporter()).job(a.id)?.labelText, "Later")
     }
 
+    /// A Paused job is still owed to the run: it does not count as finished, so resuming it never
+    /// moves the bar back, and a job paused in an earlier run is counted once it is resumed.
+    func testPausedJobsCountAsOwedAndResumedJobsJoinTheRunProgress() async {
+        let exporter = ControlledExporter()
+        let manager = makeManager(exporter)
+        let a = job("A", folder: "/Volumes/X"), b = job("B", folder: "/Volumes/Y"), c = job("C", folder: "/Volumes/X")
+        manager.add([a, b, c])
+        manager.start()
+        await eventually("A") { exporter.calls.count == 1 }
+        exporter.fail(0, JobExportError.destinationUnwritable(folder: URL(fileURLWithPath: "/Volumes/X"), reason: "Ejected"))
+        await eventually("B") { exporter.calls.count == 2 }
+        XCTAssertEqual(status(manager, c.id), .paused)
+        exporter.calls[1].progress(0.5)
+        await eventually("progress") { self.status(manager, b.id) == .exporting(progress: 0.5) }
+        XCTAssertEqual(manager.overallProgress ?? -1, 0.5 / 3, accuracy: 1e-9, "paused jobs are not finished")
+        exporter.succeed(1)
+        await eventually("B done") { if case .done = self.status(manager, b.id) { return true }; return false }
+        await manager.waitUntilIdle()
+        XCTAssertEqual(status(manager, a.id), .paused)
+
+        // A new run; the folder comes back while it exports D.
+        let d = job("D", folder: "/Volumes/Y")
+        manager.add(d)
+        manager.start()
+        await eventually("D") { exporter.calls.count == 3 }
+        exporter.calls[2].progress(0.5)
+        await eventually("D progress") { self.status(manager, d.id) == .exporting(progress: 0.5) }
+        XCTAssertEqual(manager.overallProgress ?? -1, 0.5, accuracy: 1e-9)
+        let resumed = manager.resumePaused(in: URL(fileURLWithPath: "/Volumes/X"))
+        XCTAssertEqual(resumed, [a.id, c.id])
+        XCTAssertEqual(manager.overallProgress ?? -1, 0.5 / 3, accuracy: 1e-9, "resumed jobs join the run's progress")
+        var last = manager.overallProgress ?? 0
+        exporter.succeed(2)
+        for index in 3..<5 {
+            await eventually("call \(index)") { exporter.calls.count == index + 1 }
+            let now = manager.overallProgress ?? 0
+            XCTAssertGreaterThanOrEqual(now, last, "progress never goes back")
+            XCTAssertLessThan(now, 1, "a resumed job is still to be exported")
+            last = now
+            exporter.succeed(index)
+        }
+        await manager.waitUntilIdle()
+        XCTAssertEqual(exporter.calls.map(\.job.id), [a.id, b.id, d.id, a.id, c.id])
+    }
+
     func testPausedJobsAreListedAndResumeReportsThem() async {
         let exporter = ControlledExporter()
         let manager = makeManager(exporter)

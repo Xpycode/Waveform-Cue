@@ -129,6 +129,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     @ObservationIgnored private var promptedFolders: Set<String> = []
     @ObservationIgnored private var isPromptingFolder = false
     @ObservationIgnored private var loudnessTask: Task<Void, Never>?
+    /// Set once quitting is committed: nothing new is decoded, loaded or measured.
+    @ObservationIgnored private var isQuitting = false
     @ObservationIgnored private var loudnessToken = UUID()
     /// Jobs whose loudness pass has run (or failed) this session, so each is measured once.
     @ObservationIgnored private var loudnessAttempted: Set<UUID> = []
@@ -159,6 +161,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                 + " Select one to preview it."
             placeholder = "Select a job in the queue"
         }
+        QueueSupport.removeLeftovers(exportFolders: QueueSupport.exportFolders(of: queue))
         observeQueueRun()
         observe({ [weak self] in self?.queue.currentJobID }) { [weak self] in self?.currentJobChanged() }
         observe({ [weak self] in self?.queue.unwritableFolders }) { [weak self] in self?.unwritableFoldersChanged() }
@@ -239,11 +242,19 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
-    /// Quit asks to stop the queue first. With the queue idle, quitting goes ahead at once.
-    /// Otherwise an alert offers Stop Queue and Quit (the current job is cancelled and the
-    /// app quits once it has wound down, through `reply(true)`) or Keep Exporting.
+    /// Quit asks to stop the queue first. With the queue idle, quitting goes ahead at once, after
+    /// any decode, load or loudness pass has been stopped (its FFmpeg terminated) and the decoded
+    /// audio deleted. Otherwise an alert offers Stop Queue and Quit (the current job is cancelled
+    /// and the app quits once it has wound down, through `reply(true)`) or Keep Exporting.
     func terminateReply(reply: @escaping (Bool) -> Void) -> NSApplication.TerminateReply {
-        guard queue.isRunning else { return .terminateNow }
+        guard queue.isRunning else {
+            guard needsWindDown else { return .terminateNow }
+            Task { @MainActor [weak self] in
+                await self?.windDown()
+                reply(true)
+            }
+            return .terminateLater
+        }
         let alert = NSAlert()
         alert.messageText = "The queue is exporting."
         alert.informativeText = "Stop the queue and quit? The current job is cancelled and leaves no file; the other jobs stay Pending and are restored next time."
@@ -269,12 +280,35 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     private func stopQueueThenQuit(_ reply: @escaping (Bool) -> Void) {
+        isQuitting = true
         status = "Stopping the queue before quitting…"
         queue.stopQueue()
-        Task { @MainActor [queue] in
+        Task { @MainActor [weak self, queue] in
             await queue.waitUntilIdle()
+            await self?.windDown()
             reply(true)
         }
+    }
+
+    /// Something that may own an FFmpeg process or decoded audio is still around.
+    private var needsWindDown: Bool {
+        ingestTask != nil || loadTask != nil || loudnessTask != nil || !audioLifetime.entitled.isEmpty
+            || EncoderProcesses.anyRunning()
+    }
+
+    /// Before quitting: cancels adding, loading and the loudness pass, deletes every decoded CAF
+    /// once its decode has stopped, and waits (briefly) until no FFmpeg child is left.
+    private func windDown() async {
+        isQuitting = true
+        let tasks = [ingestTask, loadTask, loudnessTask].compactMap { $0 }
+        for task in tasks { task.cancel() }
+        loadID = UUID()
+        stopTimer()
+        player?.stop()
+        await audioLifetime.releaseAll()
+        for task in tasks { await task.value }
+        // ProcessKit sends SIGTERM (then SIGKILL after a second) once its stream is cancelled.
+        await EncoderProcesses.waitUntilNoneRunning(timeout: 3)
     }
 
     /// Close (Command-W) asks to stop the queue first, as quitting does. The window's close button
@@ -371,6 +405,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Adds files and folders to the queue in order. Each file is decoded once on the way in
     /// (its peaks are kept with the job); a decode failure is added as a Failed job.
     func addAudio(_ urls: [URL]) {
+        guard !isQuitting else { return }
         let expansion = AudioIngest.expand(urls)
         ingestSkipped += expansion.skipped
         let skipped = AudioIngest.summary(skipped: expansion.skipped)
@@ -503,7 +538,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Decodes the selected job's audio through the workspace, if the lifetime allows it now.
     /// A job without stored analysis is analysed once and the result kept with the job.
     private func loadSelectedAudio() {
-        guard let job = queue.selectedJob, !hasAudio, loadTask == nil else { return }
+        guard !isQuitting, let job = queue.selectedJob, !hasAudio, loadTask == nil else { return }
         let url = job.sourceURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         guard audioLifetime.isEntitled(job.id) else {
@@ -1034,7 +1069,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Measures, one at a time, every job that has no loudness yet: added, restored, or left
     /// over from a pass that could not store its result while the job was running.
     private func scheduleLoudness() {
-        guard loudnessTask == nil, nextLoudnessJob() != nil else { return }
+        guard !isQuitting, loudnessTask == nil, nextLoudnessJob() != nil else { return }
         let token = UUID()
         loudnessToken = token
         loudnessTask = Task { [weak self] in await self?.drainLoudness(token: token) }
