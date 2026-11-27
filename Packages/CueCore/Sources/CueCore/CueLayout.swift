@@ -10,10 +10,11 @@ import CoreGraphics
 /// build 10. Otherwise the elements form one vertical stack (title band, full track, close-up and
 /// clocks, in picture order) that first moves within the free margins and, when it cannot fit
 /// between the reserved bands, gives way in this order:
-///   1. the close-up and full-track waveform heights shrink,
-///   2. the gaps between groups shrink,
-///   3. the clocks step down a size (never below Small),
-///   4. the title shrinks (never below 34 pt),
+///   1. with clocks below, the gap above the clocks shrinks to its minimum,
+///   2. the close-up and full-track waveform heights shrink,
+///   3. the remaining gaps between groups shrink,
+///   4. the clocks step down a size (never below Small),
+///   5. the title shrinks (never below 34 pt),
 /// after which `fits` is false. Clocks also step down when the pair is wider than the content
 /// column (wide left and right reserves); waveforms and gaps cannot help there.
 ///
@@ -255,14 +256,20 @@ public struct CueLayout: Sendable, Equatable {
                 break
             }
             plan.top = highY
-            let shrink = needed + 1  // whole-pixel rounding allowance
+            var shrink = needed + 1  // whole-pixel rounding allowance
+            if clockPosition == .below {
+                shrink -= plan.reclaimGapAboveClocks(upTo: shrink)
+            }
             if shrink <= plan.waveformCapacity {
                 plan.shrinkWaveforms(by: shrink)
                 break
             }
             if shrink <= plan.waveformCapacity + plan.gapCapacity {
+                // Above keeps build 11's gap compression. Below, spend only the deficit
+                // left after the waveforms reach their floors.
+                let gapShrink = clockPosition == .below ? shrink - plan.waveformCapacity : shrink
                 plan.shrinkWaveforms(by: plan.waveformCapacity)
-                plan.shrinkGaps(by: shrink - plan.waveformCapacity)
+                plan.shrinkGaps(by: gapShrink)
                 break
             }
             if Self.stepLarger(&eSize, &rSize) { continue }
@@ -379,6 +386,13 @@ private struct Stack {
             case .gap(let i): return total + gaps[i]
             }
         }
+    }
+
+    /// Gap 1 separates the bottom waveform's full extent (including ticks) from the clock labels.
+    mutating func reclaimGapAboveClocks(upTo amount: CGFloat) -> CGFloat {
+        let reclaimed = min(amount, max(0, gaps[1] - M.minimumGap))
+        gaps[1] -= reclaimed
+        return reclaimed
     }
 
     /// Whole-pixel reductions shared in proportion to what each waveform can give.

@@ -225,16 +225,22 @@ final class CueLayoutTests: XCTestCase {
                     let label = "\(zoom) \(position) t\(top) b\(bottom)"
                     let shrunkWaves = layout.overview.height < reference.overview.height
                         || (layout.detail?.height ?? 0) < (reference.detail?.height ?? 0)
-                    let shrunkGaps = zip(gaps(layout), naturalGaps).contains { $0 < $1 - 1.5 }
+                    let currentGaps = gaps(layout)
+                    let otherGapCount = currentGaps.count - (position == .below ? 1 : 0)
+                    let shrunkOtherGaps = zip(currentGaps.prefix(otherGapCount), naturalGaps).contains { $0 < $1 - 1.5 }
+                    let shrunkClockGap = position == .below && currentGaps.last! < naturalGaps.last! - 1.5
                     let steppedClocks = layout.elapsedSize != .extraLarge || layout.remainingSize != .extraLarge
                     let shrunkTitle = layout.titleSize < 48
 
-                    // 1 before 2: gaps only shrink once the waveforms are at their floors.
-                    if shrunkGaps { XCTAssertTrue(waveformsAtMinimum(layout), label) }
+                    // With clocks below, the space above them goes first in either zoom mode.
+                    if position == .below && shrunkWaves {
+                        XCTAssertLessThanOrEqual(currentGaps.last!, M.minimumGap + 1, label)
+                    }
+                    if shrunkOtherGaps { XCTAssertTrue(waveformsAtMinimum(layout), label) }
                     // 2 before 3: clocks only step down once waveforms and gaps are at their floors.
                     if steppedClocks {
                         XCTAssertTrue(waveformsAtMinimum(layout), label)
-                        if layout.elapsedSize == .small {
+                        if position == .above && layout.elapsedSize == .small {
                             for gap in gaps(layout) { XCTAssertLessThanOrEqual(gap, M.minimumGap + 1.5, label) }
                         }
                     }
@@ -263,25 +269,76 @@ final class CueLayoutTests: XCTestCase {
                     if !layout.fits { seen.insert("none") }
                     else if shrunkTitle { seen.insert("title") }
                     else if steppedClocks { seen.insert("clocks") }
-                    else if shrunkGaps { seen.insert("gaps") }
+                    else if shrunkOtherGaps { seen.insert("gaps") }
                     else if shrunkWaves { seen.insert("waves") }
+                    else if shrunkClockGap { seen.insert("clock gap") }
                     else { seen.insert("natural") }
                 }
             }
         }
-        XCTAssertEqual(seen, ["natural", "waves", "gaps", "clocks", "title", "none"])
+        XCTAssertEqual(seen, ["natural", "clock gap", "waves", "gaps", "clocks", "title", "none"])
     }
 
-    func testWaveformsGiveWayFirst() {
-        // EVS OSD with medium clocks: only the waveforms (and possibly a sliver of gap) give way.
-        let layout = CueLayout(zoom: .auto, elapsed: .medium, remaining: .medium, safeZones: .init(preset: .evsOSD))
+    func testRehearsalLayoutReclaimsTheGapAboveTheClocks() throws {
+        var appearance = CueAppearance()
+        appearance.zoom = .five
+        appearance.elapsed.size = .small
+        appearance.remaining.size = .large
+        appearance.safeZones = zones(top: 11, bottom: 11)
+
+        // Measured from build 11 with precisely these rehearsal settings.
+        let oldOverview = CGRect(x: 96, y: 695, width: 1728, height: 71)
+        let oldDetail = CGRect(x: 96, y: 397, width: 1728, height: 182)
+        let layout = appearance.layout
+        let detail = try XCTUnwrap(layout.detail)
         XCTAssertTrue(layout.fits)
-        XCTAssertEqual(layout.elapsedSize, .medium)
-        XCTAssertEqual(layout.titleSize, 48)
-        XCTAssertLessThan(layout.detail!.height, 265)
-        XCTAssertLessThan(layout.overview.height, 100)
-        XCTAssertGreaterThanOrEqual(layout.extent(of: .elapsedClock)!.minY, 216)
-        XCTAssertLessThanOrEqual(titleBand(layout).maxY, 972)
+        XCTAssertEqual(layout.overview.maxY, oldOverview.maxY)
+        XCTAssertGreaterThan(layout.overview.height, oldOverview.height)
+        XCTAssertGreaterThan(detail.height, oldDetail.height)
+        XCTAssertEqual(layout.elapsedSize, .small)
+        XCTAssertEqual(layout.remainingSize, .large)
+        XCTAssertEqual(try XCTUnwrap(gaps(layout).last), M.minimumGap, accuracy: 1)
+        let track = BaselineTests.syntheticTrack()
+        let pixels = RenderTests.render(track, timeline: ClipTimeline(duration: track.seconds),
+                                        position: 0, label: CueLabel(text: "Rehearsal"), appearance: appearance)
+        for band in layout.reserved {
+            XCTAssertEqual(RenderTests.foreignPixels(pixels, in: band), 0)
+        }
+    }
+
+    func testRehearsalLayoutsWithClocksAboveKeepBuild11Geometry() {
+        let safe = zones(top: 11, bottom: 11)
+        let above = CueLayout(zoom: .five, elapsed: .small, remaining: .large,
+                              clockPosition: .above, safeZones: safe)
+        XCTAssertEqual(above.overview, CGRect(x: 96, y: 469, width: 1728, height: 71))
+        XCTAssertEqual(above.detail, CGRect(x: 96, y: 171, width: 1728, height: 182))
+        XCTAssertEqual(above.clockBaseline, 677)
+        let aboveOff = CueLayout(zoom: .off, elapsed: .small, remaining: .large,
+                                 clockPosition: .above, safeZones: safe)
+        XCTAssertEqual(aboveOff.overview, CGRect(x: 96, y: 136, width: 1728, height: 369))
+        XCTAssertNil(aboveOff.detail)
+        XCTAssertEqual(aboveOff.clockBaseline, 677)
+    }
+
+    func testZoomOffCanReclaimClockGapWithoutShorteningOverview() {
+        let layout = CueLayout(zoom: .off, elapsed: .small, remaining: .large,
+                               safeZones: zones(top: 11, bottom: 11))
+        XCTAssertNil(layout.detail)
+        XCTAssertTrue(layout.fits)
+        XCTAssertEqual(layout.overview.height, CuePicture.overviewRect(for: .off).height)
+        XCTAssertGreaterThan(gaps(layout).last!, M.minimumGap)
+    }
+
+    func testExhaustingWaveformHeightSpendsOnlyTheRemainingDeficitOnGaps() {
+        let before = CueLayout(zoom: .five, elapsed: .small, remaining: .large,
+                               safeZones: zones(top: 16, bottom: 17))
+        let after = CueLayout(zoom: .five, elapsed: .small, remaining: .large,
+                              safeZones: zones(top: 17, bottom: 17))
+        XCTAssertTrue(before.fits && after.fits)
+        XCTAssertTrue(waveformsAtMinimum(after))
+        XCTAssertEqual(after.clockBaseline, before.clockBaseline, accuracy: 2)
+        XCTAssertGreaterThan(gaps(after)[0], M.minimumGap + 1)
+        XCTAssertEqual(gaps(after).last!, M.minimumGap, accuracy: 1)
     }
 
     func testDoesNotFit() {
