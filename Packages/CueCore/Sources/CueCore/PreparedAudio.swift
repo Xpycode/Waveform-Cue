@@ -3,14 +3,18 @@ import AudioToolbox
 
 /// One PCM source gives waveform analysis, playback and export the same sample zero
 /// and end sample, including encoder delay and padding on compressed music.
-public final class PreparedAudio {
+/// The CAF is deleted when the last reference goes away, or earlier by `JobWorkspace.release`.
+public final class PreparedAudio: Sendable {
     public let url: URL
     public static let sessionDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("WaveformCue-" + UUID().uuidString, isDirectory: true)
     public static var encoder: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ffmpeg") }
 
     init(url: URL) { self.url = url }
-    deinit { try? FileManager.default.removeItem(at: url) }
+    deinit { remove() }
+
+    /// Deletes the CAF now. Safe to call more than once.
+    func remove() { try? FileManager.default.removeItem(at: url) }
 
     // AAC packets may decode past a file's declared end. Honor a packet table
     // when it explicitly lists priming or remainder, before resampling to 48 kHz.
@@ -26,10 +30,12 @@ public final class PreparedAudio {
         return ["-af", "atrim=end_sample=" + String(table.mNumberValidFrames)]
     }
 
-    public static func decode(_ source: URL, encoder: URL) throws -> PreparedAudio {
+    /// Decodes `source` to a 48 kHz stereo 24-bit CAF in `directory` (default: the session directory,
+    /// which the app deletes on quit). Synchronous; cancelling the calling task stops FFmpeg.
+    public static func decode(_ source: URL, encoder: URL, into directory: URL = sessionDirectory) throws -> PreparedAudio {
         let fm = FileManager.default
-        try fm.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
-        let base = sessionDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let base = directory.appendingPathComponent(UUID().uuidString)
         let pcm = PreparedAudio(url: base.appendingPathExtension("caf"))
         let log = base.appendingPathExtension("log")
         guard fm.createFile(atPath: log.path, contents: nil) else { throw CueError("Cannot create the audio decoder log.") }
