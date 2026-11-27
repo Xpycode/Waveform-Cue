@@ -45,6 +45,13 @@ struct MonitorRepresentable: NSViewRepresentable {
         view.label = label
         view.frameNumber = frame
         view.editingEnabled = editingEnabled
+        if appearance.trimAndFadesEnabled {
+            if view.onTrimChanged == nil {
+                view.onTrimChanged = { [weak model] trim in model?.dragTrimPoints(trim) }
+            }
+        } else {
+            view.onTrimChanged = nil
+        }
         if view.placeholder != placeholder { view.placeholder = placeholder }
     }
 
@@ -66,10 +73,6 @@ struct MonitorRepresentable: NSViewRepresentable {
             // the model keeps fade start at or before music end and the view shows its value.
             view.onMarkerChanged = { [weak model] kind, seconds in
                 model?.setMarker(kind, to: seconds, deferringSave: true)
-            }
-            // Each in or out handle step is stored as the job's trim (saved once the drag settles).
-            view.onTrimChanged = { [weak model] trim in
-                model?.setTrim(trim, deferringSave: true)
             }
         }
     }

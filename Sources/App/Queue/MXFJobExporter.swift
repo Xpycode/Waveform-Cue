@@ -19,8 +19,7 @@ struct MXFJobExporter: JobExporting {
     /// Normalise on: one linear gain toward -23 LUFS, capped by the -1 dBTP true-peak limit
     /// (`Loudness.normalisation(for:)`). Off, or not measured yet: no gain.
     nonisolated static func normalisationGain(for job: CueJob) -> Double {
-        guard job.normalise, let measurement = job.loudness else { return 0 }
-        return Loudness.normalisation(for: measurement).gainDB
+        job.effectiveGainDB
     }
 
     init(audio: JobAudioLifetime, encoder: URL = PreparedAudio.encoder,
@@ -38,13 +37,14 @@ struct MXFJobExporter: JobExporting {
         guard let start = Timecode(job.startTimecode) else {
             throw JobExportError.failed(reason: "Start timecode “\(job.startTimecode)” is not HH:MM:SS:FF at 25 fps.", log: "")
         }
-        let appearance = job.appearance
-        var gainDB = gain(job)
+        let appearance = job.effectiveAppearance
+        let trim = job.effectiveTrim
+        var gainDB = appearance.loudnessAnalysisEnabled ? gain(job) : 0
 
         // Preflight before decoding, so a full or unwritable disk is reported without work.
         let folder = destination.deletingLastPathComponent()
         if let seconds = job.peaks?.seconds, seconds > 0 {
-            let estimate = ClipTimeline(duration: seconds, trim: job.trim, markers: job.markers,
+            let estimate = ClipTimeline(duration: seconds, trim: trim, markers: job.effectiveMarkers,
                                         target: appearance.countdownTarget, standard: preset.video.timelineRate)
             try estimate.validate()
             let workspace = audio.workspace
@@ -63,8 +63,8 @@ struct MXFJobExporter: JobExporting {
         // Normalise is on but the background pass has not measured this job yet: measure the
         // decoded audio the export reads, so the gain is never silently skipped.
         // The slate shows the job's measurement, or the one taken here.
-        var loudness = job.loudness
-        if job.normalise, job.loudness == nil {
+        var loudness = appearance.loudnessAnalysisEnabled ? job.loudness : nil
+        if job.normalise, job.shouldMeasureLoudness {
             let measured = try await LoudnessAnalyzer.measure(pcm.url, encoder: encoder)
             loudness = measured
             gainDB = Loudness.normalisation(for: measured).gainDB
@@ -75,8 +75,8 @@ struct MXFJobExporter: JobExporting {
         let worker = Task.detached(priority: .userInitiated) { () throws -> URL in
             let track = try stored.map { AudioTrack(url: job.sourceURL, analysis: $0, audio: pcm) }
                 ?? AudioTrack.analyse(job.sourceURL, audio: pcm)
-            let timeline = MXFExport.timeline(for: track, preset: preset, trim: job.trim,
-                                              markers: track.markers.applyingEdits(from: job.markers),
+            let timeline = MXFExport.timeline(for: track, preset: preset, trim: trim,
+                                              markers: job.effectiveMarkers(detected: track.markers),
                                               target: appearance.countdownTarget)
             try timeline.validate()
             let snapshot = MXFExport.Snapshot(track: track, label: job.label, appearance: appearance,

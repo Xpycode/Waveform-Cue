@@ -100,15 +100,16 @@ public final class QueueManager {
     /// trim leaves at least one second ("Trim range too short"). The trim is checked against the
     /// source duration when it is known, otherwise against the in and out points alone.
     public nonisolated static func blockingReason(for job: CueJob) -> String? {
-        if !job.appearance.layout.fits { return tooLittleRoom }
+        if !job.effectiveAppearance.layout.fits { return tooLittleRoom }
         if Timecode(job.startTimecode) == nil {
             return "Start timecode “\(job.startTimecode)” is not HH:MM:SS:FF at 25 fps."
         }
+        let trim = job.effectiveTrim
         if let seconds = job.analysis?.seconds ?? job.peaks?.seconds, seconds > 0 {
-            if (try? ClipTimeline(duration: seconds, trim: job.trim).validate()) == nil {
+            if (try? ClipTimeline(duration: seconds, trim: trim).validate()) == nil {
                 return ClipTimeline.trimTooShortMessage
             }
-        } else if let start = job.trim.inPoint, let end = job.trim.outPoint,
+        } else if let start = trim.inPoint, let end = trim.outPoint,
                   end - start < ClipTimeline.minimumTrimSeconds - 1e-8 {
             return ClipTimeline.trimTooShortMessage
         }

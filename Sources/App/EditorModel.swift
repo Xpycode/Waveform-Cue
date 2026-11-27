@@ -134,7 +134,6 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     @ObservationIgnored private var loudnessTask: Task<Void, Never>?
     /// Set once quitting is committed: nothing new is decoded, loaded or measured.
     @ObservationIgnored private var isQuitting = false
-    @ObservationIgnored private var loudnessToken = UUID()
     /// Jobs whose loudness pass has run (or failed) this session, so each is measured once.
     @ObservationIgnored private var loudnessAttempted: Set<UUID> = []
     @ObservationIgnored private(set) weak var window: NSWindow?
@@ -346,6 +345,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     func shutdown() {
+        isQuitting = true
         queue.flushPendingSave()
         loadTask?.cancel()
         ingestTask?.cancel()
@@ -379,8 +379,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
            responder.isDescendant(of: inspectorView) { return event }
         // I and O set the in and out points at the playhead (they need only the waveform).
         switch event.charactersIgnoringModifiers?.lowercased() {
-        case "i": setTrimPointAtPlayhead(.inPoint); return nil
-        case "o": setTrimPointAtPlayhead(.outPoint); return nil
+        case "i" where appearance.trimAndFadesEnabled: setTrimPointAtPlayhead(.inPoint); return nil
+        case "o" where appearance.trimAndFadesEnabled: setTrimPointAtPlayhead(.outPoint); return nil
         default: break
         }
         guard canPlay else { return event }
@@ -652,7 +652,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         let wasSelected = selectedJobID.map(ids.contains) ?? false
         let removed = queue.remove(ids)
         if removed.count < ids.count { status = "The running job can’t be removed. Cancel it first." }
-        if let measuring = measuringJobID, removed.contains(measuring) { restartLoudness() }
+        if let measuring = measuringJobID, removed.contains(measuring) { refreshLoudness() }
         for id in removed { loudnessFailures[id] = nil }
         if wasSelected, queue.selectedJobID == nil { selectJob(nil, force: true) }
     }
@@ -815,9 +815,15 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Edit the selected job or, without a selection, the working copy of the default.
     func updateAppearance(_ appearance: CueAppearance) {
         guard canEdit else { return }
+        let previous = self.appearance
+        let trimChanged = previous.trimAndFadesEnabled != appearance.trimAndFadesEnabled
+            || previous.preRollEnabled != appearance.preRollEnabled
+        let oldTimeline = trimChanged ? previewTimeline : nil
         self.appearance = appearance
         if let id = selectedJobID {
             queue.update(id) { $0.appearance = appearance }
+            if trimChanged { remapPlayhead(from: oldTimeline) }
+            if previous.loudnessAnalysisEnabled != appearance.loudnessAnalysisEnabled { refreshLoudness() }
         } else {
             unselectedAppearance = appearance
         }
@@ -850,6 +856,15 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     var selectedMarkers: MusicMarkers? {
         guard let job = selectedJob, let detected = detectedMarkers else { return nil }
         return detected.applyingEdits(from: job.markers)
+    }
+
+    var previewAppearance: CueAppearance { selectedJob?.effectiveAppearance ?? appearance }
+
+    /// Explicitly empty when markers are disabled, including for an older job whose detection
+    /// only became available while loading its track.
+    var previewMarkers: MusicMarkers {
+        guard let job = selectedJob else { return .none }
+        return job.effectiveMarkers(detected: detectedMarkers ?? job.markers)
     }
 
     /// The selected job's source duration in seconds, when known.
@@ -908,11 +923,13 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     func setNormalise(_ on: Bool) {
+        guard appearance.loudnessAnalysisEnabled else { return }
         editSelected { $0.normalise = on }
     }
 
     /// A marker time typed in the Job tab (seconds or M:SS.ff).
     func commitMarker(_ kind: MarkerKind, text: String) {
+        guard appearance.markersEnabled else { return }
         // Leaving the field without changing it must not turn the detected value into an edit.
         if let current = selectedMarkers?.value(kind),
            MarkerTime.format(current) == text.trimmingCharacters(in: .whitespaces) {
@@ -931,7 +948,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// track and fade start never passes music end: a fade start dragged past the end stops at
     /// it, and a music end dragged before the fade start takes the fade start with it.
     func setMarker(_ kind: MarkerKind, to seconds: Double, deferringSave: Bool = false) {
-        guard canEdit, let job = selectedJob, let detected = detectedMarkers, !detected.noMusic else { return }
+        guard canEdit, let job = selectedJob, job.appearance.markersEnabled,
+              let detected = detectedMarkers, !detected.noMusic else { return }
         var value = max(0, seconds.isFinite ? seconds : 0)
         if let duration = selectedDuration, duration > 0 { value = min(value, duration) }
         var merged = detected.applyingEdits(from: job.markers)
@@ -949,20 +967,19 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     /// Reset: both markers return to the detected values.
     func resetMarkers() {
+        guard appearance.markersEnabled else { return }
         markerMessage = nil
         editSelected { $0.markers.resetToDetected() }
     }
 
     // MARK: Trim, fades and pre-roll (Job tab, I and O keys, monitor handles)
 
-    /// The selected job's trim, fades and pre-roll.
-    var selectedTrim: TrimSettings { selectedJob?.trim ?? .none }
-
     /// The 25 fps timeline the monitor shows for the selected job: its trim and pre-roll, its
     /// markers and the countdown target. `frame` and the monitor's positions are on it.
     var previewTimeline: ClipTimeline? {
-        guard let track else { return nil }
-        return CuePicture.timeline(for: track, appearance: appearance, markers: selectedMarkers, trim: selectedTrim)
+        guard let track, let job = selectedJob else { return nil }
+        return CuePicture.timeline(for: track, appearance: previewAppearance, markers: previewMarkers,
+                                   trim: job.effectiveTrim)
     }
 
     /// The end position of the preview timeline (slate plus trimmed music); the slider's range.
@@ -978,7 +995,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// The trimmed music's length and the clip's, for the note under the Trim section.
     var trimSummary: String? {
         guard let job = selectedJob, let duration = selectedDuration, duration > 0 else { return nil }
-        let timeline = ClipTimeline(duration: duration, trim: job.trim)
+        let timeline = ClipTimeline(duration: duration, trim: job.effectiveTrim)
         var line = "Music " + MarkerTime.format(timeline.musicDuration)
         if timeline.isTrimmed { line += " of " + MarkerTime.format(duration) }
         if timeline.preRollFrames > 0 {
@@ -990,7 +1007,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     /// I or O: the point goes to the source time under the playhead (the in point on the slate).
     func setTrimPointAtPlayhead(_ edge: TrimEdge) {
-        guard canEdit, let job = selectedJob, let duration = selectedDuration, let timeline = previewTimeline
+        guard canEdit, let job = selectedJob, job.appearance.trimAndFadesEnabled,
+              let duration = selectedDuration, let timeline = previewTimeline
         else { NSSound.beep(); return }
         let seconds = timeline.sourceSeconds(at: frame)
         trimMessage = nil
@@ -1002,7 +1020,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     /// An In or Out time typed in the Job tab (seconds or M:SS.ff); empty clears that point.
     func commitTrimPoint(_ edge: TrimEdge, text: String) {
-        guard let job = selectedJob, let duration = selectedDuration else { return }
+        guard let job = selectedJob, job.appearance.trimAndFadesEnabled, let duration = selectedDuration else { return }
         let typed = text.trimmingCharacters(in: .whitespaces)
         let current = edge == .inPoint ? job.trim.inPoint : job.trim.outPoint
         // Leaving the field without changing it changes nothing.
@@ -1022,36 +1040,47 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     func selectFade(_ edge: TrimEdge, seconds: Double) {
-        guard let job = selectedJob else { return }
+        guard let job = selectedJob, job.appearance.trimAndFadesEnabled else { return }
         var trim = job.trim
         if edge == .inPoint { trim.fadeIn = seconds } else { trim.fadeOut = seconds }
         setTrim(trim)
     }
 
     func selectPreRoll(_ seconds: Double) {
-        guard let job = selectedJob else { return }
+        guard let job = selectedJob, job.appearance.preRollEnabled else { return }
         var trim = job.trim
         trim.preRoll = seconds
         setTrim(trim)
     }
 
-    /// Stores the selected job's trim (fields, keys, pop-ups, and every monitor handle drag step)
-    /// and keeps the playhead on the same source time, inside the new range; on the slate it
-    /// stays on the slate while there is one.
-    func setTrim(_ trim: TrimSettings, deferringSave: Bool = false) {
+    /// The monitor edits the visible points in the effective trim. Preserve the song's saved
+    /// pre-roll even when that feature is switched off during the drag.
+    func dragTrimPoints(_ points: TrimSettings) {
+        guard let job = selectedJob, job.appearance.trimAndFadesEnabled else { return }
+        var trim = job.trim
+        trim.inPoint = points.inPoint
+        trim.outPoint = points.outPoint
+        setTrim(trim, deferringSave: true)
+    }
+
+    private func setTrim(_ trim: TrimSettings, deferringSave: Bool = false) {
         guard canEdit, let job = selectedJob, job.trim != trim else { return }
         let old = previewTimeline
-        let onSlate = old?.isSlate(frame) ?? false
-        let seconds = old?.sourceSeconds(at: frame)
         editSelected(deferringSave: deferringSave) { $0.trim = trim }
+        remapPlayhead(from: old)
+    }
+
+    /// Keep the same source time across changes to trim and pre-roll, clamped to the new
+    /// range. Keep a slate position if the new timeline still has a slate.
+    private func remapPlayhead(from old: ClipTimeline?) {
         guard let new = previewTimeline else {
             frame = 0
             return
         }
         let target: Int
-        if onSlate, new.preRollPositions > 0 {
+        if old?.isSlate(frame) == true, new.preRollPositions > 0 {
             target = min(frame, new.preRollPositions - 1)
-        } else if let seconds {
+        } else if let seconds = old?.sourceSeconds(at: frame) {
             target = new.position(ofSourceSeconds: seconds)
         } else {
             target = 0
@@ -1063,6 +1092,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         guard let id = selectedJobID else { NSSound.beep(); return }
         let pending = applyToAllCount
         let changed = queue.applyToAll(from: id, scope: scope).count
+        if changed > 0 { refreshLoudness() }
         if pending == 0 {
             status = "No other Pending jobs."
         } else {
@@ -1086,22 +1116,24 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// over from a pass that could not store its result while the job was running.
     private func scheduleLoudness() {
         guard !isQuitting, loudnessTask == nil, nextLoudnessJob() != nil else { return }
-        let token = UUID()
-        loudnessToken = token
-        loudnessTask = Task { [weak self] in await self?.drainLoudness(token: token) }
+        loudnessTask = Task { [weak self] in await self?.drainLoudness() }
     }
 
-    /// Cancels the pass in flight (its job was removed) and carries on with the next job.
-    private func restartLoudness() {
-        loudnessTask?.cancel()
-        loudnessTask = nil
-        measuringJobID = nil
-        scheduleLoudness()
+    /// Reconcile a single edit, a batch appearance copy or a removal against the live queue.
+    /// Wait for the cancelled measurement task to return before scheduling another. Its
+    /// FFmpeg process can still be shutting down when the next task starts.
+    private func refreshLoudness() {
+        if let id = measuringJobID, queue.job(id)?.shouldMeasureLoudness != true {
+            loudnessTask?.cancel()
+            loudnessAttempted.remove(id)
+        } else {
+            scheduleLoudness()
+        }
     }
 
     /// Measure Again, after a failed pass.
     func measureLoudnessAgain() {
-        guard let id = selectedJobID else { return }
+        guard let id = selectedJobID, appearance.loudnessAnalysisEnabled else { return }
         loudnessFailures[id] = nil
         loudnessAttempted.remove(id)
         scheduleLoudness()
@@ -1109,7 +1141,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     private func nextLoudnessJob() -> CueJob? {
         queue.jobs.first { job in
-            guard job.loudness == nil, !loudnessAttempted.contains(job.id), !job.status.isActive else { return false }
+            guard job.shouldMeasureLoudness, !loudnessAttempted.contains(job.id), !job.status.isActive else { return false }
             if case .done = job.status { return false }
             if case .failed(let reason, _) = job.status, reason == QueueManager.sourceNotFound { return false }
             return FileManager.default.fileExists(atPath: job.sourcePath)
@@ -1119,25 +1151,27 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// The pass reads the source file. Its integrated loudness and range match the decoded CAF
     /// the export reads; for a mono source the stereo CAF's true peak is 3 dB lower than measured
     /// here, so a peak-limited gain errs on the quiet side.
-    private func drainLoudness(token: UUID) async {
+    private func drainLoudness() async {
         while !Task.isCancelled, let job = nextLoudnessJob() {
             measuringJobID = job.id
             loudnessAttempted.insert(job.id)
             do {
                 let measurement = try await LoudnessAnalyzer.measure(job.sourceURL)
                 guard !Task.isCancelled else { break }
+                guard queue.job(job.id)?.shouldMeasureLoudness == true else { continue }
                 // Refused while the job runs: measured again when the queue has finished.
                 if !queue.update(job.id, { $0.loudness = measurement }) { loudnessAttempted.remove(job.id) }
             } catch is CancellationError {
                 break
             } catch {
                 guard !Task.isCancelled else { break }
+                guard queue.job(job.id)?.shouldMeasureLoudness == true else { continue }
                 loudnessFailures[job.id] = error.localizedDescription
             }
         }
-        guard loudnessToken == token else { return }
         measuringJobID = nil
         loudnessTask = nil
+        if Task.isCancelled { scheduleLoudness() }
     }
 
 

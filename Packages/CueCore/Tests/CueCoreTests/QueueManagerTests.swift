@@ -325,8 +325,8 @@ final class QueueManagerTests: XCTestCase {
         exporter.succeed(0)
         await manager.waitUntilIdle()
 
-        // Fixed and retried, the job exports.
-        manager.update(cramped.id) { $0.appearance = CueAppearance() }
+        // Turning reserves off lets the job through the real queue without losing its insets.
+        manager.update(cramped.id) { $0.appearance.safeZonesEnabled = false }
         XCTAssertTrue(manager.retry(cramped.id))
         manager.start()
         await eventually("Cramped runs after the fix") { exporter.calls.count == 2 }
@@ -346,6 +346,11 @@ final class QueueManagerTests: XCTestCase {
         var unknown = job("Unknown")
         unknown.trim = TrimSettings(inPoint: 1, outPoint: 1.5)
         XCTAssertEqual(QueueManager.blockingReason(for: unknown), "Trim range too short")
+        unknown.appearance.trimAndFadesEnabled = false
+        XCTAssertNil(QueueManager.blockingReason(for: unknown))
+        var untrimmed = short
+        untrimmed.appearance.trimAndFadesEnabled = false
+        XCTAssertNil(QueueManager.blockingReason(for: untrimmed))
         // Exactly one second, an in point near the end of a long source, fades and pre-roll pass.
         var oneSecond = job("OneSecond")
         oneSecond.peaks = PeaksSummary(seconds: 10, overview: [0.5])

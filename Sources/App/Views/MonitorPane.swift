@@ -13,10 +13,10 @@ struct MonitorPane: View {
                                  trackID: model.trackID,
                                  frame: model.frame,
                                  label: model.label,
-                                 appearance: model.appearance,
-                                 markers: model.selectedMarkers,
-                                 trim: model.selectedTrim,
-                                 loudness: model.selectedJob?.loudness,
+                                 appearance: model.previewAppearance,
+                                 markers: model.previewMarkers,
+                                 trim: model.selectedJob?.effectiveTrim ?? .none,
+                                 loudness: model.appearance.loudnessAnalysisEnabled ? model.selectedJob?.loudness : nil,
                                  editingEnabled: model.canEdit,
                                  placeholder: model.placeholder)
             // Slider positions are the preview timeline's: the slate, then the trimmed music.
