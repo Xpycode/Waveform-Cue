@@ -140,6 +140,9 @@ struct AppKitCheckbox: NSViewRepresentable {
     let title: String
     let isOn: Bool
     var toolTip: String?
+    var isSectionHeader = false
+    var isOverridden = false
+    var onReset: (() -> Void)?
     let onToggle: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onToggle: onToggle) }
@@ -153,7 +156,23 @@ struct AppKitCheckbox: NSViewRepresentable {
 
     func updateNSView(_ box: InspectorCheckbox, context: Context) {
         context.coordinator.onToggle = onToggle
-        if box.title != title { box.title = title }
+        let displayedTitle = isOverridden ? "• " + title : title
+        if box.title != displayedTitle { box.title = displayedTitle }
+        box.setAccessibilityLabel(title)
+        if isSectionHeader { box.font = .systemFont(ofSize: 13, weight: .semibold) }
+        context.coordinator.onReset = onReset
+        if onReset != nil {
+            if box.menu == nil {
+                let menu = NSMenu()
+                menu.autoenablesItems = false
+                let item = menu.addItem(withTitle: "Reset", action: #selector(Coordinator.reset), keyEquivalent: "")
+                item.target = context.coordinator
+                box.menu = menu
+            }
+            box.menu?.items.first?.isEnabled = isOverridden && context.environment.isEnabled
+        } else {
+            box.menu = nil
+        }
         let state: NSControl.StateValue = isOn ? .on : .off
         if box.state != state { box.state = state }
         box.isEnabled = context.environment.isEnabled
@@ -162,6 +181,8 @@ struct AppKitCheckbox: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject {
+        var onReset: (() -> Void)?
+        @objc func reset() { onReset?() }
         var onToggle: (Bool) -> Void
         init(onToggle: @escaping (Bool) -> Void) { self.onToggle = onToggle }
         @objc func toggled(_ sender: NSButton) { onToggle(sender.state == .on) }

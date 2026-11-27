@@ -110,8 +110,13 @@ struct JobInspector: View {
 
     @ViewBuilder
     private func markersSection(_ job: CueJob) -> some View {
-        section("Markers")
-            .padding(.top, 11)
+        featureHeader("Markers", setting: .markersEnabled, key: \.markersEnabled)
+        markerValues(job)
+            .disabled(!job.appearance.markersEnabled)
+    }
+
+    @ViewBuilder
+    private func markerValues(_ job: CueJob) -> some View {
         if let detected = model.detectedMarkers {
             if detected.noMusic {
                 message("No music detected", color: Color(nsColor: .systemOrange))
@@ -163,8 +168,7 @@ struct JobInspector: View {
 
     @ViewBuilder
     private func loudnessSection(_ job: CueJob) -> some View {
-        section("Loudness")
-            .padding(.top, 11)
+        featureHeader("Loudness analysis", setting: .loudnessAnalysisEnabled, key: \.loudnessAnalysisEnabled)
         if let loudness = job.loudness {
             row("Integrated") { value(loudness.integratedLUFS.map { Self.decibels($0) + " LUFS" } ?? "Silent") }
             row("True peak") { value(loudness.truePeakDBTP.map { Self.decibels($0) + " dBTP" } ?? "Silent") }
@@ -174,22 +178,23 @@ struct JobInspector: View {
             } else {
                 note("Within EBU R 128.")
             }
-        } else if let failure = model.loudnessFailures[job.id] {
+        } else if job.appearance.loudnessAnalysisEnabled, let failure = model.loudnessFailures[job.id] {
             message("Loudness couldn’t be measured.", color: Color(nsColor: .systemRed))
             note(failure)
                 .lineLimit(3)
                 .help(failure)
             AppKitPushButton(title: "Measure Again", controlSize: .small) { model.measureLoudnessAgain() }
-        } else if model.measuringJobID == job.id {
+        } else if job.appearance.loudnessAnalysisEnabled, model.measuringJobID == job.id {
             note("Measuring loudness…")
-        } else {
+        } else if job.appearance.loudnessAnalysisEnabled {
             note("Waiting to measure loudness.")
         }
         AppKitCheckbox(title: "Normalise to −23 LUFS", isOn: job.normalise,
                        toolTip: "Apply one linear gain on export, held back if the true peak would pass −1 dBTP. No compression or limiting.") {
             model.setNormalise($0)
         }
-        if job.normalise {
+        .disabled(!job.appearance.loudnessAnalysisEnabled)
+        if job.appearance.loudnessAnalysisEnabled && job.normalise {
             normaliseResult(job.loudness)
         }
     }
@@ -216,8 +221,28 @@ struct JobInspector: View {
 
     @ViewBuilder
     private func trimSection(_ job: CueJob) -> some View {
-        section("Trim")
-            .padding(.top, 11)
+        featureHeader("Trim and fades", setting: .trimAndFadesEnabled, key: \.trimAndFadesEnabled)
+        trimValues(job)
+            .disabled(!job.appearance.trimAndFadesEnabled)
+        if job.appearance.trimAndFadesEnabled {
+            note("Press I or O to set a point at the playhead, or drag the brackets beside the waveform.")
+        }
+        featureHeader("Pre-roll", setting: .preRollEnabled, key: \.preRollEnabled)
+        row("Pre-roll") {
+            secondsPopUp(TrimSettings.preRollChoices, selected: job.trim.preRoll, zero: "Off",
+                         accessibilityLabel: "Pre-roll",
+                         toolTip: "A slate with the title, music duration, loudness and “Starts in” over silence before the music. The start timecode stays on the first music frame.") {
+                model.selectPreRoll($0)
+            }
+        }
+        .disabled(!job.appearance.preRollEnabled)
+        if let summary = model.trimSummary {
+            note(summary)
+        }
+    }
+
+    @ViewBuilder
+    private func trimValues(_ job: CueJob) -> some View {
         trimPointRow("In", edge: .inPoint, value: job.trim.inPoint, placeholder: "Start",
                      toolTip: "Where the clip’s music starts, in source time: seconds (83.5) or M:SS.ff. Empty is the start of the file. I sets it at the playhead.")
         trimPointRow("Out", edge: .outPoint, value: job.trim.outPoint, placeholder: "End",
@@ -242,17 +267,7 @@ struct JobInspector: View {
                 model.selectFade(.outPoint, seconds: $0)
             }
         }
-        row("Pre-roll") {
-            secondsPopUp(TrimSettings.preRollChoices, selected: job.trim.preRoll, zero: "Off",
-                         accessibilityLabel: "Pre-roll",
-                         toolTip: "A slate with the title, music duration, loudness and “Starts in” over silence before the music. The start timecode stays on the first music frame.") {
-                model.selectPreRoll($0)
-            }
-        }
-        if let summary = model.trimSummary {
-            note(summary)
-        }
-        note("Press I or O to set a point at the playhead, or drag the brackets beside the waveform.")
+
     }
 
     private func trimPointRow(_ title: String, edge: TrimEdge, value: Double?, placeholder: String,
@@ -303,6 +318,21 @@ struct JobInspector: View {
     }
 
     // MARK: Building blocks
+
+    private func featureHeader(_ title: String, setting: CueAppearance.Setting,
+                               key: WritableKeyPath<CueAppearance, Bool>) -> some View {
+        AppKitCheckbox(title: title, isOn: model.appearance[keyPath: key],
+                       toolTip: "Turn this feature on or off. Control-click to reset to the saved default.",
+                       isSectionHeader: true, isOverridden: model.appearance.differences(from: model.savedAppearance).contains(setting),
+                       onReset: {
+            model.updateAppearance(model.appearance.resetting(setting, to: model.savedAppearance))
+        }) { enabled in
+            var appearance = model.appearance
+            appearance[keyPath: key] = enabled
+            model.updateAppearance(appearance)
+        }
+        .padding(.top, 11)
+    }
 
     private func section(_ title: String) -> some View {
         Text(title).font(.system(size: 13, weight: .semibold))

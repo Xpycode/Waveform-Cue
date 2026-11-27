@@ -982,6 +982,12 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                                    trim: job.effectiveTrim)
     }
 
+    /// The trimmed clock base used to offer end-zoom widths, including while audio is loading.
+    var inspectorClockFrames: Int? {
+        guard let duration = selectedDuration, let job = selectedJob else { return nil }
+        return ClipTimeline(duration: duration, trim: job.effectiveTrim).clockFrames
+    }
+
     /// The end position of the preview timeline (slate plus trimmed music); the slider's range.
     var positionCount: Int { previewTimeline?.positionCount ?? 0 }
 

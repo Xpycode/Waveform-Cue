@@ -6,6 +6,9 @@ import SwiftUI
 /// text field and position pop-up it lays out.
 struct AppearanceSidebarRepresentable: NSViewRepresentable {
     let model: EditorModel
+    let appearance: CueAppearance
+    let savedAppearance: CueAppearance
+    let clockFrames: Int?
     let labelText: String
     let positionIndex: Int
     /// Overlay text and position need a loaded track.
@@ -31,7 +34,7 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
         position.action = #selector(Coordinator.placeFromMenu)
         position.setAccessibilityLabel("Text position")
 
-        let sidebar = CueAppearanceSidebar(settings: model.appearance, labelField: field,
+        let sidebar = CueAppearanceSidebar(settings: appearance, saved: savedAppearance, clockFrames: clockFrames, labelField: field,
                                            position: position) { [weak model] appearance in
             model?.updateAppearance(appearance)
         }
@@ -52,6 +55,7 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
 
     func updateNSView(_ container: InspectorContainerView, context: Context) {
         let coordinator = context.coordinator
+        coordinator.sidebar?.display(settings: appearance, saved: savedAppearance, clockFrames: clockFrames)
         if coordinator.labelField.currentEditor() == nil, coordinator.labelField.stringValue != labelText {
             coordinator.labelField.stringValue = labelText
         }

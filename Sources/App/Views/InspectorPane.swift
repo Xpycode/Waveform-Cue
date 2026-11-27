@@ -34,6 +34,9 @@ struct InspectorPane: View {
                     .overlay(alignment: .leading) { separator }
             case .appearance:
                 AppearanceSidebarRepresentable(model: model,
+                                               appearance: model.appearance,
+                                               savedAppearance: model.savedAppearance,
+                                               clockFrames: model.inspectorClockFrames,
                                                labelText: model.label.text,
                                                positionIndex: model.positionIndex,
                                                labelEditable: model.isReady,

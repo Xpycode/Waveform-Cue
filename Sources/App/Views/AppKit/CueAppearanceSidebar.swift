@@ -5,6 +5,61 @@ private final class SidebarDocument: NSView {
     override var isFlipped: Bool { true }
 }
 
+/// The two menus store one PostScript name. A missing saved face is displayed using the
+/// same resolved face as the renderer, without overwriting the saved name.
+@MainActor
+private final class FontPickers {
+    let family = NSPopUpButton()
+    let style = NSPopUpButton()
+    private let role: CueFonts.Role
+    private let families: [String: [CueFonts.Face]]
+    private let faces: [String: CueFonts.Face]
+    private var styles: [CueFonts.Face] = []
+
+    init(role: CueFonts.Role, label: String) {
+        self.role = role
+        let candidates = role == .clock ? CueFonts.clockCandidates() : CueFonts.titleCandidates()
+        families = Dictionary(grouping: candidates, by: \.family)
+        faces = Dictionary(uniqueKeysWithValues: candidates.map { ($0.postScriptName, $0) })
+        family.addItems(withTitles: families.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending })
+        family.setAccessibilityLabel(label + " font family")
+        style.setAccessibilityLabel(label + " font style")
+        for picker in [family, style] {
+            (picker.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
+            picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        family.widthAnchor.constraint(equalToConstant: 129).isActive = true
+        style.widthAnchor.constraint(equalToConstant: 82).isActive = true
+    }
+
+    func display(_ name: String?) {
+        let resolved = CueFonts.resolve(name: name, role: role)
+        guard let face = faces[resolved.postScriptName] else { return }
+        family.selectItem(withTitle: face.family)
+        let familyFaces = families[face.family] ?? []
+        if styles != familyFaces {
+            styles = familyFaces
+            style.removeAllItems()
+            for (index, choice) in styles.enumerated() {
+                // addItem(withTitle:) coalesces duplicate style names.
+                style.menu?.addItem(withTitle: choice.style, action: nil, keyEquivalent: "").tag = index
+            }
+        }
+        if let index = styles.firstIndex(of: face) { style.selectItem(at: index) }
+    }
+
+    func selection(from sender: NSControl) -> String? {
+        if sender === style, styles.indices.contains(style.indexOfSelectedItem) {
+            return styles[style.indexOfSelectedItem].postScriptName
+        }
+        guard sender === family, let name = family.titleOfSelectedItem, let choices = families[name] else {
+            return nil
+        }
+        return (choices.first { $0.style == style.titleOfSelectedItem }
+                ?? choices.first { $0.style == "Regular" } ?? choices.first)?.postScriptName
+    }
+}
+
 @MainActor
 final class CueAppearanceSidebar: NSView {
     static let sidebarWidth: CGFloat = 318
@@ -19,6 +74,16 @@ final class CueAppearanceSidebar: NSView {
     private let fadeFullTrack = NSButton(checkboxWithTitle: "Fade full track to red", target: nil, action: nil)
     private let fadeCloseUp = NSButton(checkboxWithTitle: "Fade close-up to red", target: nil, action: nil)
     private let zoom = NSPopUpButton()
+    private let centered = NSButton(checkboxWithTitle: "Keep playhead centered", target: nil, action: nil)
+    private let endZoom = NSPopUpButton()
+    private let shading = NSPopUpButton()
+    private let titleFont = FontPickers(role: .title, label: "Title")
+    private let clockFont = FontPickers(role: .clock, label: "Clock")
+    private let showTitle = NSButton(checkboxWithTitle: "Title", target: nil, action: nil)
+    private let showElapsed = NSButton(checkboxWithTitle: "Elapsed", target: nil, action: nil)
+    private let showRemaining = NSButton(checkboxWithTitle: "Remaining", target: nil, action: nil)
+    private let showFullTrack = NSButton(checkboxWithTitle: "Full track", target: nil, action: nil)
+    private let safeZonesEnabled = NSButton(checkboxWithTitle: "Safe zones", target: nil, action: nil)
     private let countdownTarget = NSPopUpButton()
     private let clockPosition = NSPopUpButton()
     private let safeZonePreset = NSPopUpButton()
@@ -29,11 +94,16 @@ final class CueAppearanceSidebar: NSView {
     private let roomMessage = NSTextField(wrappingLabelWithString: "Safe zones leave too little room")
     private var zoneGrid = NSGridView()
     private var settings: CueAppearance
+    private var saved: CueAppearance
+    private var clockFrames: Int?
+    private var overrideRows: [(label: NSControl, title: String, settings: [CueAppearance.Setting])] = []
     private let changed: (CueAppearance) -> Void
 
-    init(settings: CueAppearance, labelField: NSTextField, position: NSPopUpButton,
+    init(settings: CueAppearance, saved: CueAppearance, clockFrames: Int?, labelField: NSTextField, position: NSPopUpButton,
          changed: @escaping (CueAppearance) -> Void) {
         self.settings = settings
+        self.saved = saved
+        self.clockFrames = clockFrames
         self.changed = changed
         super.init(frame: .zero)
 
@@ -75,10 +145,11 @@ final class CueAppearanceSidebar: NSView {
         solidRedAt.action = #selector(edit(_:))
         fadeFullTrack.toolTip = "Apply the countdown warning to the full-track waveform."
         fadeCloseUp.toolTip = "Apply the countdown warning to the zoomed waveform."
-        for checkbox in [fadeFullTrack, fadeCloseUp] {
-            checkbox.target = self
-            checkbox.action = #selector(edit(_:))
-        }
+        endZoom.addItems(withTitles: EndZoom.allCases.map { $0 == .off ? "Off" : "\($0.rawValue) s" })
+        endZoom.autoenablesItems = false
+        endZoom.setAccessibilityLabel("Zoom near end")
+        shading.addItems(withTitles: CloseUpShading.allCases.map { $0 == .upcomingBrighter ? "Upcoming brighter" : "Played brighter" })
+        shading.setAccessibilityLabel("Close-up shading")
         countdownTarget.addItems(withTitles: CountdownTarget.allCases.map { $0.title })
         countdownTarget.setAccessibilityLabel("Countdown target")
         countdownTarget.toolTip = "Count down to the end of the file or to the end of the music."
@@ -105,13 +176,15 @@ final class CueAppearanceSidebar: NSView {
             zoneValues[index].alignment = .right
             zoneValues[index].widthAnchor.constraint(equalToConstant: 40).isActive = true
         }
-        for control in [countdownTarget, clockPosition, safeZonePreset] {
+        for control in [countdownTarget, clockPosition, safeZonePreset, fadeFullTrack, fadeCloseUp,
+                        centered, endZoom, shading, titleFont.family, titleFont.style, clockFont.family,
+                        clockFont.style, showTitle, showElapsed, showRemaining, showFullTrack, safeZonesEnabled] as [NSControl] {
             control.target = self
             control.action = #selector(edit(_:))
         }
         showGuides.target = self
         showGuides.action = #selector(edit(_:))
-        for picker in [elapsedSize, remainingSize, zoom, warning, solidRedAt, countdownTarget, clockPosition, safeZonePreset] {
+        for picker in [elapsedSize, remainingSize, zoom, warning, solidRedAt, countdownTarget, clockPosition] {
             picker.widthAnchor.constraint(equalToConstant: 119).isActive = true
         }
         func section(_ title: String) -> NSTextField {
@@ -131,34 +204,69 @@ final class CueAppearanceSidebar: NSView {
         let overlayTitle = section("Overlay text")
         let placement = grid([[NSTextField(labelWithString: "Position"), position]])
         position.widthAnchor.constraint(equalToConstant: 134).isActive = true
+        func label(_ title: String, _ settings: [(CueAppearance.Setting, String)]) -> NSTextField {
+            let field = NSTextField(labelWithString: title)
+            registerOverrides(field, title: title, settings: settings)
+            return field
+        }
+        for (box, setting) in [(fadeCloseUp, .fadeCloseUp), (fadeFullTrack, .fadeFullTrack),
+                               (centered, .playheadMode), (showTitle, .showTitle), (showElapsed, .showElapsed),
+                               (showRemaining, .showRemaining), (showFullTrack, .showFullTrack),
+                               (showGuides, .showGuides), (safeZonesEnabled, .safeZonesEnabled)] as [(NSButton, CueAppearance.Setting)] {
+            registerOverrides(box, title: box.title, settings: [(setting, box.title)])
+        }
+        let fonts = grid([
+            [NSView(), heading("Family"), heading("Style")],
+            [label("Title", [(.titleFontName, "Title font")]), titleFont.family, titleFont.style],
+            [label("Clock", [(.clockFontName, "Clock font")]), clockFont.family, clockFont.style]
+        ])
+        fonts.column(at: 0).width = 44
+        let visibility = grid([[showTitle, showElapsed], [showRemaining, showFullTrack]])
+        visibility.column(at: 0).width = 126
         let clocks = grid([
             [heading("Clock"), heading("Size"), heading("Color")],
-            [NSTextField(labelWithString: "Elapsed"), elapsedSize, elapsedColor],
-            [NSTextField(labelWithString: "Remaining"), remainingSize, remainingColor]
+            [label("Elapsed", [(.elapsedSize, "Size"), (.elapsedColor, "Color")]), elapsedSize, elapsedColor],
+            [label("Remaining", [(.remainingSize, "Size"), (.remainingColor, "Color")]), remainingSize, remainingColor]
         ])
         let waveforms = grid([
             [heading("Waveform"), heading("Zoom window"), heading("Color")],
-            [NSTextField(labelWithString: "Full track"), NSView(), overviewColor],
-            [NSTextField(labelWithString: "Close-up"), zoom, detailColor]
+            [label("Full track", [(.overviewColor, "Full track color")]), NSView(), overviewColor],
+            [label("Close-up", [(.zoom, "Zoom window"), (.detailColor, "Color")]), zoom, detailColor]
         ])
+        let closeUpOptions = grid([
+            [label("Zoom near end", [(.endZoom, "Zoom near end")]), endZoom],
+            [label("Close-up shading", [(.closeUpShading, "Close-up shading")]), shading]
+        ])
+        closeUpOptions.column(at: 0).width = 119
+        shading.widthAnchor.constraint(equalToConstant: 144).isActive = true
+        endZoom.widthAnchor.constraint(equalTo: shading.widthAnchor).isActive = true
         let timing = grid([
-            [NSTextField(labelWithString: "Fade to red"), warning],
-            [NSTextField(labelWithString: "Solid red at"), solidRedAt],
-            [NSTextField(labelWithString: "Countdown to"), countdownTarget]
+            [label("Fade to red", [(.warning, "Fade to red")]), warning],
+            [label("Solid red at", [(.solidRedAt, "Solid red at")]), solidRedAt],
+            [label("Countdown to", [(.countdownTarget, "Countdown to")]), countdownTarget]
         ])
-        let clockPlacement = grid([[NSTextField(labelWithString: "Clock position"), clockPosition]])
-        let zonePreset = grid([[NSTextField(labelWithString: "Safe zones"), safeZonePreset]])
-        zoneGrid = grid((0..<4).map { [NSTextField(labelWithString: zoneNames[$0]), zoneSteppers[$0], zoneValues[$0]] })
+        let clockPlacement = grid([[label("Clock position", [(.clockPosition, "Clock position")]), clockPosition]])
+        let presetMenuLabel = label("Preset", [(.safeZonePreset, "Safe-zone preset")])
+        let presetGroup = NSStackView(views: [presetMenuLabel, safeZonePreset])
+        presetGroup.spacing = 5
+        safeZonePreset.widthAnchor.constraint(equalToConstant: 105).isActive = true
+        let zonePreset = grid([[safeZonesEnabled, presetGroup]])
+        zonePreset.column(at: 0).width = 96
+        timing.column(at: 0).width = 105
+        clockPlacement.column(at: 0).width = 105
+        let sides: [CueAppearance.Setting] = [.safeZoneTop, .safeZoneBottom, .safeZoneLeft, .safeZoneRight]
+        zoneGrid = grid(sides.indices.map { [label(zoneNames[$0], [(sides[$0], zoneNames[$0])]), zoneSteppers[$0], zoneValues[$0]] })
         let title = NSTextField(labelWithString: "Appearance")
         title.font = .systemFont(ofSize: 17, weight: .semibold)
-        let reset = NSButton(title: "Restore Defaults", target: self, action: #selector(reset))
-        let stack = NSStackView(views: [title, overlayTitle, labelField, placement, clocks, clockPlacement, waveforms,
+        let reset = NSButton(title: "Reset All to Default", target: self, action: #selector(reset))
+        let stack = NSStackView(views: [title, overlayTitle, labelField, placement, section("Fonts"), fonts,
+                                        section("Show"), visibility, clocks, clockPlacement, waveforms, centered, closeUpOptions,
                                         section("End warning"), timing, fadeCloseUp, fadeFullTrack,
                                         section("Overlay safe zones"), zonePreset, zoneGrid, showGuides, roomMessage, reset])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
-        for view in [title, placement, clockPlacement, waveforms, fadeFullTrack, showGuides] as [NSView] {
+        for view in [title, placement, visibility, clockPlacement, closeUpOptions, fadeFullTrack, showGuides] as [NSView] {
             stack.setCustomSpacing(20, after: view)
         }
 
@@ -208,6 +316,36 @@ final class CueAppearanceSidebar: NSView {
         }
     }
 
+    private func registerOverrides(_ label: NSControl, title: String, settings: [(CueAppearance.Setting, String)]) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for (setting, name) in settings {
+            let item = menu.addItem(withTitle: settings.count == 1 ? "Reset" : "Reset " + name,
+                                    action: #selector(resetSetting(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = setting
+        }
+        label.menu = menu
+        let resetHelp = "Control-click to reset to the saved default."
+        label.toolTip = label.toolTip.map { $0 + " " + resetHelp } ?? resetHelp
+        overrideRows.append((label, title, settings.map { $0.0 }))
+    }
+
+    @objc private func resetSetting(_ sender: NSMenuItem) {
+        guard let setting = sender.representedObject as? CueAppearance.Setting else { return }
+        settings = settings.resetting(setting, to: saved)
+        refresh()
+        changed(settings)
+    }
+
+    func display(settings: CueAppearance, saved: CueAppearance, clockFrames: Int?) {
+        guard self.settings != settings || self.saved != saved || self.clockFrames != clockFrames else { return }
+        self.settings = settings
+        self.saved = saved
+        self.clockFrames = clockFrames
+        refresh()
+    }
+
     @objc private func edit(_ sender: NSControl) {
         switch sender {
         case elapsedSize: settings.elapsed.size = ClockSize.allCases[elapsedSize.indexOfSelectedItem]
@@ -222,11 +360,18 @@ final class CueAppearanceSidebar: NSView {
         case detailColor: settings.detailColor = CueColor(detailColor.color)
         case zoom:
             settings.zoom = ZoomWindow.allCases[zoom.indexOfSelectedItem]
-            detailColor.isEnabled = settings.zoom != .off
-            updateWarningControls()
+        case centered: settings.playheadMode = centered.state == .on ? .centered : .edgeHeld
+        case endZoom: settings.endZoom = EndZoom.allCases[endZoom.indexOfSelectedItem]
+        case shading: settings.closeUpShading = CloseUpShading.allCases[shading.indexOfSelectedItem]
+        case titleFont.family, titleFont.style: settings.titleFontName = titleFont.selection(from: sender)
+        case clockFont.family, clockFont.style: settings.clockFontName = clockFont.selection(from: sender)
+        case showTitle: settings.showTitle = showTitle.state == .on
+        case showElapsed: settings.showElapsed = showElapsed.state == .on
+        case showRemaining: settings.showRemaining = showRemaining.state == .on
+        case showFullTrack: settings.showFullTrack = showFullTrack.state == .on
+        case safeZonesEnabled: settings.safeZonesEnabled = safeZonesEnabled.state == .on
         case warning:
             settings.warning = CountdownWarning.allCases[warning.indexOfSelectedItem]
-            updateWarningControls()
         case solidRedAt: settings.solidRedAt = SolidRedThreshold.allCases[solidRedAt.indexOfSelectedItem]
         case fadeCloseUp: settings.fadeCloseUp = fadeCloseUp.state == .on
         case fadeFullTrack: settings.fadeFullTrack = fadeFullTrack.state == .on
@@ -234,27 +379,54 @@ final class CueAppearanceSidebar: NSView {
         case clockPosition: settings.clockPosition = ClockPosition.allCases[clockPosition.indexOfSelectedItem]
         case safeZonePreset:
             settings.safeZones.preset = SafeZonePreset.allCases[safeZonePreset.indexOfSelectedItem]
-            updateSafeZoneControls()
         case showGuides: settings.showGuides = showGuides.state == .on
         case let stepper as NSStepper where zoneSteppers.contains(stepper):
             var custom = settings.safeZones.custom
             let values = zoneSteppers.map { Int($0.integerValue) }
             custom = SafeZones.Insets(top: values[0], bottom: values[1], left: values[2], right: values[3])
             settings.safeZones.custom = custom
-            updateSafeZoneControls()
         default: return
         }
-        roomMessage.isHidden = settings.layout.fits
+        refresh()
         changed(settings)
     }
 
     @objc private func reset() {
-        settings = CueAppearance()
+        settings = saved
         refresh()
         changed(settings)
     }
 
     private func refresh() {
+        let differences = settings.differences(from: saved)
+        for row in overrideRows {
+            let overridden = !differences.isDisjoint(with: row.settings)
+            let title = overridden ? "• " + row.title : row.title
+            if let field = row.label as? NSTextField { field.stringValue = title }
+            if let box = row.label as? NSButton { box.title = title }
+            for (setting, item) in zip(row.settings, row.label.menu?.items ?? []) {
+                item.isEnabled = differences.contains(setting)
+            }
+        }
+        titleFont.display(settings.titleFontName)
+        clockFont.display(settings.clockFontName)
+        for (box, value) in [(showTitle, settings.showTitle), (showElapsed, settings.showElapsed),
+                             (showRemaining, settings.showRemaining), (showFullTrack, settings.showFullTrack),
+                             (safeZonesEnabled, settings.safeZonesEnabled), (centered, settings.playheadMode == .centered)] {
+            box.state = value ? .on : .off
+        }
+        centered.isEnabled = settings.zoom != .off
+        shading.isEnabled = centered.isEnabled
+        shading.selectItem(at: CloseUpShading.allCases.firstIndex(of: settings.closeUpShading)!)
+        endZoom.isEnabled = centered.isEnabled
+        endZoom.selectItem(at: EndZoom.allCases.firstIndex(of: settings.endZoom)!)
+        // With no clip selected, Auto may reach its full ten seconds on future imports.
+        let frames = clockFrames ?? 20 * ClipTimeline.clockRate
+        let width = settings.zoom.rawValue > 0 && (settings.playheadMode == .centered || clockFrames == nil)
+            ? settings.zoom.rawValue * ClipTimeline.clockRate : settings.zoom.frameCount(for: frames)
+        for (choice, item) in zip(EndZoom.allCases, endZoom.itemArray) {
+            item.isEnabled = choice == .off || choice.rawValue * ClipTimeline.clockRate < width
+        }
         elapsedSize.selectItem(withTitle: settings.elapsed.size.rawValue)
         remainingSize.selectItem(withTitle: settings.remaining.size.rawValue)
         overviewColor.color = (settings.overviewColor ?? CueAppearance.defaultOverview).nsColor
@@ -284,7 +456,9 @@ final class CueAppearanceSidebar: NSView {
     private func updateSafeZoneControls() {
         let custom = settings.safeZones.custom
         let values = [custom.top, custom.bottom, custom.left, custom.right]
-        let editable = settings.safeZones.preset == .custom
+        safeZonePreset.isEnabled = settings.safeZonesEnabled
+        showGuides.isEnabled = settings.safeZonesEnabled
+        let editable = settings.safeZonesEnabled && settings.safeZones.preset == .custom
         for index in 0..<4 {
             zoneSteppers[index].integerValue = values[index]
             zoneValues[index].stringValue = "\(values[index]) %"
