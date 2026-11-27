@@ -315,12 +315,13 @@ Dependency graph (no cycles):
   - Success: Atlas pass: set in and out by key and by drag, export, and the file covers only that range with the slate first.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
 
-- [ ] **5.2**: Retry naming and re-export of Done jobs (operator decisions, 2026-11-27)
+- [x] **5.2**: Retry naming and re-export of Done jobs (operator decisions, 2026-11-27)
   - Depends on: 4.1 (shares `EditorModel.swift`; run after it, beside or after 5.1 only if file ownership is split)
   - Owns: `Packages/CueCore/Sources/CueCore/Queue/QueueManager.swift` and `QueueManagerTests.swift`; the `exportSelected` path in `Sources/App/EditorModel.swift`
   - Detail: (a) Retry reuses the job's previous output name when that file does not exist (a cancelled or failed attempt left nothing); it picks `… 2`, `… 3` only when the name is taken on disk or by another job. (b) Export Selected on a Done job re-queues it as Pending with a fresh non-colliding name and exports it; the existing file is never overwritten.
   - Success: unit tests for both rules; Atlas pass: cancel then Retry writes `<name> - Cue.mxf`; Export Selected on a Done job writes `<name> - Cue 2.mxf` and leaves the first file intact.
   - Backpressure: `swift test --package-path Packages/CueCore --filter QueueManagerTests`, `xcodebuild … build`, Atlas pass.
+  - Evidence (2026-11-27): worktree agent, task commit `0d7fd9c`, merged `70d8afc`; full suite with FFmpeg 234 tests, 0 failures, 3 opt-in skips (5 new `QueueManagerTests`); build clean. Atlas pass: a Failed job fixed and exported wrote `toneD - Cue.mxf`; Export Selected on that Done job wrote `toneD - Cue 2.mxf` and left the first file's size and date unchanged; a re-export cancelled at once left no file, and Retry plus Start Queue reused its name (`… 2`, not `… 3`). Deviation accepted: `update` now clears the saved output path on a naming change for every status except Done, so Retry never reuses a name the new settings no longer give.
 
 ### Wave 6 (verification and handoff)
 
@@ -413,6 +414,7 @@ Dependency graph (no cycles):
 | 3.1, 3.2, 3.3 | Parallel worktree agents; 3.3 dispatched when 2.3 landed | 214 tests; worst-block tolerance raised to 9 after markers (3.2) entered export frames; coordinator switched the queue to `MXFJobExporter` via `JobAudioLifetime`; Atlas pass found and fixed lost markers in exports | "Merge task 3.3; export queue jobs with the preset engine", "Keep detected markers in queue exports" | Next: Wave 4 |
 | 4.2, 4.3 | Worktree agents (4.2 after 3.2; 4.3 after 3.1) | 227 tests; Atlas pass for 4.2 (safe zones, guides, too-little-room disables export, Music end) | worktree merges, "Record task 4.3" (`366d513`) | 4.1 running at session close |
 | 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3); coordinator merged and ran the Atlas pass | 229 tests with FFmpeg; `xcodebuild build` clean; Atlas pass (see task evidence); stale-field bug found and fixed | `84ac328`, `ef78828` | Next: 5.1 |
+| 5.1, 5.2 | Parallel worktree agents; `EditorModel.swift` split by function (5.2: `exportSelected`, `exportSelectedToFolder`, `canExportSelected`; 5.1: the rest and `QueueManager.blockingReason`) | 5.2: 234 tests, build clean, Atlas pass | 5.2: `70d8afc` | 5.1 running |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
