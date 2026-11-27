@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 9/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 10/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -203,13 +203,14 @@ Dependency graph (no cycles):
   - Backpressure: `swift test --package-path Packages/CueCore --filter LoudnessTests`
   - Evidence (2026-11-27): 11 tests on verbatim FFmpeg 8.1 captures. FFmpeg reports silence as `I: -70.0 LUFS` (the R 128 absolute gate), so ≤ −70 is stored as silence (`nil`).
 
-- [ ] **1.6**: Queue core (spec B, logic only)
+- [x] **1.6**: Queue core (spec B, logic only)
   - Depends on: 0.3
   - Owns: `Queue/CueJob.swift`, `Queue/QueueStore.swift`, `Queue/QueueManager.swift` and tests, all in `CueCore`
   - Detail: `JobStatus` (pending, preparing, exporting(progress), done(output), failed(reason, log), cancelled, paused). `CueJob` holds the source path, label and position, appearance snapshot, preset ID, layout, start timecode, template, trim, markers, loudness, peaks summary, with explicit coding keys so run state is not saved and tolerant per-job decoding. `QueueStore` saves atomically after every change; an unreadable file is copied to `queue-recovery-<UUID>.json` and writes are blocked if that copy fails. `QueueManager` (`@MainActor @Observable`): add, remove, select, Apply to All (appearance and preset, pending jobs only), serial loop, cancel current, stop queue, retry with a fresh name, restore (interrupted → pending, missing source → Failed "Source not found"), pause jobs sharing an unwritable folder, progress coalescing at about 10 Hz (cookbook 177), cancel the producer and wait for its end (cookbook 154). Work is injected through protocols so tests need no FFmpeg.
   - Interface: `protocol JobExporting { func export(_ job: CueJob, progress:) async throws -> URL }`, `protocol SleepPreventing`, `QueueManager(storageDirectory:exporter:sleep:fileExists:)`.
   - Success: state-transition, ordering, cancel, stop, retry, Apply to All, save-then-reload, corrupt-file recovery, legacy-fixture and pause tests pass.
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'QueueManagerTests|QueueStoreTests|CueJobTests'`
+  - Evidence (2026-11-27): 51 queue tests passed on 6 consecutive runs (transitions, order, cancel waits for exporter end, stop, retry naming, Apply to All, locks, save/reload, restore, corrupt-file recovery, blocked writes, legacy bare-array fixture, pause/resume, coalescing with injected clock). Choices: the manager resolves `outputPath` (hook `outputNamer`; 2.3 sets it to `FilenameTemplate.resolve`); per-job `destinationFolder` plus queue-wide `destinationOverride`; Paused restores as Pending; empty `PresetID` means default preset; `AppearanceSnapshot` wraps `CueAppearance` (`@unchecked Sendable`, JSON equality).
 
 - [x] **1.7**: App Shell migration with single-track parity (spec A)
   - Depends on / external gates: 0.2; U1 only for anything beyond the parity layout
