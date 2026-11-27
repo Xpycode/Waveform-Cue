@@ -32,10 +32,21 @@ private struct EditorCommands: Commands {
     var body: some Commands {
         let _ = registerWindowOpener()
         CommandGroup(replacing: .newItem) {
-            Button("Open Audio…") { model.chooseAudio() }
+            Button("Add Audio…") { model.chooseAudio() }
                 .keyboardShortcut("o")
-            Button("Export MXF to Folder…") { model.chooseExportFolder() }
+            Divider()
+            Button("Export Selected") { model.exportSelected() }
                 .keyboardShortcut("e")
+                .disabled(!model.canExportSelected)
+            Button("Export Selected to Folder…") { model.exportSelectedToFolder() }
+                .disabled(!model.canExportSelected)
+            Divider()
+            Button("Start Queue") { model.startQueue() }
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!model.canStartQueue)
+            Button("Stop Queue") { model.stopQueue() }
+                .keyboardShortcut(".", modifiers: .command)
+                .disabled(!model.isExporting || model.queue.isStopping)
         }
     }
 
@@ -49,16 +60,16 @@ private struct EditorCommands: Commands {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = EditorModel()
 
-    /// Finder or Dock opens. The model loads immediately, even before the window exists.
+    /// Finder or Dock opens (files or folders). They join the queue, even before the window exists.
     func application(_ sender: NSApplication, open urls: [URL]) {
-        guard let url = urls.first else { return }
-        model.open(fromFinder: url)
+        guard !urls.isEmpty else { return }
+        model.open(fromFinder: urls)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        model.shouldTerminate() ? .terminateNow : .terminateCancel
+        model.terminateReply { quit in sender.reply(toApplicationShouldTerminate: quit) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
