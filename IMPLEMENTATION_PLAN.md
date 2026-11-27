@@ -308,12 +308,13 @@ Dependency graph (no cycles):
 
 ### Wave 5 (single task — it edits the Job tab that 4.1 creates and consumes 4.3's engine)
 
-- [ ] **5.1**: Trim, fade and pre-roll controls and keys
+- [x] **5.1**: Trim, fade and pre-roll controls and keys
   - Depends on / external gates: 4.1, 4.3; **U1**
   - Owns: `JobInspector.swift`, `EditorModel.swift`, key handling in `MainWindow.swift`
   - Detail: wiring left by 4.3: `MonitorRepresentable` passes `trim` and `loudness` (set after `track`) and sets `onTrimChanged`; with a trim or pre-roll, `MonitorView.frameNumber`/`onSeek` are 25 fps timeline positions (slate first), so `EditorModel` maps them with `CuePicture.timeline(for:appearance:markers:trim:)`, `position(at:)` and `position(ofClockFrame:)`; `MXFJobExporter` passes `loudness: job.loudness` into `MXFExport.Snapshot` so the slate shows it. In and Out fields, fade pop-ups (0, 0.5, 1, 2, 5 s), pre-roll pop-up (Off, 2, 3, 5, 10 s); I and O keys at the playhead; playback and scrubbing confined to the trimmed range; starting a job with under one second of trim is blocked with "Trim range too short".
   - Success: Atlas pass: set in and out by key and by drag, export, and the file covers only that range with the slate first.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
+  - Evidence (2026-11-27): worktree agent, task commit `7575686`, merged `98c9923` on top of 5.2; full suite with FFmpeg 239 tests, 0 failures, 3 opt-in skips (new `TrimEditingTests`, one `QueueManagerTests`); build clean. Atlas pass: I and O at the playhead set In 2.00 / Out 7.20 and confined the overview and slider; bracket drags moved In and Out with the full waveform shown while dragging; fades 1 s / 2 s and pre-roll 3 s from the pop-ups ("clip 0:08.20 with the slate"); the slate showed title, "Starts in 00:03:00", music duration and loudness; In 4 / Out 4.5 showed "Trim range too short" and disabled Export Selected; trim, fades and pre-roll kept after relaunch. Export: 8.20 s (205 frames) = 3 s slate + 5.2 s, file TC 09:59:57:00 so music starts at 10:00:00:00, silent slate (−91 dB), fade-in rising (−35.7 → −27.2 dB), steady −24.9 dB, fade-out falling (−28.8 → −40.1 dB). Deviations accepted: I/O keys live in `EditorModel.handleKey` (the key monitor is there, not in `MainWindow`); `MonitorPane.swift` passes trim and loudness; new `CueCore/TrimEditing.swift`; no trim Reset button (not in U1); preview playback has no fades (export only). Not checked on screen: audible slate countdown and stop at Out (no audio in the helper), lock while running (same locked group as 4.1).
 
 - [x] **5.2**: Retry naming and re-export of Done jobs (operator decisions, 2026-11-27)
   - Depends on: 4.1 (shares `EditorModel.swift`; run after it, beside or after 5.1 only if file ownership is split)
@@ -414,7 +415,7 @@ Dependency graph (no cycles):
 | 3.1, 3.2, 3.3 | Parallel worktree agents; 3.3 dispatched when 2.3 landed | 214 tests; worst-block tolerance raised to 9 after markers (3.2) entered export frames; coordinator switched the queue to `MXFJobExporter` via `JobAudioLifetime`; Atlas pass found and fixed lost markers in exports | "Merge task 3.3; export queue jobs with the preset engine", "Keep detected markers in queue exports" | Next: Wave 4 |
 | 4.2, 4.3 | Worktree agents (4.2 after 3.2; 4.3 after 3.1) | 227 tests; Atlas pass for 4.2 (safe zones, guides, too-little-room disables export, Music end) | worktree merges, "Record task 4.3" (`366d513`) | 4.1 running at session close |
 | 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3); coordinator merged and ran the Atlas pass | 229 tests with FFmpeg; `xcodebuild build` clean; Atlas pass (see task evidence); stale-field bug found and fixed | `84ac328`, `ef78828` | Next: 5.1 |
-| 5.1, 5.2 | Parallel worktree agents; `EditorModel.swift` split by function (5.2: `exportSelected`, `exportSelectedToFolder`, `canExportSelected`; 5.1: the rest and `QueueManager.blockingReason`) | 5.2: 234 tests, build clean, Atlas pass | 5.2: `70d8afc` | 5.1 running |
+| 5.1, 5.2 | Parallel worktree agents; `EditorModel.swift` split by function (5.2: `exportSelected`, `exportSelectedToFolder`, `canExportSelected`; 5.1: the rest and `QueueManager.blockingReason`) | 5.2: 234 tests, Atlas pass; 5.1 after merge: 239 tests, build clean, Atlas pass | `70d8afc`, `98c9923` | Next: Wave 6 |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution

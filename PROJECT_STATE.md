@@ -6,7 +6,7 @@ Last updated: 2026-11-27
 
 Building the batch, preset and cue tools round from [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Build 10 in `04_Exports/0.1-10` is still the last handoff candidate. See the [current handoff](sessions/2026-11-27.md#resume-after-41-and-wave-5-dispatch).
 
-**Execution:** 20/25 tasks done (Waves 0–4, 5.2). 5.1 running as a worktree agent; then Wave 6. Gates X1–X4 open; U1 approved.
+**Execution:** 21/25 tasks done (Waves 0–5). Next: Wave 6 (6.1 integration and performance, 6.2 acceptance, 6.3 review, 6.4 build 11). Gates X1–X4 open; U1 approved.
 
 ## Recent
 
