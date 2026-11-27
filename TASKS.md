@@ -2,7 +2,7 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 21/25; next Wave 6. The plan owns task status and evidence.
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 23/25; 6.2 blocked by the Atlas helper, then 6.4. The plan owns task status and evidence.
 
 ## Backlog
 

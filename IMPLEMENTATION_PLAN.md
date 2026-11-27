@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 18/25; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 23/25; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -326,23 +326,26 @@ Dependency graph (no cycles):
 
 ### Wave 6 (verification and handoff)
 
-- [ ] **6.1**: Full integration run and performance record
+- [x] **6.1**: Full integration run and performance record
   - Depends on: 5.1, 5.2
   - Owns: evidence in the Execution Log; `PerformanceTests.swift`
   - Success: the whole suite passes with FFmpeg present (no skipped integration tests); a 3-minute AVC-I 100 1080p25 and 1080i50 export each finish in under 3 minutes, times recorded; the 50-job CAF cap test passes.
   - Backpressure: `FFMPEG_EXECUTABLE=… CUE_BENCH=1 swift test --package-path Packages/CueCore` with zero failures and zero skips
+  - Evidence (2026-11-27): fresh agent wrote `PerformanceTests.swift`; coordinator re-ran `FFMPEG_EXECUTABLE=… CUE_BENCH=1 CUE_EXPORT_BENCH=1 CUE_SLATE_PNG=<scratch> swift test` after the 6.3 fixes: 247 tests, 0 failures, 0 skips (commit `dada202`). 3-minute exports (debug): 1080p25 26.97 s (6.7× real time), 1080i50 39.89 s (226 images/s, 4.5×); file exists, 4500 frames, duration 180 s ± 0.05. 50 real jobs through `QueueManager`/`JobAudioLifetime`/`JobWorkspace` with a disk scanner: at most 2 CAFs, also with the selection moving faster than a decode. The racing case first reached 5–6 CAFs on disk; fixed under 6.3 (finding 6).
 
 - [ ] **6.2**: Acceptance pass in the Atlas helper
   - Depends on: 5.1
   - Owns: screenshots and notes linked from the Execution Log
   - Success: every spec criterion in A–F, the edge cases and the error states is marked verified, not verified, or externally gated, each with a screenshot or a decoded-file measurement. Fixtures are copied into the helper; no live project or operator file is used.
   - Backpressure: the criterion checklist in the session log, with no unexplained gaps
+  - **Blocked (2026-11-27):** the Atlas helper is stuck on another session's unrecovered action, and agents were stopped in the helper. Nothing has run on build 11. Draft checklist: [sessions/evidence/2026-11-27-acceptance-6.2.md](sessions/evidence/2026-11-27-acceptance-6.2.md) (25 cited, 19 open). Candidate and fixtures: `04_Exports/0.1-11-rc/`. Unblock: the operator recovers the helper and resumes agents.
 
-- [ ] **6.3**: Review
+- [x] **6.3**: Review
   - Depends on: 5.1
   - Owns: review report; findings return to the owning task
   - Success: `/shell-check` reports no violations; a code review of the diff since 0.1 has its confirmed findings fixed and the affected tests re-run.
   - Backpressure: shell-check output and the re-run test results
+  - Evidence (2026-11-27): `/shell-check` 10/10 pass (AppShellKit adopted, no local forks; note: `Theme` is the dark-only floor, light ramp pending). Fresh review agent over `b51eee8..HEAD`: no high-severity bug; five findings plus one from 6.1, all confirmed and fixed by a fresh fix agent: stale partial MXFs and CAF session folders swept at launch; idle quit waits for decode, loudness and other FFmpeg children; unwritable folder during encoding pauses instead of failing; progress counts Paused as owed and resumed jobs rejoin the run; guides tooltip says preview only; CAF release waits for the decode to end (on-disk cap). 8 new tests; 247 tests, 0 failures, 0 skips; Debug and Release builds clean (`dada202`). Not fixed (Inbox): `queue.json` re-encoded on the main actor after every change, which may stall large queues; to be measured first. The quit wind-down has no unit test; it is checked on screen in 6.2.
 
 - [ ] **6.4**: Build 11 handoff and documentation
   - Depends on: 6.1, 6.2, 6.3
@@ -415,6 +418,7 @@ Dependency graph (no cycles):
 | 3.1, 3.2, 3.3 | Parallel worktree agents; 3.3 dispatched when 2.3 landed | 214 tests; worst-block tolerance raised to 9 after markers (3.2) entered export frames; coordinator switched the queue to `MXFJobExporter` via `JobAudioLifetime`; Atlas pass found and fixed lost markers in exports | "Merge task 3.3; export queue jobs with the preset engine", "Keep detected markers in queue exports" | Next: Wave 4 |
 | 4.2, 4.3 | Worktree agents (4.2 after 3.2; 4.3 after 3.1) | 227 tests; Atlas pass for 4.2 (safe zones, guides, too-little-room disables export, Music end) | worktree merges, "Record task 4.3" (`366d513`) | 4.1 running at session close |
 | 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3); coordinator merged and ran the Atlas pass | 229 tests with FFmpeg; `xcodebuild build` clean; Atlas pass (see task evidence); stale-field bug found and fixed | `84ac328`, `ef78828` | Next: 5.1 |
+| 6.1, 6.3 | Parallel fresh agents (6.1 performance tests; 6.3 review, read-only), then one fresh fix agent for the six confirmed findings; coordinator ran shell-check, re-ran the full suite and both builds | 247 tests, 0 failures, 0 skips; 3-minute exports 27 s / 40 s; shell-check 10/10; Debug and Release clean | `dada202` | 6.2 blocked by the Atlas helper (another session's action); 6.4 waits on 6.2 |
 | 5.1, 5.2 | Parallel worktree agents; `EditorModel.swift` split by function (5.2: `exportSelected`, `exportSelectedToFolder`, `canExportSelected`; 5.1: the rest and `QueueManager.blockingReason`) | 5.2: 234 tests, Atlas pass; 5.1 after merge: 239 tests, build clean, Atlas pass | `70d8afc`, `98c9923` | Next: Wave 6 |
 
 ---
