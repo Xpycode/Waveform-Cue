@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 18/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 18/25; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -106,7 +106,7 @@ Until U1 is confirmed, 1.7 may build the three-pane shell with single-track pari
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** 2026-11-27, "execute next steps": continue through ready waves. U1 approved 2026-11-27. Pushes and app control keep their own authorization.
+- **Execution scope/limits:** 2026-11-27, "execute next steps": continue through ready waves. U1 approved 2026-11-27. Pushes and app control keep their own authorization; nothing has been pushed (41+ local commits on `main`).
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` after each wave), `Info.plist`, `Packages/CueCore/Package.swift`, `Sources/CueCore/CueTypes.swift` after 0.3, `Scripts/`, Git, `IMPLEMENTATION_PLAN.md`, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
 - **Shared build resources:** parallel tasks run `swift test` with their own `--scratch-path` (the task's scratch folder) and a `--filter` for their own test class. Only the coordinator runs the full suite and `xcodebuild build`, using a `-derivedDataPath` outside the project.
 - **Interfaces to establish before dispatch:** the shared value types in 0.3, and the frozen signatures named in each task's Interface line.
@@ -314,10 +314,17 @@ Dependency graph (no cycles):
   - Success: Atlas pass: set in and out by key and by drag, export, and the file covers only that range with the slate first.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
 
+- [ ] **5.2**: Retry naming and re-export of Done jobs (operator decisions, 2026-11-27)
+  - Depends on: 4.1 (shares `EditorModel.swift`; run after it, beside or after 5.1 only if file ownership is split)
+  - Owns: `Packages/CueCore/Sources/CueCore/Queue/QueueManager.swift` and `QueueManagerTests.swift`; the `exportSelected` path in `Sources/App/EditorModel.swift`
+  - Detail: (a) Retry reuses the job's previous output name when that file does not exist (a cancelled or failed attempt left nothing); it picks `… 2`, `… 3` only when the name is taken on disk or by another job. (b) Export Selected on a Done job re-queues it as Pending with a fresh non-colliding name and exports it; the existing file is never overwritten.
+  - Success: unit tests for both rules; Atlas pass: cancel then Retry writes `<name> - Cue.mxf`; Export Selected on a Done job writes `<name> - Cue 2.mxf` and leaves the first file intact.
+  - Backpressure: `swift test --package-path Packages/CueCore --filter QueueManagerTests`, `xcodebuild … build`, Atlas pass.
+
 ### Wave 6 (verification and handoff)
 
 - [ ] **6.1**: Full integration run and performance record
-  - Depends on: 5.1
+  - Depends on: 5.1, 5.2
   - Owns: evidence in the Execution Log; `PerformanceTests.swift`
   - Success: the whole suite passes with FFmpeg present (no skipped integration tests); a 3-minute AVC-I 100 1080p25 and 1080i50 export each finish in under 3 minutes, times recorded; the 50-job CAF cap test passes.
   - Backpressure: `FFMPEG_EXECUTABLE=… CUE_BENCH=1 swift test --package-path Packages/CueCore` with zero failures and zero skips
@@ -400,6 +407,11 @@ Dependency graph (no cycles):
 | 0.1 | Coordinator, serial | `git status -sb` → `## main...origin/main`; https://github.com/Xpycode/Waveform-Cue (public) | `b51eee8` | Next: 0.2, then 0.3; execution not yet requested |
 | 0.2 | Coordinator, serial (foundation every later task builds on) | `swift test --package-path Packages/CueCore` 7 tests, 0 failures, 1 skip (benchmark); release run with `CUE_BENCH=1` 254 frames/s; `xcodebuild … build` succeeded | see commit "Extract CueCore" | Next: 0.3 |
 | 0.3 | Coordinator, serial (frozen interface for Wave 1) | `swift test --package-path Packages/CueCore` 16 tests, 0 failures, 1 skip | see commit "Add shared value types" | Next: Wave 1 |
+| 1.1–1.7 | Parallel fresh agents: 1.1–1.6 in git worktrees (one each, disjoint new files), 1.7 in the main checkout (needs `../../zPackages`); coordinator merged | 147 tests after merge; Atlas parity pass for 1.7 found and fixed the hidden transport row | worktree merges + "Keep the transport row above the status bar" | Next: Wave 2 |
+| 2.1, 2.2, 2.3 | Parallel worktree agents (disjoint files); 2.3 started when 1.6 landed | 179 tests with FFmpeg; Atlas pass for 2.3 (12-track folder, cancel, retry, serial export); `public.folder` added to `Info.plist` | worktree merges + "Accept folders on the app icon" | Next: Wave 3 |
+| 3.1, 3.2, 3.3 | Parallel worktree agents; 3.3 dispatched when 2.3 landed | 214 tests; worst-block tolerance raised to 9 after markers (3.2) entered export frames; coordinator switched the queue to `MXFJobExporter` via `JobAudioLifetime`; Atlas pass found and fixed lost markers in exports | "Merge task 3.3; export queue jobs with the preset engine", "Keep detected markers in queue exports" | Next: Wave 4 |
+| 4.2, 4.3 | Worktree agents (4.2 after 3.2; 4.3 after 3.1) | 227 tests; Atlas pass for 4.2 (safe zones, guides, too-little-room disables export, Music end) | worktree merges, "Record task 4.3" (`366d513`) | 4.1 running at session close |
+| 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3) | not yet returned at session close (branch still at `478165e`, no task commit) | none yet | Next: if the branch has a 4.1 commit, review, merge, build, Atlas pass; otherwise re-dispatch 4.1 |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution

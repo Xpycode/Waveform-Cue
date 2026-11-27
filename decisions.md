@@ -32,3 +32,16 @@
 **Context:** the shell moves to SwiftUI, and raw SwiftUI controls are not allowed outside the toolbar.
 **Decision:** `CueAppearanceSidebar` is hosted in the inspector through `NSViewRepresentable`, unchanged.
 **Consequences:** no rewrite of a working, already-compliant control panel.
+
+## 2026-11-27 · Retry reuses the name; Done jobs can be re-exported
+
+**Context:** the Atlas pass showed Retry naming a cancelled job's output `… - Cue 2.mxf` although the cancelled attempt wrote nothing, and Export Selected only beeped on a Done job.
+**Alternatives:** always pick a fresh name on Retry; forbid re-export.
+**Decision (operator):** Retry reuses the previous name when that file does not exist. Export Selected re-exports a Done job under a new, non-colliding name.
+**Consequences:** plan task 5.2. An existing output file is never overwritten.
+
+## 2026-11-27 · FFmpeg colour tags through `setparams`
+
+**Context:** FFmpeg 8.1 ignored `-color_primaries` and `-color_trc` for libx264 AVC-Intra output, so files read `bt709/unknown/unknown`.
+**Decision:** the AVC-Intra filter chain adds `setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709`. MPEG-2 keeps build 10's arguments.
+**Consequences:** AVC-Intra files report all three tags as BT.709; MPEG-2 output stays identical to build 10.
