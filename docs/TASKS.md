@@ -2,14 +2,12 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done, external gates X1–X4 open. The plan owns task status and evidence.
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done. X1 passed, X2 partly passed; X2–X4 still open. The plan owns task status and evidence.
 
 ## Backlog
 
-- Verify a sample export on the operator's EVS ingest configuration. On 2026-11-27 an AVC-I 100 1080i50 conversion imported and played. The app's own MPEG-2 export is still untested, and the EVS OSD covers the clocks (spec section F). Tracked as plan gate X2.
-- Measure the EVS OSD bands from a straight-on still of the cue output, for the spec's EVS OSD safe-zone preset (plan gate X1).
+- Finish the EVS ingest check (plan gate X2). On 2026-11-28 the operator confirmed that build 11 AVC-Intra exports ingest and play. Still unreported: 8 mono tracks and channel order, 1080p50 Experimental, the 23:59:55:00 pre-roll start, and the MPEG-2 preset.
 - Sweep hidden `.waveform-cue-<UUID>.mxf` temporaries left beside a destination after a crash or power loss during export; they are invisible in Finder and count against the next disk-space check (review 6.3, pre-existing since build 10). The decoded-audio folders in `$TMPDIR` are swept at launch since 6.3.
-- Decide how release builds keep the flat toolbar: the macOS 27.2 SDK (Xcode 27.2 on the M1 Max) ignores `UIDesignRequiresCompatibility`, so build 11 shows glass capsules around the toolbar groups and spec criterion A3 is not met. Options: build releases with the macOS 26 SDK (Xcode 26.3 on the M4 Pro) while it lasts, or accept the system look (2026-11-28, task 6.2 shot 01).
 - Make the monitor accept the same drops as the queue sidebar: today it takes exactly one item and none while the selected job is running (review 6.3).
 
 ## Inbox

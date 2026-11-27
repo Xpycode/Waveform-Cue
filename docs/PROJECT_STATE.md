@@ -4,14 +4,14 @@ Last updated: 2026-11-28
 
 ## Now
 
-Build 11 of the batch, preset and cue tools round is ready in `04_Exports/0.1-11` on the M1 Max, with EVS sample files beside it. Waiting on the operator's EVS ingest test (gate X2) and the decisions in [TASKS.md](TASKS.md). See the [current handoff](sessions/2026-11-28.md#resume).
+Build 12 is in `04_Exports/0.1-12` on the M1 Max and running on the desktop. It has the measured EVS safe zones (8 % top, 17 % bottom) and the flat toolbar back on the macOS 27 SDK. Next: the operator checks the −60/−40 dB thresholds (X3), answers the open questions (X4) and the decisions in [TASKS.md](TASKS.md).
 
-**Execution:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) 26/26 tasks done; awaiting acceptance on gates X1–X4 (EVS measurements and ingest, threshold check, open questions). Spec A3 (flat toolbar) is not met on the macOS 27 SDK.
+**Execution:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) 26/26 tasks done. X1 passed; X2 partly passed (AVC-Intra exports ingest on EVS); X3 and X4 open.
 
 ## Recent
 
+- Build 12: EVS OSD safe zones set to the operator's measurement (gate X1); toolbar glass capsules hidden as in Penumbra, restoring spec A3 on the macOS 27 SDK. Checked in the Atlas helper.
+- Operator confirmed that build 11 AVC-Intra exports ingest and play on EVS (gate X2, partly).
 - Finished Wave 6: moved to the Directions folder layout, fixed 13 review findings, passed the on-screen acceptance check, and built build 11 with EVS test files.
 - Finished Wave 5: the Job tab, trim/fade/pre-roll controls with I and O keys, and safe Retry and re-export naming, all checked on screen with real exports.
-- Built Waves 0–4: CueCore package with 227 tests, App Shell window, batch queue with restore, AVC-Intra 100 presets, music-end markers, safe zones, slate and trim engine. Verified on screen in the Atlas helper.
-- Planned the batch, preset and cue tools round. Planning research confirmed the AVC-Intra arguments and found that `-top 1` is deprecated and that 1080p50 cannot be labelled correctly by FFmpeg.
-- An AVC-Intra 100 1080i50 test file imported and played on EVS. The server's on-screen text covers the clocks, so safe zones were added to the spec.
+- Built Waves 0–4: CueCore package, App Shell window, batch queue with restore, AVC-Intra 100 presets, music-end markers, safe zones, slate and trim engine.

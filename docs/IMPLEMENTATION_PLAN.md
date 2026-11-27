@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 26/26; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27). Spec A3 (flat toolbar) not met on the macOS 27 SDK; see TASKS backlog.
+**Progress:** 26/26; external acceptance: X1 passed 2026-11-28, X2 partly passed (AVC-I export ingests), X3 and X4 open (G1 and U1 passed 2026-11-27). Spec A3 (flat toolbar) restored on the macOS 27 SDK in build 12.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -377,12 +377,14 @@ Dependency graph (no cycles):
   - Gates: 2.3, 4.1, 4.2, 5.1, and any part of 1.7 beyond the parity layout
   - While unavailable: Wave 0, 1.1–1.6, the parity part of 1.7, 2.1, 2.2, 3.1, 3.2 and 4.3 can proceed.
 
-- [ ] **X1**: Measure the EVS OSD bands
+- [x] **X1**: Measure the EVS OSD bands
+  - Result (2026-11-28): the operator measured 8 % top and 17 % bottom; `SafeZones.evsOSDInsets` set to 8/17 in build 12 (bands 87 px top, 184 px bottom at 1080). 245 tests, 0 failures.
   - Requires: a straight-on still or grab of the cue output with OSD on, ideally over a plain background
   - Gates: the final numbers of the EVS OSD safe-zone preset (spec F, first criterion). Code proceeds with the provisional 10 % top and 20 % bottom; 6.4 or a follow-up sets the measured values.
   - Note: the XT3 manual documents "OSD on outputs" Yes/No under Operation → OSD Settings, but gives no positions or sizes.
 
 - [ ] **X2**: EVS ingest of files made by build 11
+  - Partial result (2026-11-28): the operator reports that build 11 files exported with the AVC-Intra preset ingest and play on the EVS. Still unreported: 8 mono tracks and channel order, 1080p50 Experimental, the 23:59:55:00 pre-roll start, and MPEG-2.
   - Depends on: 6.4
   - Requires: the operator's EVS
   - Gates: the claims "ingests on EVS" for the app's own 1080i50 and 1080p25 output; that 4 and 8 mono tracks appear and play on the right channels; whether 1080p50 with the 25p label is accepted (keeps or drops the Experimental preset); how a `23:59:55:00` pre-roll start and 50p timecode display; whether the MPEG-2 preset is worth keeping.

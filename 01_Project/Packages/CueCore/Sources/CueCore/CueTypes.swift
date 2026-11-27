@@ -208,8 +208,8 @@ public struct SafeZones: Codable, Sendable, Equatable, Hashable {
     public static let range = 0...30
     static func clamp(_ value: Int) -> Int { min(range.upperBound, max(range.lowerBound, value)) }
 
-    /// Provisional until gate X1 measures the EVS OSD from a still of the cue output.
-    public static let evsOSDInsets = Insets(top: 10, bottom: 20)
+    /// Measured by the operator on the EVS output (gate X1, 2026-11-28): 8 % top, 17 % bottom.
+    public static let evsOSDInsets = Insets(top: 8, bottom: 17)
 
     public var preset: SafeZonePreset
     /// The operator's Custom values, kept while another preset is selected.

@@ -241,7 +241,7 @@ Observed on 2026-11-27, on the operator's EVS output with OSD on, while playing 
 | Question | Status | Answer |
 |----------|--------|--------|
 | Does the operator's EVS ingest AVC-I 100 1080i50 from this FFmpeg without errors? (Gate for presets.) | Resolved 2026-11-27 | **Yes.** A 1080i50 AVC-I 100 file with 4 mono tracks (converted from a build 2 MPEG-2 cue) imported and played. EVS OSD overlap found; see section F. |
-| What are the exact EVS OSD band sizes on the operator's outputs (top line, bottom two lines, status icons) and do they differ per output or multiviewer? | Open | Estimated from a phone photo: bottom 17–20 %, top 8–10 %. Measure from a straight-on still or a grab of the OSD on a plain background, then set the EVS OSD preset. |
+| What are the exact EVS OSD band sizes on the operator's outputs (top line, bottom two lines, status icons) and do they differ per output or multiviewer? | Resolved 2026-11-28 | **8 % top, 17 % bottom**, measured by the operator. Set as the EVS OSD preset in build 12. |
 | Should the operator simply switch off OSD on the cue output in the EVS setup instead? | Open | Safe zones still help where OSD must stay on (multiviewer, operator monitor) |
 | Did all four mono tracks appear and play correctly on EVS? | Open | Not reported yet |
 | Does EVS accept 1080p50 AVC-I with FFmpeg's 25p coding label, or should 1080p50 be dropped or replaced (e.g. DNxHD)? | Open | Experimental until tested |

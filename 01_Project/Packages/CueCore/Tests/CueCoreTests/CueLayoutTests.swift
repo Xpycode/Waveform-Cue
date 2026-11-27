@@ -110,9 +110,9 @@ final class CueLayoutTests: XCTestCase {
 
     func testReservedBandsInPixels() {
         let evs = CueLayout(safeZones: SafeZones(preset: .evsOSD))
-        XCTAssertEqual(evs.reserved, [CGRect(x: 0, y: 972, width: 1920, height: 108),
-                                      CGRect(x: 0, y: 0, width: 1920, height: 216)])
-        XCTAssertEqual(evs.usable, CGRect(x: 0, y: 216, width: 1920, height: 756))
+        XCTAssertEqual(evs.reserved, [CGRect(x: 0, y: 993, width: 1920, height: 87),
+                                      CGRect(x: 0, y: 0, width: 1920, height: 184)])
+        XCTAssertEqual(evs.usable, CGRect(x: 0, y: 184, width: 1920, height: 809))
         // 1 % of 1080 is 10.8 px: rounded outward so a partly covered row stays reserved.
         let odd = CueLayout(safeZones: zones(top: 1, left: 3))
         XCTAssertEqual(odd.reserved, [CGRect(x: 0, y: 1069, width: 1920, height: 11),
@@ -280,8 +280,8 @@ final class CueLayoutTests: XCTestCase {
         XCTAssertEqual(layout.titleSize, 48)
         XCTAssertLessThan(layout.detail!.height, 265)
         XCTAssertLessThan(layout.overview.height, 100)
-        XCTAssertGreaterThanOrEqual(layout.extent(of: .elapsedClock)!.minY, 216)
-        XCTAssertLessThanOrEqual(titleBand(layout).maxY, 972)
+        XCTAssertGreaterThanOrEqual(layout.extent(of: .elapsedClock)!.minY, 184)
+        XCTAssertLessThanOrEqual(titleBand(layout).maxY, 993)
     }
 
     func testDoesNotFit() {

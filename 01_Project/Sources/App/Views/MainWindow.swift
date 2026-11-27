@@ -57,6 +57,7 @@ struct MainWindow: View {
             }
             .buttonStyle(.borderless)
         }
+        .withoutSharedBackground()
         ToolbarItemGroup(placement: .primaryAction) {
             HStack(spacing: 8) {
                 Text(model.toolbarReadout)
@@ -89,6 +90,7 @@ struct MainWindow: View {
             }
             .buttonStyle(.borderless)
         }
+        .withoutSharedBackground()
     }
 
     private func toolbarLabel(_ title: String, systemImage: String) -> some View {
@@ -133,5 +135,19 @@ private struct StatusBar: View {
         .frame(maxWidth: .infinity)
         .background(Theme.secondaryBackground)
         .overlay(alignment: .top) { Divider() }
+    }
+}
+
+private extension ToolbarContent {
+    /// The macOS 27 SDK ignores `UIDesignRequiresCompatibility` and wraps each toolbar group
+    /// in a glass capsule around the flat buttons. Hiding the shared background restores the
+    /// flat look (spec A3), as in Penumbra; earlier systems are unchanged.
+    @ToolbarContentBuilder
+    func withoutSharedBackground() -> some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            self.sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
     }
 }
