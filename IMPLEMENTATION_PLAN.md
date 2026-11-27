@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 11/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 12/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -232,13 +232,14 @@ Dependency graph (no cycles):
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'BaselineTests|RenderTests'`
   - Evidence (2026-11-27): 20 baseline hashes unchanged (not re-recorded) through both the old `frame:` call and the new timeline entry point; 11 `RenderTests`: build 10 appearance JSON decodes with new defaults; reserved bands contain only background pixels across EVS OSD, clocks Above, asymmetric custom, zoom Off and a 30 % bottom reserve (control test shows build 10 layout does intrude); 50 Hz odd positions differ from both neighbours; hit-test of view point (500, 416) seeks to frame 385 as in build 10. `MXFExport` computes the layout once; it still renders 25 fps (3.1 moves it to the timeline). Slate drawing and trimmed overview stay in 4.3; guides in 3.2.
 
-- [ ] **2.2**: Analysis integration and decoded-audio lifetime
+- [x] **2.2**: Analysis integration and decoded-audio lifetime
   - Depends on: 1.2, 1.5
   - Owns: `AudioTrack.swift`, `PreparedAudio.swift`, new `JobWorkspace.swift`, `LoudnessAnalyzer.swift`, tests
   - Detail: `AudioTrack.read` keeps the absolute peak and runs `MusicEndDetector` on the 5 ms buckets in the existing pass (no extra decode). `JobWorkspace` owns a job's temporary CAF: created on demand, deleted on release, with a registry the tests can count. `LoudnessAnalyzer` runs the `ebur128` pass in the background through ProcessKit and returns a `LoudnessMeasurement`; cancellable. A track can be rebuilt from stored peaks and markers without re-analysis.
   - Interface: `AudioTrack.read(_:encoder:)` stays source-compatible and gains `markers` and `absolutePeak`; `JobWorkspace.acquire(for:)` / `release`; `LoudnessAnalyzer.measure(_ url:encoder:) async throws`.
   - Success: unit tests on a generated WAV with a fade and a silent tail (needs FFmpeg; skipped with a notice otherwise); the workspace deletes its CAF on release; the loudness of a −23 LUFS reference tone is within 0.5 LU.
   - Backpressure: `FFMPEG_EXECUTABLE=… swift test --package-path Packages/CueCore --filter 'AudioTrackTests|JobWorkspaceTests|LoudnessAnalyzerTests'`
+  - Evidence (2026-11-27): 21 new tests; full suite with FFmpeg 179 tests, 0 failures, 1 skip (benchmark); without FFmpeg 9 integration tests skip by name. Generated WAV: music end ≈ 8.0 s, fade start ≈ 7.98 s (±0.02); −23 LUFS tone within 0.5 LU; cancelling the analyzer kills FFmpeg; release deletes the CAF; six-job two-CAF pattern holds. Design: jobs store `TrackAnalysis` (peaks as base64 Float32, ~48 KB per 3 min); `AudioTrack(url:analysis:)` draws without audio; `JobWorkspace` actor (`acquire(for: UUID, source:)`) never evicts on its own — 3.3 owns that policy and must route `EditorModel` loading through it. Music end ignores the whole-frame padding.
 
 - [ ] **2.3**: Queue sidebar wired to the shell, exporting through the existing engine
   - Depends on / external gates: 1.6, 1.7; **U1**
