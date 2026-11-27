@@ -12,6 +12,7 @@ Next feature round is specified in [specs/batch-presets-cue-tools.md](specs/batc
 
 ## Recent
 
+- Researched a Windows version: [specs/windows-version-research.md](specs/windows-version-research.md). Recommends a separate C#/.NET app (Avalonia, SkiaSharp, Velopack). No decision recorded, nothing built.
 - Planned the batch, preset and cue tools round. Planning research confirmed the AVC-Intra arguments and found that `-top 1` is deprecated and that 1080p50 cannot be labelled correctly by FFmpeg.
 - An AVC-Intra 100 1080i50 test file imported and played on EVS. The server's on-screen text covers the clocks, so safe zones were added to the spec.
 - Moved overlay text and positioning to the Appearance sidebar, accessible from the window toolbar.
