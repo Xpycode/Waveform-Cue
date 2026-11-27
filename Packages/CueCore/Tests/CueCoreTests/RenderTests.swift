@@ -305,4 +305,54 @@ final class RenderTests: XCTestCase {
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: layout.overview.midX, y: y), in: 0..<750, layout: layout), 375)
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: layout.contentMaxX, y: y), in: 0..<750, layout: layout), 750)
     }
+
+    // MARK: - Task 3.2: guides and markers in the export
+
+    /// `CuePicture` output (what the export encodes) never contains the safe-zone guides: with
+    /// guides on, every image equals the guides-off image, and the bands hold only background.
+    func testExportHasNoGuidePixels() {
+        var track = BaselineTests.syntheticTrack()
+        track.markers = MusicMarkers(detectedMusicEnd: 26, detectedFadeStart: 24)
+        for zones in [SafeZones(preset: .evsOSD), Self.zones(top: 12, bottom: 25, left: 8, right: 8)] {
+            for position in [ClockPosition.below, .above] {
+                var off = CueAppearance()
+                off.safeZones = zones
+                off.clockPosition = position
+                off.countdownTarget = .musicEnd
+                off.warning = .five
+                var on = off
+                on.showGuides = true
+                let layout = on.layout
+                XCTAssertTrue(layout.fits)
+                let timeline = CuePicture.timeline(for: track, appearance: on)
+                for frame in [0, 600, 640, 700, 750] {
+                    let label = CueLabel(text: "Guides", position: CGPoint(x: 1, y: 0))
+                    let withGuides = Self.render(track, timeline: timeline, position: frame, label: label, appearance: on)
+                    XCTAssertEqual(withGuides, Self.render(track, timeline: timeline, position: frame, label: label,
+                                                           appearance: off))
+                    for band in layout.reserved {
+                        XCTAssertEqual(Self.foreignPixels(withGuides, in: band), 0, "\(zones) \(position) \(frame) \(band)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Clocks Above and Below move as a pair: both clocks share one baseline, above the full
+    /// track or below the close-up.
+    func testClocksMoveAsAPair() {
+        for zones in [SafeZones.none, SafeZones(preset: .evsOSD)] {
+            var below = CueAppearance()
+            below.safeZones = zones
+            var above = below
+            above.clockPosition = .above
+            let b = below.layout, a = above.layout
+            let bElapsed = b.extent(of: .elapsedClock)!, bRemaining = b.extent(of: .remainingClock)!
+            let aElapsed = a.extent(of: .elapsedClock)!, aRemaining = a.extent(of: .remainingClock)!
+            XCTAssertEqual(bElapsed.minY, bRemaining.minY)
+            XCTAssertEqual(aElapsed.minY, aRemaining.minY)
+            XCTAssertLessThan(bElapsed.maxY, b.extent(of: .detail)!.minY)
+            XCTAssertGreaterThan(aElapsed.minY, a.extent(of: .overview)!.maxY)
+        }
+    }
 }

@@ -7,6 +7,8 @@ final class MonitorView: NSView {
         didSet {
             scrubRange = nil
             heldDetail = nil
+            markerDrag = nil
+            markers = nil
             updateOverview()
             needsDisplay = true
         }
@@ -24,6 +26,20 @@ final class MonitorView: NSView {
         }
     }
     private(set) var layout: CueLayout
+    /// The job's markers when they differ from the track's (edited values); nil uses
+    /// `track.markers`. Cleared when a new track is assigned, so set it after `track`.
+    var markers: MusicMarkers? { didSet { if oldValue != markers { needsDisplay = true } } }
+    /// The markers the picture shows.
+    var effectiveMarkers: MusicMarkers { markers ?? track?.markers ?? .none }
+    /// A marker was dragged: which one and its new time in source seconds. Called on every
+    /// drag step; the monitor already shows the new position.
+    var onMarkerChanged: ((MarkerKind, Double) -> Void)?
+
+    /// The timeline the monitor draws and hit-tests with: the untrimmed track, its markers and
+    /// the appearance's countdown target.
+    private var timeline: ClipTimeline? {
+        track.map { CuePicture.timeline(for: $0, appearance: cueAppearance, markers: markers) }
+    }
 
     private func updateOverview() {
         path = CuePicture.waveform(track?.peaks ?? [], in: layout.overview)
@@ -43,6 +59,8 @@ final class MonitorView: NSView {
     private var down: CGPoint?
     private var scrubRange: Range<Int>?
     private var heldDetail: Range<Int>?
+    private var markerDrag: (kind: MarkerKind, range: Range<Int>)?
+    private var hoverTracking: NSTrackingArea?
     override var acceptsFirstResponder: Bool { true }
 
     override init(frame: NSRect) {
@@ -70,7 +88,11 @@ final class MonitorView: NSView {
         let picture = self.picture
         guard !picture.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
         if let track {
-            CuePicture.draw(in: context, rect: picture, track: track, path: path, frame: frameNumber, label: label, appearance: cueAppearance, layout: layout, heldRange: heldDetail)
+            CuePicture.draw(in: context, rect: picture, track: track, path: path,
+                            timeline: CuePicture.timeline(for: track, appearance: cueAppearance, markers: markers),
+                            layout: layout, position: frameNumber, label: label, appearance: cueAppearance,
+                            heldRange: heldDetail)
+            if cueAppearance.showGuides { drawGuides(in: context, picture: picture) }
         } else {
             NSColor(cgColor: CuePicture.rgb(0.047, 0.067, 0.076))?.setFill()
             picture.fill()
@@ -100,6 +122,60 @@ final class MonitorView: NSView {
         }
     }
 
+    /// Hatched tint over the reserved bands, in the monitor only; `CuePicture` never draws it,
+    /// so an export never contains it.
+    private func drawGuides(in context: CGContext, picture: CGRect) {
+        let bands = layout.reserved.map { CuePicture.viewRect($0, in: picture).intersection(picture) }
+            .filter { !$0.isEmpty }
+        guard !bands.isEmpty else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+        let tint = CGColor(srgbRed: 1, green: 0.42, blue: 0.24, alpha: 1)
+        for band in bands {
+            context.saveGState()
+            context.clip(to: band)
+            context.setFillColor(tint.copy(alpha: 0.16)!)
+            context.fill(band)
+            context.setStrokeColor(tint.copy(alpha: 0.55)!)
+            context.setLineWidth(1)
+            let spacing: CGFloat = 10
+            var x = band.minX - band.height
+            while x < band.maxX {
+                context.move(to: CGPoint(x: x, y: band.minY))
+                context.addLine(to: CGPoint(x: x + band.height, y: band.maxY))
+                x += spacing
+            }
+            context.strokePath()
+            context.restoreGState()
+            context.setStrokeColor(tint.copy(alpha: 0.8)!)
+            context.stroke(band.insetBy(dx: 0.5, dy: 0.5), width: 1)
+        }
+    }
+
+    private func closeUpRange() -> Range<Int> {
+        guard let track else { return 0..<1 }
+        return heldDetail ?? CuePicture.closeUp(frame: frameNumber, total: track.frames, zoom: cueAppearance.zoom)
+    }
+
+    private func hitTarget(_ p: CGPoint) -> CuePicture.HitTarget {
+        guard let timeline else { return .none }
+        return CuePicture.hitTarget(at: p, label: label, layout: layout, timeline: timeline, closeUp: closeUpRange())
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect, .cursorUpdate],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard editingEnabled, track != nil, markerDrag == nil else { return }
+        if case .marker = hitTarget(point(event)) { NSCursor.resizeLeftRight.set() } else { NSCursor.arrow.set() }
+    }
+
     private func point(_ event: NSEvent) -> CGPoint {
         CuePicture.picturePoint(convert(event.locationInWindow, from: nil), in: picture)
     }
@@ -109,9 +185,17 @@ final class MonitorView: NSView {
         guard let track else { onChoose?(); return }
         let p = point(event)
         down = p
-        switch CuePicture.hitTarget(at: p, label: label, layout: layout) {
+        switch hitTarget(p) {
         case .title:
             labelOrigin = label.position
+            return
+        case .marker(let kind, let onCloseUp):
+            if onCloseUp {
+                heldDetail = closeUpRange()
+                markerDrag = (kind, heldDetail!)
+            } else {
+                markerDrag = (kind, 0..<track.frames)
+            }
             return
         case .overview:
             scrubRange = 0..<track.frames
@@ -128,18 +212,34 @@ final class MonitorView: NSView {
     }
     override func mouseDragged(with event: NSEvent) {
         let p = point(event)
-        if let origin = labelOrigin, let down {
+        if let drag = markerDrag {
+            dragMarker(drag, to: p)
+        } else if let origin = labelOrigin, let down {
             onPlace?(CuePicture.draggedTitlePosition(origin: origin, down: down, to: p, label: label, layout: layout))
         } else if scrubRange != nil { scrub(p) }
     }
     override func mouseUp(with event: NSEvent) {
         labelOrigin = nil
         down = nil
+        if markerDrag != nil {
+            markerDrag = nil
+            heldDetail = nil
+            needsDisplay = true
+            return
+        }
         guard scrubRange != nil else { return }
         scrubRange = nil
         heldDetail = nil
         needsDisplay = true
         onScrubChanged?(false)
+    }
+    private func dragMarker(_ drag: (kind: MarkerKind, range: Range<Int>), to p: CGPoint) {
+        guard let timeline else { return }
+        let seconds = CuePicture.draggedMarkerSeconds(at: p, in: drag.range, timeline: timeline, layout: layout)
+        var edited = effectiveMarkers
+        edited.setEdited(drag.kind, to: seconds)
+        markers = edited
+        onMarkerChanged?(drag.kind, seconds)
     }
     private func scrub(_ p: CGPoint) {
         guard let scrubRange else { return }

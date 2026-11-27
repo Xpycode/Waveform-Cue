@@ -12,6 +12,21 @@ public struct CueLabel: Sendable, Equatable {
     }
 }
 
+/// The two music markers drawn on the waveforms.
+public enum MarkerKind: String, Equatable, Hashable, Sendable, CaseIterable {
+    case musicEnd, fadeStart
+}
+
+extension MusicMarkers {
+    /// The marker in force (edited, else detected).
+    public func value(_ kind: MarkerKind) -> Double? { kind == .musicEnd ? musicEnd : fadeStart }
+
+    /// Sets the operator's edited value for `kind`.
+    public mutating func setEdited(_ kind: MarkerKind, to seconds: Double?) {
+        if kind == .musicEnd { editedMusicEnd = seconds } else { editedFadeStart = seconds }
+    }
+}
+
 public enum CuePicture {
     public static let size = CGSize(width: 1920, height: 1080)
     /// Build 10 geometry (safe zones None). The renderer reads `CueLayout`; these remain for
@@ -94,23 +109,42 @@ public enum CuePicture {
     }
 
     /// Build 10 entry point: `frame` is a 25-base clock frame of the whole, untrimmed track.
-    /// Forwards to the timeline entry point with an identity 25 fps timeline. Pass the cached
-    /// `layout` when one is at hand; it defaults to `appearance.layout`.
+    /// Forwards to the timeline entry point with an identity 25 fps timeline carrying the
+    /// track's markers and the appearance's countdown target. Pass the cached `layout` when one
+    /// is at hand; it defaults to `appearance.layout`.
     public static func draw(in ctx: CGContext, rect: CGRect, track: AudioTrack, path: CGPath,
                             frame: Int, label: CueLabel, appearance: CueAppearance = CueAppearance(),
                             layout: CueLayout? = nil, heldRange: Range<Int>? = nil) {
-        draw(in: ctx, rect: rect, track: track, path: path, timeline: ClipTimeline(duration: track.seconds),
+        draw(in: ctx, rect: rect, track: track, path: path, timeline: timeline(for: track, appearance: appearance),
              layout: layout ?? appearance.layout, position: frame, label: label, appearance: appearance,
              heldRange: heldRange)
     }
+
+    /// The untrimmed 25 fps timeline for a track: its markers and the appearance's countdown
+    /// target. `markers` overrides the track's own (a job's edited values).
+    public static func timeline(for track: AudioTrack, appearance: CueAppearance,
+                                markers: MusicMarkers? = nil) -> ClipTimeline {
+        ClipTimeline(duration: track.seconds, markers: markers ?? track.markers, target: appearance.countdownTarget)
+    }
+
+    // Marker colours: distinct from the waveforms, the cursor and the warning red.
+    /// Music end: warm yellow, solid 3 pt line.
+    public static let musicEndColor = rgb(1.0, 0.80, 0.22)
+    /// Fade start: sky blue, dashed 2 pt line.
+    public static let fadeStartColor = rgb(0.45, 0.72, 1.0)
 
     /// Renders one output image. `position` is a `ClipTimeline` position at the encode rate, so
     /// 1080i50 fields and 1080p50 frames each get their own playhead; the clocks read
     /// `timeline.clocks(at:)`. `layout` must be `appearance.layout` (computed once and shared)
     /// and `path` must be `overviewPath(track, layout:)`.
     ///
-    /// Not yet here: the pre-roll slate draws as the first music frame (task 4.3), and
-    /// Remaining counts to the file end whatever `appearance.countdownTarget` (task 3.2).
+    /// Markers come from `timeline.musicEndMarker` and `fadeStartMarker` and are drawn on both
+    /// waveforms. Remaining, its fade to red and the waveform fades all measure to
+    /// `timeline.target`; past a music-end target Remaining holds at 00:00:00 in red. With
+    /// target File end (or no marker, or no tail) the clocks and fades are build 10's.
+    /// Safe-zone guides are never drawn here (the monitor overlays them).
+    ///
+    /// Not yet here: the pre-roll slate draws as the first music frame (task 4.3).
     public static func draw(in ctx: CGContext, rect: CGRect, track: AudioTrack, path: CGPath,
                             timeline: ClipTimeline, layout: CueLayout, position: Int, label: CueLabel,
                             appearance: CueAppearance = CueAppearance(), heldRange: Range<Int>? = nil) {
@@ -133,7 +167,8 @@ public enum CuePicture {
         }
         let total = timeline.clockFrames
         let clocks = timeline.clocks(at: position)
-        let framesLeft = clocks.toFileEnd
+        // Equals `toFileEnd` for target File end; counts to the music-end marker otherwise.
+        let framesLeft = clocks.remaining
         // Playhead on the 25 base; it moves between clock frames at 50 images per second.
         let playhead = playheadFrame(timeline: timeline, position: position)
         let warningFraction = appearance.warning.fraction(framesLeft: framesLeft, solidAt: appearance.solidRedAt)
@@ -143,8 +178,40 @@ public enum CuePicture {
         func xForFrame(_ frame: Double, in range: Window, rect: CGRect) -> CGFloat {
             rect.minX + rect.width * CGFloat(frame - range.lower) / CGFloat(range.count)
         }
+        let markerFrames: [(MarkerKind, Double)] = [
+            (MarkerKind.fadeStart, timeline.fadeStartMarker), (MarkerKind.musicEnd, timeline.musicEndMarker)
+        ].compactMap { kind, marker in marker.map { (kind, $0.seconds * fps) } }
+        func paintMarkers(in range: Window, rect: CGRect, labelSize: CGFloat) {
+            for (kind, frame) in markerFrames {
+                guard frame >= range.lower, frame <= range.upper else { continue }
+                let x = min(rect.maxX - 1.5, max(rect.minX + 1.5, xForFrame(frame, in: range, rect: rect)))
+                let color = kind == .musicEnd ? musicEndColor : fadeStartColor
+                ctx.saveGState()
+                ctx.setStrokeColor(color)
+                ctx.setLineWidth(kind == .musicEnd ? 3 : 2)
+                if kind == .fadeStart { ctx.setLineDash(phase: 0, lengths: [10, 6]) }
+                ctx.move(to: CGPoint(x: x, y: rect.minY))
+                ctx.addLine(to: CGPoint(x: x, y: rect.maxY))
+                ctx.strokePath()
+                ctx.restoreGState()
+                // Tag inside the panel's top edge: End right of its line, Fade left of its line
+                // (flipped at the panel edge), so the two read apart when they sit close.
+                let text = kind == .musicEnd ? "End" : "Fade"
+                let run = line(text, font: "HelveticaNeue-Bold", size: labelSize, color: color)
+                let width = CGFloat(CTLineGetTypographicBounds(run, nil, nil, nil))
+                let gap: CGFloat = 6
+                var left = kind == .musicEnd ? x + gap : x - gap - width
+                if left + width > rect.maxX - 4 { left = x - gap - width }
+                if left < rect.minX + 4 { left = x + gap }
+                let baseline = rect.maxY - labelSize - 2
+                let tag = CGRect(x: left - 3, y: baseline - labelSize * 0.25, width: width + 6, height: labelSize * 1.2)
+                fill(tag.intersection(rect), background.copy(alpha: 0.8) ?? background)
+                ctx.textPosition = CGPoint(x: left, y: baseline)
+                CTLineDraw(run, ctx)
+            }
+        }
         func paintEnvelope(_ path: CGPath, rect: CGRect, cursor: CGFloat, played: CueColor,
-                           upcoming: CueColor, fadeToRed: Bool) {
+                           upcoming: CueColor, fadeToRed: Bool, markersIn range: Window) {
             let fraction = fadeToRed ? warningFraction : 0
             fill(CGRect(x: rect.minX, y: rect.midY, width: rect.width, height: 1.5), rgb(0.30, 0.37, 0.37))
             ctx.setFillColor(upcoming.blended(toward: CueColor.warningRed.dimmed, fraction: fraction).cgColor)
@@ -156,6 +223,9 @@ public enum CuePicture {
             ctx.addPath(path)
             ctx.fillPath()
             ctx.restoreGState()
+            if !markerFrames.isEmpty {
+                paintMarkers(in: range, rect: rect, labelSize: rect.height >= 150 ? 20 : 16)
+            }
             let overhang = M.cursorOverhang
             fill(CGRect(x: cursor - overhang, y: rect.minY - overhang, width: 2 * overhang,
                         height: rect.height + 2 * overhang), paper)
@@ -176,7 +246,7 @@ public enum CuePicture {
         paintEnvelope(path, rect: overview, cursor: xForFrame(playhead, in: full, rect: overview),
                       played: appearance.overviewColor ?? CueAppearance.defaultOverview,
                       upcoming: appearance.overviewColor?.dimmed ?? CueColor(0.31, 0.40, 0.41),
-                      fadeToRed: appearance.fadeFullTrack)
+                      fadeToRed: appearance.fadeFullTrack, markersIn: full)
         if let detail = layout.detail {
             ctx.setStrokeColor(rgb(0.51, 0.69, 0.64))
             ctx.setLineWidth(2)
@@ -209,7 +279,7 @@ public enum CuePicture {
             paintEnvelope(detailPath, rect: detail, cursor: cursor,
                           played: appearance.detailColor ?? CueAppearance.defaultDetail,
                           upcoming: appearance.detailColor?.dimmed ?? CueColor(0.32, 0.48, 0.47),
-                          fadeToRed: appearance.fadeCloseUp)
+                          fadeToRed: appearance.fadeCloseUp, markersIn: window)
             let triangleTop = detail.maxY + M.cursorTriangleRise
             let half = M.cursorTriangleHalfWidth
             ctx.beginPath()
@@ -227,7 +297,9 @@ public enum CuePicture {
         }
         drawClock("Elapsed", frame: clocks.elapsed, color: appearance.elapsed.color, size: layout.elapsedSize,
                   labelBaseline: layout.elapsedLabelBaseline, right: false)
-        let remainingColor = appearance.remaining.color.blended(toward: .warningRed, fraction: warningFraction)
+        // Past a music-end target Remaining holds at 00:00:00 in solid red until the clip ends.
+        let remainingColor = clocks.isPastTarget ? CueColor.warningRed
+            : appearance.remaining.color.blended(toward: .warningRed, fraction: warningFraction)
         drawClock("Remaining", frame: framesLeft, color: remainingColor, size: layout.remainingSize,
                   labelBaseline: layout.remainingLabelBaseline, right: true)
         if !label.text.isEmpty {
@@ -264,9 +336,72 @@ public enum CuePicture {
 // MARK: - Hit-testing (monitor)
 
 extension CuePicture {
-    /// What a click in the picture lands on, in build 10's priority order.
+    /// What a click in the picture lands on, in build 10's priority order; a marker line sits
+    /// between the title and the waveforms.
     public enum HitTarget: Equatable, Sendable {
         case title, overview, detail, none
+        case marker(MarkerKind, onCloseUp: Bool)
+    }
+
+    /// Horizontal grab tolerance either side of a marker line, in picture points.
+    public static let markerHitTolerance: CGFloat = 10
+
+    /// A picture rectangle (1920 × 1080 points) mapped back into the monitor view.
+    public static func viewRect(_ rect: CGRect, in picture: CGRect) -> CGRect {
+        let sx = picture.width / size.width, sy = picture.height / size.height
+        return CGRect(x: picture.minX + rect.minX * sx, y: picture.minY + rect.minY * sy,
+                      width: rect.width * sx, height: rect.height * sy)
+    }
+
+    /// The marker line under `point`, nearest first, on the full track (whole clip) or the
+    /// close-up (`closeUp`, the 25-base window on screen). Nil when none is within tolerance.
+    public static func markerHit(at point: CGPoint, timeline: ClipTimeline, layout: CueLayout,
+                                 closeUp: Range<Int>) -> (kind: MarkerKind, onCloseUp: Bool)? {
+        let fps = Double(ClipTimeline.clockRate)
+        let markers: [(MarkerKind, Double)] = [
+            (MarkerKind.musicEnd, timeline.musicEndMarker), (MarkerKind.fadeStart, timeline.fadeStartMarker)
+        ].compactMap { kind, marker in marker.map { (kind, $0.seconds * fps) } }
+        guard !markers.isEmpty else { return nil }
+        var panes: [(rect: CGRect, lower: Double, upper: Double, onCloseUp: Bool)] = [
+            (layout.overview, 0, Double(timeline.clockFrames), false)
+        ]
+        if let detail = layout.detail {
+            panes.append((detail, Double(closeUp.lowerBound), Double(closeUp.upperBound), true))
+        }
+        for pane in panes where pane.rect.insetBy(dx: -markerHitTolerance, dy: -6).contains(point) {
+            guard pane.upper > pane.lower else { continue }
+            var best: (kind: MarkerKind, distance: CGFloat)?
+            for (kind, frame) in markers where frame >= pane.lower && frame <= pane.upper {
+                let x = pane.rect.minX + pane.rect.width * CGFloat((frame - pane.lower) / (pane.upper - pane.lower))
+                let distance = abs(point.x - x)
+                if distance <= markerHitTolerance, distance < (best?.distance ?? .infinity) { best = (kind, distance) }
+            }
+            if let best { return (best.kind, pane.onCloseUp) }
+        }
+        return nil
+    }
+
+    /// `hitTarget(at:label:layout:)` with marker lines: the title first, then a marker within
+    /// tolerance, then scrubbing on either waveform.
+    public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout,
+                                 timeline: ClipTimeline, closeUp: Range<Int>) -> HitTarget {
+        let target = hitTarget(at: point, label: label, layout: layout)
+        if target == .title { return .title }
+        if let hit = markerHit(at: point, timeline: timeline, layout: layout, closeUp: closeUp) {
+            return .marker(hit.kind, onCloseUp: hit.onCloseUp)
+        }
+        return target
+    }
+
+    /// The source time, in seconds, a marker dragged to `point` lands on: x maps across the
+    /// content column over `range` (25-base frames of the trimmed music: the whole clip for the
+    /// full track, the held window for the close-up), clamped inside the trimmed range.
+    public static func draggedMarkerSeconds(at point: CGPoint, in range: Range<Int>, timeline: ClipTimeline,
+                                            layout: CueLayout) -> Double {
+        let fraction = Double(min(1, max(0, (point.x - layout.contentMinX) / layout.contentWidth)))
+        let frame = Double(range.lowerBound) + fraction * Double(range.count)
+        let seconds = timeline.sourceRange.lowerBound + frame / Double(ClipTimeline.clockRate)
+        return min(timeline.sourceRange.upperBound, max(timeline.sourceRange.lowerBound, seconds))
     }
 
     /// A point in the monitor view mapped to picture points (1920 × 1080, bottom-left origin).
