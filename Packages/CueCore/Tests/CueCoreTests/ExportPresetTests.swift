@@ -3,6 +3,8 @@ import XCTest
 
 final class ExportPresetTests: XCTestCase {
     private let colour = "scale=out_color_matrix=bt709:out_range=tv"
+    /// AVC-I also stamps the colour description on the frames (FFmpeg 8.1 ignores the tag options).
+    private var tagged: String { colour + ",setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709" }
     private let tags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"]
 
     private func head(rate: Int, trackMaps: Int) -> [String] {
@@ -73,7 +75,7 @@ final class ExportPresetTests: XCTestCase {
             let args = ExportPreset.avcIntra1080i50.ffmpegArguments(
                 audioPath: "/tmp/a.caf", outputFrames: 100, layout: layout,
                 timecode: Timecode("10:00:00:00")!, output: "/tmp/out.mxf")
-            let video = ["-vf", "\(colour),format=yuv422p10le,tinterlace=interleave_top,setfield=tff",
+            let video = ["-vf", "\(tagged),format=yuv422p10le,tinterlace=interleave_top,setfield=tff",
                          "-c:v", "libx264", "-avcintra-class", "100", "-pix_fmt", "yuv422p10le",
                          "-flags", "+ildct+ilme"]
             XCTAssertEqual(args, head(rate: 50, trackMaps: layout.trackCount) + video
@@ -86,7 +88,7 @@ final class ExportPresetTests: XCTestCase {
         for layout in AudioLayout.allCases {
             let args = ExportPreset.avcIntra1080p25.ffmpegArguments(
                 audioPath: "/tmp/a.caf", outputFrames: 10, layout: layout, output: "/tmp/out.mxf")
-            let video = ["-vf", "\(colour),format=yuv422p10le",
+            let video = ["-vf", "\(tagged),format=yuv422p10le",
                          "-c:v", "libx264", "-avcintra-class", "100", "-pix_fmt", "yuv422p10le"]
             XCTAssertEqual(args, head(rate: 25, trackMaps: layout.trackCount) + video
                            + tail(graph: graph(samples: 19_200, tracks: layout.trackCount), tc: "00:00:00:00"),
@@ -99,7 +101,7 @@ final class ExportPresetTests: XCTestCase {
             let args = ExportPreset.avcIntra1080p50.ffmpegArguments(
                 audioPath: "/tmp/a.caf", outputFrames: 10, layout: layout,
                 timecode: Timecode("00:00:01:12")!, output: "/tmp/out.mxf")
-            let video = ["-vf", "\(colour),format=yuv422p10le",
+            let video = ["-vf", "\(tagged),format=yuv422p10le",
                          "-c:v", "libx264", "-avcintra-class", "100", "-pix_fmt", "yuv422p10le"]
             // 25-based 12 frames becomes 24 on the 50-based timecode.
             XCTAssertEqual(args, head(rate: 50, trackMaps: layout.trackCount) + video
