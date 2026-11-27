@@ -13,3 +13,5 @@
   - On/off checkboxes for every feature (music-end markers, loudness check, normalisation, trim and fades, pre-roll, safe zones, safe-zone guides) and every picture element (full-track waveform, close-up, elapsed clock, remaining clock, title).
   - Settings work at two levels: app-wide defaults, which new jobs start with, and per-job overrides with a marker and Reset. Apply to All copies to jobs not yet run; Save as Default updates the defaults. Optional switch "Same settings for all jobs". Done jobs never change.
   - Build 10 settings load unchanged. With every setting at its build 10 value, the export is identical to build 10.
+  - Zoom in near the end (requested 2026-11-27): optional, off by default, zoom in only. The close-up narrows to a final window (for example 10 s → 3 s) with an eased transition of about 1 s, measured to the music end when the countdown target is Music end, otherwise to the file end. It depends only on the frame, so every frame still reads on its own when jogged. The highlight box on the full track shrinks with it.
+  - Research for all of the above: [NEXT_PLAN_RESEARCH.md](NEXT_PLAN_RESEARCH.md).
