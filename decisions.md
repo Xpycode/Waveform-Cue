@@ -45,3 +45,11 @@
 **Context:** FFmpeg 8.1 ignored `-color_primaries` and `-color_trc` for libx264 AVC-Intra output, so files read `bt709/unknown/unknown`.
 **Decision:** the AVC-Intra filter chain adds `setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709`. MPEG-2 keeps build 10's arguments.
 **Consequences:** AVC-Intra files report all three tags as BT.709; MPEG-2 output stays identical to build 10.
+
+## 2026-11-27 · Appearance defaults and copy scope
+
+Jobs in a batch can share a look while keeping their own preset, title, timing and output reservation. Both inspector tabs now copy appearance to the other Pending jobs. The separate Job action can also copy the preset and releases a reservation only when the preset changes. Each submission captures the current saved default for all tracks in that submission. The operator uses Save as Default to change the starting look for later imports.
+
+## 2026-11-27 · Clock clearance and end zoom
+
+Rehearsal frames showed unused space above the clocks while the waveforms lost height. With clocks below, the layout now reduces that gap to its floor first. The operator's EVS output check still determines the final safe-zone percentages. End zoom has its own Off, 2, 3 and 5-second values. Keeping these separate from the starting zoom preserves the existing close-up choices. [Appearance and playhead plan](specs/cue-appearance-and-playhead-plan.md)
