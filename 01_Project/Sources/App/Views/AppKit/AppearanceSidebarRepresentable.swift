@@ -32,8 +32,11 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
         position.setAccessibilityLabel("Text position")
 
         let sidebar = CueAppearanceSidebar(settings: model.appearance, labelField: field,
-                                           position: position) { [weak model] appearance in
-            model?.updateAppearance(appearance)
+                                           position: position) { [weak model, weak coordinator] appearance in
+            guard let model else { return }
+            model.updateAppearance(appearance)
+            // A refused edit (the job is exporting) must not leave the controls showing it.
+            coordinator?.sidebar?.sync(to: model.appearance)
         }
         let container = InspectorContainerView()
         container.addSubview(sidebar)
@@ -61,6 +64,7 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
         coordinator.labelField.isEnabled = labelEditable
         coordinator.position.isEnabled = labelEditable
         container.isInteractive = isInteractive
+        coordinator.sidebar?.sync(to: coordinator.model.appearance)
     }
 
     static func dismantleNSView(_ container: InspectorContainerView, coordinator: Coordinator) {

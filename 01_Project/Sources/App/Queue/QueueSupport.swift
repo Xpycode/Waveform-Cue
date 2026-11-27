@@ -55,12 +55,13 @@ enum AudioIngest {
     /// sorted by name as Finder sorts them. Anything that is not audio is counted as skipped.
     static func expand(_ urls: [URL], fileManager: FileManager = .default) -> Expansion {
         var result = Expansion()
-        for url in urls {
+        for original in urls {
+            let url = resolvingAlias(original)
             if isDirectory(url) {
                 let contents = (try? fileManager.contentsOfDirectory(
                     at: url, includingPropertiesForKeys: [.isDirectoryKey, .contentTypeKey],
                     options: [.skipsHiddenFiles])) ?? []
-                let files = contents.filter { !isDirectory($0) }
+                let files = contents.map(resolvingAlias).filter { !isDirectory($0) }
                     .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
                 for file in files { take(file, into: &result) }
             } else {
@@ -83,6 +84,13 @@ enum AudioIngest {
 
     private static func take(_ url: URL, into result: inout Expansion) {
         if isSupported(url) { result.files.append(url) } else { result.skipped += 1 }
+    }
+
+    /// A Finder alias stands for its target; an alias that cannot be resolved stays as it is.
+    private static func resolvingAlias(_ url: URL) -> URL {
+        guard (try? url.resourceValues(forKeys: [.isAliasFileKey]).isAliasFile) == true,
+              let target = try? URL(resolvingAliasFileAt: url) else { return url }
+        return target
     }
 
     private static func isDirectory(_ url: URL) -> Bool {

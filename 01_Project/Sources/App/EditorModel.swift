@@ -82,6 +82,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     var canStartQueue: Bool { !queue.isRunning && queue.jobs.contains { $0.status == .pending } }
+    /// Export Selected to Folder… also needs a per-job destination: a queue-wide folder wins over it.
+    var canExportSelectedToFolder: Bool { canExportSelected && queue.destinationOverride == nil }
     var canExportSelected: Bool {
         guard let job = selectedJob, !job.status.isActive else { return false }
         // "Safe zones leave too little room" (task 4.2), an invalid start timecode (4.1) or
@@ -159,9 +161,17 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                 + " Select one to preview it."
             placeholder = "Select a job in the queue"
         }
+        // Decoded audio from a launch that crashed or was force quit skipped the quit-time cleanup.
+        PreparedAudio.removeStaleSessionDirectories()
         observeQueueRun()
         observe({ [weak self] in self?.queue.currentJobID }) { [weak self] in self?.currentJobChanged() }
         observe({ [weak self] in self?.queue.unwritableFolders }) { [weak self] in self?.unwritableFoldersChanged() }
+        observe({ [weak self] in self?.canEdit }) { [weak self] in self?.editLockChanged() }
+        // The queue copies the job when it starts it; a half-typed commit-only field must land first.
+        queue.willStartJob = { [weak self] id in
+            guard let self, id == self.selectedJobID else { return }
+            self.endEditing()
+        }
         scheduleLoudness()
     }
 
@@ -214,6 +224,16 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// The running job holds the export slot of the audio lifetime from the moment it starts.
     private func currentJobChanged() {
         audioLifetime.assign(.running, to: queue.currentJobID)
+    }
+
+    /// The selected job locked (it started exporting): preview playback and the colour panel stop,
+    /// since every edit is refused from here.
+    private func editLockChanged() {
+        guard !canEdit else { return }
+        appearanceSidebar?.closeColorPicker()
+        resumeAfterScrub = false
+        haltPlayer()
+        syncPlaying()
     }
 
     private func queueRunChanged() {
@@ -333,7 +353,9 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             requestClose()
             return nil
         }
-        guard !(window.firstResponder is NSTextView), !(window.firstResponder is InspectorKeyControl),
+        // Space belongs to a focused control (Full Keyboard Access) as well as to text editing.
+        guard !(window.firstResponder is NSTextView), !(window.firstResponder is NSControl),
+              !(window.firstResponder is InspectorKeyControl),
               modifiers.isEmpty, isReady else { return event }
         if let responder = window.firstResponder as? NSView, let inspectorView,
            responder.isDescendant(of: inspectorView) { return event }
@@ -521,7 +543,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                 let pcm = try await lifetime.audio(for: jobID, source: url, as: .selected)
                 let track: AudioTrack
                 if let stored {
-                    track = AudioTrack(url: url, analysis: stored, audio: pcm)
+                    track = try AudioTrack(url: url, analysis: stored, audio: pcm)
                 } else {
                     let worker = Task.detached(priority: .userInitiated) { try AudioTrack.analyse(url, audio: pcm) }
                     track = try await worker.value
@@ -739,7 +761,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             syncPlaying()
         } else if resumeAfterScrub {
             resumeAfterScrub = false
-            if frame < positionCount { togglePlayback() }
+            if canPlay, frame < positionCount { togglePlayback() }
         }
     }
 
@@ -1120,10 +1142,14 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         } else if job.status.canRetry {
             queue.retry(job.id)
         }
+        let fullRunActive = queue.isRunning
         prepareForExport()
         queue.start(only: [job.id])
         if let current = queue.selectedJob, current.status == .pending, queue.isRunning {
-            status = "Exporting " + current.sourceURL.lastPathComponent + "…"
+            // A full run in progress does not take a second scope; the job goes in list order.
+            status = fullRunActive
+                ? current.sourceURL.lastPathComponent + " will export in its turn."
+                : "Exporting " + current.sourceURL.lastPathComponent + "…"
         }
     }
 
@@ -1143,7 +1169,11 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         let id = job.id
         present(panel) { [weak self] urls in
             guard let self, let folder = urls.first else { return }
-            self.queue.update(id) { $0.destinationFolder = folder.path }
+            guard self.queue.update(id, { $0.destinationFolder = folder.path }) else {
+                self.status = "This job is exporting. Its settings are locked."
+                NSSound.beep()
+                return
+            }
             self.exportSelected()
         }
     }
@@ -1171,6 +1201,17 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
            responder.isDescendant(of: inspectorView), let monitorView {
             window.makeFirstResponder(monitorView)
         }
+        endEditing()
+        // The previewed job may become the running one; its preview stops with the lock.
+        resumeAfterScrub = false
+        haltPlayer()
+        syncPlaying()
+    }
+
+    /// Commits any field being edited, on whichever inspector tab is showing, so the job the
+    /// queue copies has the typed value.
+    private func endEditing() {
+        window?.makeFirstResponder(nil)
     }
 
     // MARK: Destination

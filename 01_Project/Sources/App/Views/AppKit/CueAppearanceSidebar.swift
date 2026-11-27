@@ -201,6 +201,13 @@ final class CueAppearanceSidebar: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Shows `appearance` in every control, dropping edits the job refused.
+    func sync(to appearance: CueAppearance) {
+        guard settings != appearance else { return }
+        settings = appearance
+        refresh()
+    }
+
     func closeColorPicker() {
         for well in [elapsedColor, remainingColor, overviewColor, detailColor] where well.isActive {
             well.deactivate()

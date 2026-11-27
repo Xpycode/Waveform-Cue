@@ -73,7 +73,7 @@ struct MXFJobExporter: JobExporting {
         let slateLoudness = loudness
         let stored = job.analysis
         let worker = Task.detached(priority: .userInitiated) { () throws -> URL in
-            let track = try stored.map { AudioTrack(url: job.sourceURL, analysis: $0, audio: pcm) }
+            let track = try stored.map { try AudioTrack(url: job.sourceURL, analysis: $0, audio: pcm) }
                 ?? AudioTrack.analyse(job.sourceURL, audio: pcm)
             let timeline = MXFExport.timeline(for: track, preset: preset, trim: job.trim,
                                               markers: track.markers.applyingEdits(from: job.markers),

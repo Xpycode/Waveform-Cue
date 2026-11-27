@@ -39,7 +39,7 @@ private struct EditorCommands: Commands {
                 .keyboardShortcut("e")
                 .disabled(!model.canExportSelected)
             Button("Export Selected to Folder…") { model.exportSelectedToFolder() }
-                .disabled(!model.canExportSelected)
+                .disabled(!model.canExportSelectedToFolder)
             Divider()
             Button("Start Queue") { model.startQueue() }
                 .keyboardShortcut(.return, modifiers: .command)
