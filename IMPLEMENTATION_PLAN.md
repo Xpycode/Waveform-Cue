@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 17/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 18/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -296,20 +296,21 @@ Dependency graph (no cycles):
   - Backpressure: `xcodebuild … build`, Atlas pass.
   - Evidence (2026-11-27): Atlas pass: Safe zones EVS OSD and Custom, Show guides, Countdown to Music end (Remaining 00:07:23 instead of 00:10:00 on a 10 s tone with a tail), steppers 0–30; Custom top 30 + bottom 30 shows "Safe zones leave too little room" and disables Export Selected (coordinator applied the `canExportSelected` rule); top 10 % draws hatched guides and re-lays out the picture; settings per job and kept across relaunch; an export with Custom 10/30 keeps the bottom 30 % empty. Clock position Above was set in tests only (key presses went to the queue list). Start Queue does not yet skip a job whose layout does not fit (captured for 4.1).
 
-- [ ] **4.3**: Trim, fades and pre-roll through the timeline (spec E engine)
+- [x] **4.3**: Trim, fades and pre-roll through the timeline (spec E engine)
   - Depends on: 1.3, 3.1, 3.2
   - Owns: `CuePicture.swift` (slate drawing, trimmed overview), `MonitorView.swift` (in and out handles), `MXFExport.swift` (audio chain and pre-roll timecode), `TrimPreRollTests.swift`
   - Detail: preview and export both read the job's `ClipTimeline`. The slate shows title, music duration, loudness and "Starts in" over silent audio. Elapsed starts at zero on the first music frame. The embedded timecode puts the music start at the job's start timecode. Fades apply to audio only. Single-task ownership of three shared files is the reason this runs beside the UI tasks rather than beside 3.1 or 3.2.
   - Interface: `MonitorView.onTrimChanged`; `EditorModel` playback confined to the trimmed range (owned here only where it lives in `CueCore`; app wiring is 5.1).
   - Success: integration tests: clip length equals pre-roll plus trimmed range, rounded up to a whole frame; the first music frame's timecode equals the start timecode; audio is silent during the slate and the fade envelopes measure correctly; a track shorter than the pre-roll or the warning interval exports without a crash.
   - Backpressure: `FFMPEG_EXECUTABLE=… swift test --package-path Packages/CueCore --filter 'TrimPreRollTests|BaselineTests'`
+  - Evidence (2026-11-27): 12 `TrimPreRollTests`; 20 baseline hashes unchanged; full suite with FFmpeg 227 tests, 0 failures, 3 skips (two benchmarks, slate-PNG writer). Exports at 1080i50 and 1080p50 (in 1.0, out 4.52, fades 0.5/1, pre-roll 2, start 10:00:00:00): lengths equal pre-roll + trimmed range rounded up; file TC 09:59:58:00 so music starts at 10:00:00:00; silent slate and padding; fade envelopes within 0.015 of linear; decoded slate and first music frame match the preview (mean 0.08–0.09). A 0.6 s track with 3 s pre-roll and 10 s warning exports without a crash. Slate reviewed by the coordinator (title, "Starts in", countdown, music duration, loudness line). Trim handles are monitor-only and inactive until `onTrimChanged` is set.
 
 ### Wave 5 (single task — it edits the Job tab that 4.1 creates and consumes 4.3's engine)
 
 - [ ] **5.1**: Trim, fade and pre-roll controls and keys
   - Depends on / external gates: 4.1, 4.3; **U1**
   - Owns: `JobInspector.swift`, `EditorModel.swift`, key handling in `MainWindow.swift`
-  - Detail: In and Out fields, fade pop-ups (0, 0.5, 1, 2, 5 s), pre-roll pop-up (Off, 2, 3, 5, 10 s); I and O keys at the playhead; playback and scrubbing confined to the trimmed range; starting a job with under one second of trim is blocked with "Trim range too short".
+  - Detail: wiring left by 4.3: `MonitorRepresentable` passes `trim` and `loudness` (set after `track`) and sets `onTrimChanged`; with a trim or pre-roll, `MonitorView.frameNumber`/`onSeek` are 25 fps timeline positions (slate first), so `EditorModel` maps them with `CuePicture.timeline(for:appearance:markers:trim:)`, `position(at:)` and `position(ofClockFrame:)`; `MXFJobExporter` passes `loudness: job.loudness` into `MXFExport.Snapshot` so the slate shows it. In and Out fields, fade pop-ups (0, 0.5, 1, 2, 5 s), pre-roll pop-up (Off, 2, 3, 5, 10 s); I and O keys at the playhead; playback and scrubbing confined to the trimmed range; starting a job with under one second of trim is blocked with "Trim range too short".
   - Success: Atlas pass: set in and out by key and by drag, export, and the file covers only that range with the slate first.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
 
