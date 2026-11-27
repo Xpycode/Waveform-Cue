@@ -96,11 +96,21 @@ public final class QueueManager {
 
     /// Why a job cannot be exported as it is set up, or `nil` when it can. Start Queue fails such
     /// a job with this reason instead of exporting it, and the app disables Export Selected.
-    /// Checked: the appearance's layout fits, and the start timecode is HH:MM:SS:FF at 25 fps.
+    /// Checked: the appearance's layout fits, the start timecode is HH:MM:SS:FF at 25 fps, and a
+    /// trim leaves at least one second ("Trim range too short"). The trim is checked against the
+    /// source duration when it is known, otherwise against the in and out points alone.
     public nonisolated static func blockingReason(for job: CueJob) -> String? {
         if !job.appearance.layout.fits { return tooLittleRoom }
         if Timecode(job.startTimecode) == nil {
             return "Start timecode “\(job.startTimecode)” is not HH:MM:SS:FF at 25 fps."
+        }
+        if let seconds = job.analysis?.seconds ?? job.peaks?.seconds, seconds > 0 {
+            if (try? ClipTimeline(duration: seconds, trim: job.trim).validate()) == nil {
+                return ClipTimeline.trimTooShortMessage
+            }
+        } else if let start = job.trim.inPoint, let end = job.trim.outPoint,
+                  end - start < ClipTimeline.minimumTrimSeconds - 1e-8 {
+            return ClipTimeline.trimTooShortMessage
         }
         return nil
     }

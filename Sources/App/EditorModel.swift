@@ -36,6 +36,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     private(set) var trackID: UUID?
     private(set) var label = CueLabel()
     private(set) var appearance = CueAppearance.load()
+    /// The playhead: a position of `previewTimeline` (see Playback).
     private(set) var frame = 0
     private(set) var isPlaying = false
     private(set) var positionIndex = 0
@@ -50,6 +51,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     private(set) var loudnessFailures: [UUID: String] = [:]
     /// A marker time typed in the Job tab that could not be read.
     private(set) var markerMessage: String?
+    /// An in or out time typed in the Job tab that could not be read.
+    private(set) var trimMessage: String?
 
     /// The queue is exporting (Start Queue or Export Selected).
     var isExporting: Bool { queue.isRunning }
@@ -81,8 +84,9 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     var canStartQueue: Bool { !queue.isRunning && queue.jobs.contains { $0.status == .pending } }
     var canExportSelected: Bool {
         guard let job = selectedJob, !job.status.isActive else { return false }
-        // "Safe zones leave too little room" (task 4.2) or an invalid start timecode (4.1)
-        // disables export for that job; Start Queue fails such a job with the same reason.
+        // "Safe zones leave too little room" (task 4.2), an invalid start timecode (4.1) or
+        // "Trim range too short" (5.1) disables export for that job; Start Queue fails such a
+        // job with the same reason.
         guard QueueManager.blockingReason(for: job) == nil else { return false }
         if queue.isRunning && queue.isStopping { return false }
         switch job.status {
@@ -114,6 +118,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// A track decoded while adding, kept so selecting that job needs no second decode.
     @ObservationIgnored private var ingestedTrack: (job: UUID, track: AudioTrack)?
     @ObservationIgnored private var resumeAfterScrub = false
+    /// Playing from the slate: the player's device time at which the music starts.
+    @ObservationIgnored private var slateStart: TimeInterval?
     @ObservationIgnored private var keyMonitor: Any?
     @ObservationIgnored private var closeObserver: NSObjectProtocol?
     @ObservationIgnored private var wasRunning = false
@@ -328,9 +334,16 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             return nil
         }
         guard !(window.firstResponder is NSTextView), !(window.firstResponder is InspectorKeyControl),
-              modifiers.isEmpty, canPlay else { return event }
+              modifiers.isEmpty, isReady else { return event }
         if let responder = window.firstResponder as? NSView, let inspectorView,
            responder.isDescendant(of: inspectorView) { return event }
+        // I and O set the in and out points at the playhead (they need only the waveform).
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "i": setTrimPointAtPlayhead(.inPoint); return nil
+        case "o": setTrimPointAtPlayhead(.outPoint); return nil
+        default: break
+        }
+        guard canPlay else { return event }
         switch event.keyCode {
         case 49: togglePlayback()
         case 123: step(-1)
@@ -465,6 +478,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         positionIndex = Self.positionIndex(for: job.label.position)
         appearance = job.appearance
         markerMessage = nil
+        trimMessage = nil
         statusHelp = nil
         let url = job.sourceURL
         if let cached = ingestedTrack, cached.job == job.id {
@@ -557,6 +571,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     private func dropPlayer() {
         stopTimer()
+        slateStart = nil
         player?.stop()
         player = nil
         hasAudio = false
@@ -576,6 +591,11 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             self.track = track
             trackID = UUID()
             hasAudio = true
+            // The playhead (the slate, or the in point) and the player agree from the start.
+            if let timeline = previewTimeline {
+                frame = min(frame, timeline.positionCount)
+                audio.currentTime = min(audio.duration, timeline.sourceSeconds(at: frame))
+            }
             if !queue.isRunning, pendingAdds == 0 {
                 status = "Click the waveform to cue. Drag the text to position it."
             }
@@ -605,65 +625,121 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     // MARK: Playback
+    //
+    // `frame` is a position of `previewTimeline` (25 per second): with a pre-roll the slate
+    // comes first, then the trimmed music; `positionCount` is the end. Without trim or pre-roll
+    // the positions are the track's frames, as in build 10. The player plays the source, so
+    // positions map to source time through the timeline. Playing from the slate counts it down
+    // in silence (the player starts at the in point when it ends); playback stops at the out
+    // point, and scrubbing and seeking never leave the trimmed range.
 
-    private func syncPlaying() { isPlaying = player?.isPlaying == true }
+    /// The player is playing, or waiting out the slate before it starts at the in point.
+    private var playerActive: Bool { player?.isPlaying == true || slateStart != nil }
+    private func syncPlaying() { isPlaying = playerActive }
     private func stopTimer() { timer?.invalidate(); timer = nil }
 
+    /// Stops the player and a pending slate start; keeps the position.
+    private func haltPlayer() {
+        player?.pause()
+        slateStart = nil
+        stopTimer()
+    }
+
     func togglePlayback() {
-        guard let player, let track else { return }
-        if player.isPlaying { player.pause(); stopTimer() }
+        guard let player, let timeline = previewTimeline else { return }
+        if playerActive { haltPlayer() }
         else {
-            if frame >= track.frames { seek(frame: 0) }
-            if player.play() {
-                stopTimer()
-                let timer = Timer(timeInterval: 1.0/30, target: self, selector: #selector(tick),
-                                  userInfo: nil, repeats: true)
-                RunLoop.main.add(timer, forMode: .common)
-                self.timer = timer
-            } else { status = "Audio playback could not start." }
+            if frame >= timeline.positionCount { seek(frame: 0) }
+            if startPlayer(player, timeline: timeline) { startTimer() }
+            else { status = "Audio playback could not start." }
         }
         syncPlaying()
     }
 
+    private func startTimer() {
+        stopTimer()
+        let timer = Timer(timeInterval: 1.0/30, target: self, selector: #selector(tick),
+                          userInfo: nil, repeats: true)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    /// Starts the source audio for the current position: at once in the music, or at the in
+    /// point once the rest of the slate has passed.
+    private func startPlayer(_ player: AVAudioPlayer, timeline: ClipTimeline) -> Bool {
+        player.currentTime = min(player.duration, timeline.sourceSeconds(at: frame))
+        let slateLeft = timeline.preRollPositions - frame
+        guard slateLeft > 0 else { return player.play() }
+        let start = player.deviceCurrentTime + Double(slateLeft) / Double(timeline.positionRate)
+        guard player.play(atTime: start) else { return false }
+        slateStart = start
+        return true
+    }
+
     @objc private func tick() {
-        guard let player, let track else { return }
-        frame = min(track.frames, max(0, Int(player.currentTime * Double(AudioTrack.fps))))
+        guard let player, let timeline = previewTimeline else { return }
+        if let start = slateStart {
+            let wait = start - player.deviceCurrentTime
+            if wait > 0 {
+                let left = Int(ceil(wait * Double(timeline.positionRate)))
+                frame = max(0, timeline.preRollPositions - left)
+                return
+            }
+            slateStart = nil
+        }
+        let seconds = player.currentTime
+        if timeline.sourceRange.upperBound < timeline.duration,
+           seconds >= timeline.sourceRange.upperBound {
+            // The out point: stop there, as the file ends there.
+            haltPlayer()
+            frame = timeline.positionCount
+            syncPlaying()
+            return
+        }
+        frame = timeline.position(ofSourceSeconds: seconds)
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        guard player === self.player, let track else { return }
+        guard player === self.player else { return }
         stopTimer()
-        frame = track.frames
+        slateStart = nil
+        frame = positionCount
         if !flag { status = "Audio playback ended with a decoder error." }
         syncPlaying()
     }
 
+    /// Moves the playhead to a timeline position (monitor scrub, the seek slider, frame steps),
+    /// clamped to the slate and the trimmed music. Playing continues from there.
     func seek(frame target: Int) {
-        guard let track, let player else { return }
-        let f = min(track.frames, max(0, target))
-        if f == track.frames { player.pause(); stopTimer() }
-        player.currentTime = min(player.duration, Double(f) / Double(AudioTrack.fps))
+        guard let player, let timeline = previewTimeline else { return }
+        let f = min(timeline.positionCount, max(0, target))
+        let wasActive = playerActive
+        let slateInvolved = slateStart != nil || timeline.isSlate(f)
+        if f == timeline.positionCount || (wasActive && slateInvolved) { haltPlayer() }
         frame = f
+        player.currentTime = min(player.duration, timeline.sourceSeconds(at: f))
+        // A seek into or out of the slate while playing restarts the player at the new place.
+        if wasActive, slateInvolved, f < timeline.positionCount, startPlayer(player, timeline: timeline) {
+            startTimer()
+        }
         syncPlaying()
     }
 
     func step(_ count: Int) {
-        player?.pause()
-        stopTimer()
+        haltPlayer()
         seek(frame: frame + count)
     }
 
     /// Pauses for the length of a monitor scrub and resumes afterwards if it was playing.
     func scrubChanged(began: Bool) {
-        guard let track else { return }
+        guard track != nil else { return }
         if began {
-            resumeAfterScrub = player?.isPlaying == true
-            player?.pause()
-            stopTimer()
+            resumeAfterScrub = playerActive
+            haltPlayer()
             syncPlaying()
         } else if resumeAfterScrub {
             resumeAfterScrub = false
-            if frame < track.frames { togglePlayback() }
+            if frame < positionCount { togglePlayback() }
         }
     }
 
@@ -824,6 +900,112 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     func resetMarkers() {
         markerMessage = nil
         editSelected { $0.markers.resetToDetected() }
+    }
+
+    // MARK: Trim, fades and pre-roll (Job tab, I and O keys, monitor handles)
+
+    /// The selected job's trim, fades and pre-roll.
+    var selectedTrim: TrimSettings { selectedJob?.trim ?? .none }
+
+    /// The 25 fps timeline the monitor shows for the selected job: its trim and pre-roll, its
+    /// markers and the countdown target. `frame` and the monitor's positions are on it.
+    var previewTimeline: ClipTimeline? {
+        guard let track else { return nil }
+        return CuePicture.timeline(for: track, appearance: appearance, markers: selectedMarkers, trim: selectedTrim)
+    }
+
+    /// The end position of the preview timeline (slate plus trimmed music); the slider's range.
+    var positionCount: Int { previewTimeline?.positionCount ?? 0 }
+
+    /// The trim leaves under one second: the inline message; the job can't be exported.
+    var trimProblem: String? {
+        guard let job = selectedJob, QueueManager.blockingReason(for: job) == ClipTimeline.trimTooShortMessage
+        else { return nil }
+        return ClipTimeline.trimTooShortMessage + ". Leave at least one second between In and Out; this job can’t be exported until then."
+    }
+
+    /// The trimmed music's length and the clip's, for the note under the Trim section.
+    var trimSummary: String? {
+        guard let job = selectedJob, let duration = selectedDuration, duration > 0 else { return nil }
+        let timeline = ClipTimeline(duration: duration, trim: job.trim)
+        var line = "Music " + MarkerTime.format(timeline.musicDuration)
+        if timeline.isTrimmed { line += " of " + MarkerTime.format(duration) }
+        if timeline.preRollFrames > 0 {
+            line += " · clip " + MarkerTime.format(Double(timeline.preRollFrames) / Double(timeline.frameRate)
+                                                   + timeline.musicDuration) + " with the slate"
+        }
+        return line
+    }
+
+    /// I or O: the point goes to the source time under the playhead (the in point on the slate).
+    func setTrimPointAtPlayhead(_ edge: TrimEdge) {
+        guard canEdit, let job = selectedJob, let duration = selectedDuration, let timeline = previewTimeline
+        else { NSSound.beep(); return }
+        let seconds = timeline.sourceSeconds(at: frame)
+        trimMessage = nil
+        setTrim(edge == .inPoint ? job.trim.settingIn(seconds, duration: duration)
+                                 : job.trim.settingOut(seconds, duration: duration))
+        status = (edge == .inPoint ? "In" : "Out") + " set at " + MarkerTime.format(seconds) + "."
+        statusHelp = nil
+    }
+
+    /// An In or Out time typed in the Job tab (seconds or M:SS.ff); empty clears that point.
+    func commitTrimPoint(_ edge: TrimEdge, text: String) {
+        guard let job = selectedJob, let duration = selectedDuration else { return }
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        let current = edge == .inPoint ? job.trim.inPoint : job.trim.outPoint
+        // Leaving the field without changing it changes nothing.
+        if typed == (current.map(MarkerTime.format) ?? "") { trimMessage = nil; return }
+        var seconds: Double?
+        if !typed.isEmpty {
+            guard let value = MarkerTime.parse(typed) else {
+                trimMessage = "“\(text)” is not a time. Type seconds (83.5) or M:SS.ff (1:23.50); leave it empty for the "
+                    + (edge == .inPoint ? "start." : "end.")
+                return
+            }
+            seconds = value
+        }
+        trimMessage = nil
+        setTrim(edge == .inPoint ? job.trim.settingIn(seconds, duration: duration)
+                                 : job.trim.settingOut(seconds, duration: duration))
+    }
+
+    func selectFade(_ edge: TrimEdge, seconds: Double) {
+        guard let job = selectedJob else { return }
+        var trim = job.trim
+        if edge == .inPoint { trim.fadeIn = seconds } else { trim.fadeOut = seconds }
+        setTrim(trim)
+    }
+
+    func selectPreRoll(_ seconds: Double) {
+        guard let job = selectedJob else { return }
+        var trim = job.trim
+        trim.preRoll = seconds
+        setTrim(trim)
+    }
+
+    /// Stores the selected job's trim (fields, keys, pop-ups, and every monitor handle drag step)
+    /// and keeps the playhead on the same source time, inside the new range; on the slate it
+    /// stays on the slate while there is one.
+    func setTrim(_ trim: TrimSettings, deferringSave: Bool = false) {
+        guard canEdit, let job = selectedJob, job.trim != trim else { return }
+        let old = previewTimeline
+        let onSlate = old?.isSlate(frame) ?? false
+        let seconds = old?.sourceSeconds(at: frame)
+        editSelected(deferringSave: deferringSave) { $0.trim = trim }
+        guard let new = previewTimeline else {
+            frame = 0
+            return
+        }
+        let target: Int
+        if onSlate, new.preRollPositions > 0 {
+            target = min(frame, new.preRollPositions - 1)
+        } else if let seconds {
+            target = new.position(ofSourceSeconds: seconds)
+        } else {
+            target = 0
+        }
+        if hasAudio { seek(frame: target) } else { frame = min(new.positionCount, max(0, target)) }
     }
 
     /// Apply to All: the selected job's appearance and preset go to every Pending job.

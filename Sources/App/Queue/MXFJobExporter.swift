@@ -62,10 +62,15 @@ struct MXFJobExporter: JobExporting {
         let encoder = self.encoder
         // Normalise is on but the background pass has not measured this job yet: measure the
         // decoded audio the export reads, so the gain is never silently skipped.
+        // The slate shows the job's measurement, or the one taken here.
+        var loudness = job.loudness
         if job.normalise, job.loudness == nil {
-            gainDB = Loudness.normalisation(for: try await LoudnessAnalyzer.measure(pcm.url, encoder: encoder)).gainDB
+            let measured = try await LoudnessAnalyzer.measure(pcm.url, encoder: encoder)
+            loudness = measured
+            gainDB = Loudness.normalisation(for: measured).gainDB
         }
         let finalGain = gainDB
+        let slateLoudness = loudness
         let stored = job.analysis
         let worker = Task.detached(priority: .userInitiated) { () throws -> URL in
             let track = try stored.map { AudioTrack(url: job.sourceURL, analysis: $0, audio: pcm) }
@@ -75,7 +80,8 @@ struct MXFJobExporter: JobExporting {
                                               target: appearance.countdownTarget)
             try timeline.validate()
             let snapshot = MXFExport.Snapshot(track: track, label: job.label, appearance: appearance,
-                                              layout: job.layout, startTimecode: start, gainDB: finalGain)
+                                              layout: job.layout, startTimecode: start, gainDB: finalGain,
+                                              loudness: slateLoudness)
             try MXFExport.run(snapshot: snapshot, preset: preset, timeline: timeline, encoder: encoder,
                               destination: destination, progress: progress)
             return destination

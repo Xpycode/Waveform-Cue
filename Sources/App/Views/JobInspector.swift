@@ -4,7 +4,8 @@ import CueCore
 import SwiftUI
 
 /// The inspector's Job tab (gate U1): Export (preset, audio tracks, start timecode, filename),
-/// Markers (music end, fade start, Reset), Loudness (I / TP / LRA, Normalise) and Apply to All.
+/// Markers (music end, fade start, Reset), Loudness (I / TP / LRA, Normalise), Trim (in, out,
+/// fades, pre-roll) and Apply to All.
 /// Every control is an AppKit wrapper; edits go to the selected job through `EditorModel`.
 /// The running job's tab is dimmed and disabled (its settings are locked).
 struct JobInspector: View {
@@ -43,6 +44,7 @@ struct JobInspector: View {
             exportSection(job)
             markersSection(job)
             loudnessSection(job)
+            trimSection(job)
             applyToAllSection
         }
         .disabled(!model.canEdit)
@@ -208,6 +210,82 @@ struct JobInspector: View {
         } else {
             note("The gain is worked out when the loudness has been measured (at export at the latest).")
         }
+    }
+
+    // MARK: Trim
+
+    @ViewBuilder
+    private func trimSection(_ job: CueJob) -> some View {
+        section("Trim")
+            .padding(.top, 11)
+        trimPointRow("In", edge: .inPoint, value: job.trim.inPoint, placeholder: "Start",
+                     toolTip: "Where the clip’s music starts, in source time: seconds (83.5) or M:SS.ff. Empty is the start of the file. I sets it at the playhead.")
+        trimPointRow("Out", edge: .outPoint, value: job.trim.outPoint, placeholder: "End",
+                     toolTip: "Where the clip’s music ends, in source time: seconds (83.5) or M:SS.ff. Empty is the end of the file. O sets it at the playhead.")
+        if let problem = model.trimMessage {
+            message(problem, color: Color(nsColor: .systemRed))
+        }
+        if let problem = model.trimProblem {
+            message(problem, color: Color(nsColor: .systemRed))
+        }
+        row("Fade in") {
+            secondsPopUp(TrimSettings.fadeChoices, selected: job.trim.fadeIn, zero: "None",
+                         accessibilityLabel: "Fade in",
+                         toolTip: "Audio fade-in from the in point. The picture is not faded.") {
+                model.selectFade(.inPoint, seconds: $0)
+            }
+        }
+        row("Fade out") {
+            secondsPopUp(TrimSettings.fadeChoices, selected: job.trim.fadeOut, zero: "None",
+                         accessibilityLabel: "Fade out",
+                         toolTip: "Audio fade-out to the out point. The picture is not faded.") {
+                model.selectFade(.outPoint, seconds: $0)
+            }
+        }
+        row("Pre-roll") {
+            secondsPopUp(TrimSettings.preRollChoices, selected: job.trim.preRoll, zero: "Off",
+                         accessibilityLabel: "Pre-roll",
+                         toolTip: "A slate with the title, music duration, loudness and “Starts in” over silence before the music. The start timecode stays on the first music frame.") {
+                model.selectPreRoll($0)
+            }
+        }
+        if let summary = model.trimSummary {
+            note(summary)
+        }
+        note("Press I or O to set a point at the playhead, or drag the brackets beside the waveform.")
+    }
+
+    private func trimPointRow(_ title: String, edge: TrimEdge, value: Double?, placeholder: String,
+                              toolTip: String) -> some View {
+        row(title) {
+            AppKitTextField(text: value.map(MarkerTime.format) ?? "",
+                            placeholder: placeholder,
+                            accessibilityLabel: title + " point",
+                            toolTip: toolTip,
+                            monospaced: true,
+                            onCommit: { model.commitTrimPoint(edge, text: $0) })
+                .frame(width: 90)
+        }
+    }
+
+    /// A pop-up of second values ("None" or "Off" for 0). A stored value that is not offered
+    /// shows the nearest choice.
+    private func secondsPopUp(_ choices: [Double], selected: Double, zero: String, accessibilityLabel: String,
+                              toolTip: String, onSelect: @escaping (Double) -> Void) -> some View {
+        let nearest = choices.indices.min { abs(choices[$0] - selected) < abs(choices[$1] - selected) } ?? 0
+        return AppKitPopUp(items: choices.map { $0 == 0 ? zero : Self.seconds($0) },
+                           selection: nearest,
+                           accessibilityLabel: accessibilityLabel,
+                           toolTip: toolTip) { index in
+            guard choices.indices.contains(index) else { return }
+            onSelect(choices[index])
+        }
+        .frame(width: 90)
+    }
+
+    /// "0.5 s", "2 s".
+    static func seconds(_ value: Double) -> String {
+        (value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)) + " s"
     }
 
     // MARK: Apply to All
