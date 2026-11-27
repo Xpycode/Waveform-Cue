@@ -74,8 +74,11 @@ public struct ExportPreset: Sendable, Equatable, Hashable, Identifiable {
         switch codec {
         case .mpeg2_50: return colour + ",setsar=1"
         case .avcIntra100:
-            if video.interlaced { return colour + ",format=yuv422p10le,tinterlace=interleave_top,setfield=tff" }
-            return colour + ",format=yuv422p10le"
+            // FFmpeg 8.1 takes the colour description from the frames, not from `-color_primaries`
+            // and `-color_trc`, so without `setparams` the H.264 VUI says "unknown" for both.
+            let tagged = colour + ",setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709"
+            if video.interlaced { return tagged + ",format=yuv422p10le,tinterlace=interleave_top,setfield=tff" }
+            return tagged + ",format=yuv422p10le"
         }
     }
 
