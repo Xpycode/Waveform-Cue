@@ -14,6 +14,7 @@ struct MonitorPane: View {
                                  frame: model.frame,
                                  label: model.label,
                                  appearance: model.appearance,
+                                 markers: model.selectedMarkers,
                                  editingEnabled: model.canEdit,
                                  placeholder: model.placeholder)
             TransportRepresentable(model: model,

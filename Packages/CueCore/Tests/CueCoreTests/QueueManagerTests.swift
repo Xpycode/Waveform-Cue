@@ -301,6 +301,40 @@ final class QueueManagerTests: XCTestCase {
         await manager.waitUntilIdle()
     }
 
+    func testStartQueueFailsJobsThatCannotBeExported() async {
+        let exporter = ControlledExporter()
+        let manager = makeManager(exporter)
+        var cramped = job("Cramped")
+        var appearance = CueAppearance()
+        appearance.safeZones = SafeZones(preset: .custom, custom: .init(top: 30, bottom: 30))
+        cramped.appearance = appearance
+        XCTAssertFalse(cramped.appearance.layout.fits)
+        var badTimecode = job("BadTC")
+        badTimecode.startTimecode = "10:00:00:25"
+        let fine = job("Fine")
+        XCTAssertNil(QueueManager.blockingReason(for: fine))
+        manager.add([cramped, badTimecode, fine])
+        manager.start()
+        await eventually("Fine runs") { exporter.calls.count == 1 }
+        XCTAssertEqual(exporter.calls[0].job.id, fine.id, "only the exportable job reaches the exporter")
+        XCTAssertEqual(status(manager, cramped.id), .failed(reason: QueueManager.tooLittleRoom, log: ""))
+        guard case .failed(let reason, _)? = status(manager, badTimecode.id) else {
+            return XCTFail("an invalid start timecode fails the job")
+        }
+        XCTAssertTrue(reason.contains("10:00:00:25"))
+        exporter.succeed(0)
+        await manager.waitUntilIdle()
+
+        // Fixed and retried, the job exports.
+        manager.update(cramped.id) { $0.appearance = CueAppearance() }
+        XCTAssertTrue(manager.retry(cramped.id))
+        manager.start()
+        await eventually("Cramped runs after the fix") { exporter.calls.count == 2 }
+        XCTAssertEqual(exporter.calls[1].job.id, cramped.id)
+        exporter.succeed(1)
+        await manager.waitUntilIdle()
+    }
+
     func testExportSelectedRunsOnlyThoseJobs() async {
         let exporter = ControlledExporter()
         let manager = makeManager(exporter)

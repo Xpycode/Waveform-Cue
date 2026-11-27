@@ -120,6 +120,20 @@ final class CueJobTests: XCTestCase {
         XCTAssertEqual(job.sourcePath, sampleJob().sourcePath)
     }
 
+    func testNormaliseDefaultsOffAndRoundTrips() throws {
+        XCTAssertFalse(sampleJob().normalise)
+        var dict = try object(sampleJob())
+        XCTAssertEqual(dict["normalise"] as? Bool, false)
+        dict.removeValue(forKey: "normalise")
+        XCTAssertFalse(try decode(dict).normalise, "a job saved before Normalise existed decodes with it off")
+        dict["normalise"] = "yes"
+        XCTAssertFalse(try decode(dict).normalise, "a malformed value falls back to off")
+        var job = sampleJob()
+        job.normalise = true
+        XCTAssertTrue(try roundTrip(job).normalise)
+        XCTAssertEqual(try roundTrip(job), job)
+    }
+
     func testUnknownStateBecomesPending() throws {
         var dict = try object(sampleJob())
         dict["status"] = ["state": "teleported"]

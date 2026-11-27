@@ -14,10 +14,12 @@ enum QueueSupport {
     /// The queue, saved in `storageDirectory`, holding a power assertion while it exports.
     ///
     /// `MXFJobExporter` decodes through `JobAudioLifetime.exportAudio(for:source:)`, so the
-    /// running job's CAF lives in the same capped workspace as the selected job's.
+    /// running job's CAF lives in the same capped workspace as the selected job's. Its gain is
+    /// the job's Normalise to -23 LUFS setting applied to its stored loudness.
     @MainActor
     static func makeManager(audio: JobAudioLifetime) -> QueueManager {
-        let manager = QueueManager(storageDirectory: storageDirectory, exporter: MXFJobExporter(audio: audio),
+        let exporter = MXFJobExporter(audio: audio, gain: { MXFJobExporter.normalisationGain(for: $0) })
+        let manager = QueueManager(storageDirectory: storageDirectory, exporter: exporter,
                                    sleep: SleepAssertion())
         manager.outputNamer = outputName
         return manager

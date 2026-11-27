@@ -11,6 +11,8 @@ struct MonitorRepresentable: NSViewRepresentable {
     let frame: Int
     let label: CueLabel
     let appearance: CueAppearance
+    /// The selected job's markers (detection plus edits); set after `track`, which clears them.
+    let markers: MusicMarkers?
     let editingEnabled: Bool
     let placeholder: String
 
@@ -30,6 +32,7 @@ struct MonitorRepresentable: NSViewRepresentable {
             coordinator.appliedTrackID = trackID
             view.track = track
         }
+        if view.markers != markers { view.markers = markers }
         view.cueAppearance = appearance
         view.label = label
         view.frameNumber = frame
@@ -50,6 +53,11 @@ struct MonitorRepresentable: NSViewRepresentable {
             view.onSeek = { [weak model] frame in model?.seek(frame: frame) }
             view.onScrubChanged = { [weak model] began in model?.scrubChanged(began: began) }
             view.onPlace = { [weak model] point in model?.placeLabel(at: point) }
+            // Each drag step is stored as the job's marker edit (saved once the drag settles);
+            // the model keeps fade start at or before music end and the view shows its value.
+            view.onMarkerChanged = { [weak model] kind, seconds in
+                model?.setMarker(kind, to: seconds, deferringSave: true)
+            }
         }
     }
 }

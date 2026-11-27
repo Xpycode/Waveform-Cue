@@ -44,6 +44,12 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     private(set) var statusHelp: String?
     /// Files still waiting to be read and added, including the one being read.
     private(set) var pendingAdds = 0
+    /// The job whose loudness is being measured in the background, if any.
+    private(set) var measuringJobID: UUID?
+    /// Why a job's loudness pass failed (shown in the Job tab until it is measured again).
+    private(set) var loudnessFailures: [UUID: String] = [:]
+    /// A marker time typed in the Job tab that could not be read.
+    private(set) var markerMessage: String?
 
     /// The queue is exporting (Start Queue or Export Selected).
     var isExporting: Bool { queue.isRunning }
@@ -75,8 +81,9 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     var canStartQueue: Bool { !queue.isRunning && queue.jobs.contains { $0.status == .pending } }
     var canExportSelected: Bool {
         guard let job = selectedJob, !job.status.isActive else { return false }
-        // "Safe zones leave too little room" (task 4.2) disables export for that job.
-        guard job.appearance.layout.fits else { return false }
+        // "Safe zones leave too little room" (task 4.2) or an invalid start timecode (4.1)
+        // disables export for that job; Start Queue fails such a job with the same reason.
+        guard QueueManager.blockingReason(for: job) == nil else { return false }
         if queue.isRunning && queue.isStopping { return false }
         switch job.status {
         case .pending, .failed, .cancelled: return true
@@ -115,6 +122,10 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// Unwritable folders already offered to the operator (standardised paths).
     @ObservationIgnored private var promptedFolders: Set<String> = []
     @ObservationIgnored private var isPromptingFolder = false
+    @ObservationIgnored private var loudnessTask: Task<Void, Never>?
+    @ObservationIgnored private var loudnessToken = UUID()
+    /// Jobs whose loudness pass has run (or failed) this session, so each is measured once.
+    @ObservationIgnored private var loudnessAttempted: Set<UUID> = []
     @ObservationIgnored private(set) weak var window: NSWindow?
     /// Registered by the AppKit wrappers so the key monitor can manage focus.
     @ObservationIgnored weak var monitorView: NSView?
@@ -145,6 +156,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         observeQueueRun()
         observe({ [weak self] in self?.queue.currentJobID }) { [weak self] in self?.currentJobChanged() }
         observe({ [weak self] in self?.queue.unwritableFolders }) { [weak self] in self?.unwritableFoldersChanged() }
+        scheduleLoudness()
     }
 
     // MARK: Window and app lifecycle
@@ -208,6 +220,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         let failed = jobs.filter { if case .failed = $0.status { return true }; return false }.count
         status = "Queue finished. \(done) done" + (failed > 0 ? ", \(failed) failed." : ".")
         statusHelp = nil
+        // A job that was running when its loudness pass wanted to store a result is measured now.
+        scheduleLoudness()
     }
 
     func open(fromFinder urls: [URL]) {
@@ -289,6 +303,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         queue.flushPendingSave()
         loadTask?.cancel()
         ingestTask?.cancel()
+        loudnessTask?.cancel()
         ingestedTrack = nil
         stopTimer()
         player?.stop()
@@ -312,7 +327,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             requestClose()
             return nil
         }
-        guard !(window.firstResponder is NSTextView), modifiers.isEmpty, canPlay else { return event }
+        guard !(window.firstResponder is NSTextView), !(window.firstResponder is InspectorKeyControl),
+              modifiers.isEmpty, canPlay else { return event }
         if let responder = window.firstResponder as? NSView, let inspectorView,
            responder.isDescendant(of: inspectorView) { return event }
         switch event.keyCode {
@@ -388,6 +404,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                                  peaks: PeaksSummary(seconds: track.seconds, overview: track.peaks),
                                  analysis: track.analysis)
                 queue.add(job)
+                scheduleLoudness()
                 added += 1
                 if queue.selectedJobID == nil {
                     ingestedTrack = (job.id, track)
@@ -447,6 +464,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         label = job.label
         positionIndex = Self.positionIndex(for: job.label.position)
         appearance = job.appearance
+        markerMessage = nil
         statusHelp = nil
         let url = job.sourceURL
         if let cached = ingestedTrack, cached.job == job.id {
@@ -573,6 +591,8 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         let wasSelected = selectedJobID.map(ids.contains) ?? false
         let removed = queue.remove(ids)
         if removed.count < ids.count { status = "The running job can’t be removed. Cancel it first." }
+        if let measuring = measuringJobID, removed.contains(measuring) { restartLoudness() }
+        for id in removed { loudnessFailures[id] = nil }
         if wasSelected, queue.selectedJobID == nil { selectJob(nil, force: true) }
     }
 
@@ -694,6 +714,200 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
+    // MARK: Job settings (Job tab, selected job only)
+
+    /// The selected job's detected markers (from its analysis), or `nil` before analysis.
+    var detectedMarkers: MusicMarkers? { selectedJob?.analysis?.markers ?? track?.markers }
+
+    /// The markers in force for the selected job: the detection with its edits on top.
+    var selectedMarkers: MusicMarkers? {
+        guard let job = selectedJob, let detected = detectedMarkers else { return nil }
+        return detected.applyingEdits(from: job.markers)
+    }
+
+    /// The selected job's source duration in seconds, when known.
+    private var selectedDuration: Double? {
+        selectedJob?.analysis?.seconds ?? selectedJob?.peaks?.seconds ?? track?.seconds
+    }
+
+    /// The start timecode cannot be read: the inline message under the field.
+    var timecodeProblem: String? {
+        guard let job = selectedJob, Timecode(job.startTimecode) == nil else { return nil }
+        return "Use HH:MM:SS:FF at 25 fps (frames 00–24). This job can’t be exported until it is fixed."
+    }
+
+    /// The output file name the template gives now. A clash with an existing file adds " 2",
+    /// " 3"… when the job runs; a finished job shows the file it wrote.
+    var resolvedFilename: String? {
+        guard let job = selectedJob else { return nil }
+        if case .done(let output) = job.status { return output.lastPathComponent }
+        let preset = ExportPreset.preset(for: job.presetID) ?? .default
+        return FilenameTemplate.expand(job.filenameTemplate, name: job.sourceName, preset: preset.name) + ".mxf"
+    }
+
+    /// Other Pending jobs that Apply to All would change.
+    var applyToAllCount: Int {
+        guard let id = selectedJobID else { return 0 }
+        return queue.jobs.filter { $0.id != id && $0.status == .pending }.count
+    }
+
+    func selectPreset(_ preset: ExportPreset) {
+        editSelected { $0.presetID = preset.id }
+    }
+
+    func selectAudioLayout(_ layout: AudioLayout) {
+        editSelected { $0.layout = layout }
+    }
+
+    /// Stored as typed, so an invalid value is kept, shown with its message and blocks export.
+    func setStartTimecode(_ text: String) {
+        editSelected(deferringSave: true) { $0.startTimecode = text }
+    }
+
+    /// A valid timecode is written back in its canonical form (`1:2:3:4` → `01:02:03:04`).
+    func commitStartTimecode(_ text: String) {
+        let value = Timecode(text)?.formatted ?? text
+        editSelected { $0.startTimecode = value }
+    }
+
+    func setFilenameTemplate(_ text: String) {
+        editSelected(deferringSave: true) { $0.filenameTemplate = text }
+    }
+
+    /// An empty template returns to the default when editing ends.
+    func commitFilenameTemplate(_ text: String) {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? CueJob.defaultFilenameTemplate : text
+        editSelected { $0.filenameTemplate = value }
+    }
+
+    func setNormalise(_ on: Bool) {
+        editSelected { $0.normalise = on }
+    }
+
+    /// A marker time typed in the Job tab (seconds or M:SS.ff).
+    func commitMarker(_ kind: MarkerKind, text: String) {
+        // Leaving the field without changing it must not turn the detected value into an edit.
+        if let current = selectedMarkers?.value(kind),
+           MarkerTime.format(current) == text.trimmingCharacters(in: .whitespaces) {
+            markerMessage = nil
+            return
+        }
+        guard let seconds = MarkerTime.parse(text) else {
+            markerMessage = "“\(text)” is not a time. Type seconds (83.5) or M:SS.ff (1:23.50)."
+            return
+        }
+        markerMessage = nil
+        setMarker(kind, to: seconds)
+    }
+
+    /// A marker dragged in the monitor (every drag step) or typed. The value is kept inside the
+    /// track and fade start never passes music end: a fade start dragged past the end stops at
+    /// it, and a music end dragged before the fade start takes the fade start with it.
+    func setMarker(_ kind: MarkerKind, to seconds: Double, deferringSave: Bool = false) {
+        guard canEdit, let job = selectedJob, let detected = detectedMarkers, !detected.noMusic else { return }
+        var value = max(0, seconds.isFinite ? seconds : 0)
+        if let duration = selectedDuration, duration > 0 { value = min(value, duration) }
+        var merged = detected.applyingEdits(from: job.markers)
+        merged.setEdited(kind, to: value)
+        if kind == .fadeStart, let end = merged.musicEnd, value > end {
+            merged.setEdited(.fadeStart, to: end)
+        } else if kind == .musicEnd, let fade = merged.fadeStart, fade > value {
+            merged.setEdited(.fadeStart, to: value)
+        }
+        editSelected(deferringSave: deferringSave) {
+            $0.markers.editedMusicEnd = merged.editedMusicEnd
+            $0.markers.editedFadeStart = merged.editedFadeStart
+        }
+    }
+
+    /// Reset: both markers return to the detected values.
+    func resetMarkers() {
+        markerMessage = nil
+        editSelected { $0.markers.resetToDetected() }
+    }
+
+    /// Apply to All: the selected job's appearance and preset go to every Pending job.
+    func applyToAll() {
+        guard let id = selectedJobID else { NSSound.beep(); return }
+        let pending = applyToAllCount
+        let changed = queue.applyToAll(from: id)
+        if pending == 0 {
+            status = "No other Pending jobs. Apply to All never changes Done, Failed, Cancelled or running jobs."
+        } else {
+            status = "Applied this job’s appearance and preset to \(pending) Pending job\(pending == 1 ? "" : "s")"
+                + (changed < pending ? " (\(pending - changed) already matched)." : ".")
+        }
+        statusHelp = nil
+    }
+
+    private func editSelected(deferringSave: Bool = false, _ change: (inout CueJob) -> Void) {
+        guard let id = selectedJobID else { return }
+        if !queue.update(id, deferringSave: deferringSave, change) {
+            status = "This job is exporting. Its settings are locked."
+        }
+    }
+
+    // MARK: Loudness (background)
+
+    /// Measures, one at a time, every job that has no loudness yet: added, restored, or left
+    /// over from a pass that could not store its result while the job was running.
+    private func scheduleLoudness() {
+        guard loudnessTask == nil, nextLoudnessJob() != nil else { return }
+        let token = UUID()
+        loudnessToken = token
+        loudnessTask = Task { [weak self] in await self?.drainLoudness(token: token) }
+    }
+
+    /// Cancels the pass in flight (its job was removed) and carries on with the next job.
+    private func restartLoudness() {
+        loudnessTask?.cancel()
+        loudnessTask = nil
+        measuringJobID = nil
+        scheduleLoudness()
+    }
+
+    /// Measure Again, after a failed pass.
+    func measureLoudnessAgain() {
+        guard let id = selectedJobID else { return }
+        loudnessFailures[id] = nil
+        loudnessAttempted.remove(id)
+        scheduleLoudness()
+    }
+
+    private func nextLoudnessJob() -> CueJob? {
+        queue.jobs.first { job in
+            guard job.loudness == nil, !loudnessAttempted.contains(job.id), !job.status.isActive else { return false }
+            if case .done = job.status { return false }
+            if case .failed(let reason, _) = job.status, reason == QueueManager.sourceNotFound { return false }
+            return FileManager.default.fileExists(atPath: job.sourcePath)
+        }
+    }
+
+    /// The pass reads the source file. Its integrated loudness and range match the decoded CAF
+    /// the export reads; for a mono source the stereo CAF's true peak is 3 dB lower than measured
+    /// here, so a peak-limited gain errs on the quiet side.
+    private func drainLoudness(token: UUID) async {
+        while !Task.isCancelled, let job = nextLoudnessJob() {
+            measuringJobID = job.id
+            loudnessAttempted.insert(job.id)
+            do {
+                let measurement = try await LoudnessAnalyzer.measure(job.sourceURL)
+                guard !Task.isCancelled else { break }
+                // Refused while the job runs: measured again when the queue has finished.
+                if !queue.update(job.id, { $0.loudness = measurement }) { loudnessAttempted.remove(job.id) }
+            } catch is CancellationError {
+                break
+            } catch {
+                guard !Task.isCancelled else { break }
+                loudnessFailures[job.id] = error.localizedDescription
+            }
+        }
+        guard loudnessToken == token else { return }
+        measuringJobID = nil
+        loudnessTask = nil
+    }
+
+
     // MARK: Queue actions
 
     func toggleQueue() {
@@ -757,6 +971,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     func retryJob(_ id: UUID) {
         guard queue.retry(id) else { NSSound.beep(); return }
+        scheduleLoudness()
     }
 
     func reveal(_ id: UUID) {

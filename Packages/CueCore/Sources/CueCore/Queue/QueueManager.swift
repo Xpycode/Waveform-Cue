@@ -91,6 +91,19 @@ public final class ProgressCoalescer: @unchecked Sendable {
 @Observable
 public final class QueueManager {
     public static let sourceNotFound = "Source not found"
+    /// The job's safe zones leave no room for the picture (spec F); it cannot be exported.
+    public nonisolated static let tooLittleRoom = "Safe zones leave too little room"
+
+    /// Why a job cannot be exported as it is set up, or `nil` when it can. Start Queue fails such
+    /// a job with this reason instead of exporting it, and the app disables Export Selected.
+    /// Checked: the appearance's layout fits, and the start timecode is HH:MM:SS:FF at 25 fps.
+    public nonisolated static func blockingReason(for job: CueJob) -> String? {
+        if !job.appearance.layout.fits { return tooLittleRoom }
+        if Timecode(job.startTimecode) == nil {
+            return "Start timecode “\(job.startTimecode)” is not HH:MM:SS:FF at 25 fps."
+        }
+        return nil
+    }
 
     /// The jobs in list order (export order).
     public private(set) var jobs: [CueJob] = []
@@ -407,6 +420,12 @@ public final class QueueManager {
         guard let index = jobs.firstIndex(where: { $0.id == id }) else { return }
         guard fileExists(jobs[index].sourceURL) else {
             jobs[index].status = .failed(reason: Self.sourceNotFound, log: "")
+            persist()
+            return
+        }
+        // Skipped, not exported: the operator fixes the setting and presses Retry.
+        if let reason = Self.blockingReason(for: jobs[index]) {
+            jobs[index].status = .failed(reason: reason, log: "")
             persist()
             return
         }
