@@ -46,13 +46,16 @@ public enum MXFExport {
             if task.isRunning { task.terminate() }
             task.waitUntilExit()
         }
-        let path = CuePicture.waveform(track.peaks, in: CuePicture.overviewRect(for: appearance.zoom))
+        // One layout for the whole export, the same value the preview computes.
+        let layout = appearance.layout
+        let path = CuePicture.overviewPath(track, layout: layout)
         var brokenPipe = false
         for frame in 0..<track.frames {
             try Task.checkCancellation()
             autoreleasepool {
                 CuePicture.draw(in: bitmap, rect: CGRect(origin: .zero, size: CuePicture.size),
-                                track: track, path: path, frame: frame, label: label, appearance: appearance)
+                                track: track, path: path, frame: frame, label: label, appearance: appearance,
+                                layout: layout)
             }
             var offset = 0
             let bytes = bitmap.bytesPerRow * bitmap.height
