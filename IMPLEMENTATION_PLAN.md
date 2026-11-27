@@ -281,12 +281,13 @@ Dependency graph (no cycles):
 
 ### Wave 4 (parallel — three tasks)
 
-- [ ] **4.1**: Job tab: export settings, markers, loudness, Apply to All (spec C, D, E controls)
+- [x] **4.1**: Job tab: export settings, markers, loudness, Apply to All (spec C, D, E controls)
   - Depends on / external gates: 3.1, 3.3; **U1**
   - Owns: `Sources/App/Views/JobInspector.swift`, `InspectorPane.swift`, `Sources/App/Views/AppKit/**`
   - Detail: also make Start Queue skip or fail a job whose `appearance.layout.fits` is false with "Safe zones leave too little room" (4.2 disables only Export Selected). Wire marker drags from 3.2 (`MonitorView.onMarkerChanged`, `markers` set after `track` in `MonitorRepresentable`) into the selected job's `MusicMarkers` edits, keeping fade start ≤ music end. AppKit-wrapped pop-up, text field, checkbox and button components. Preset picker with the format readout and the Experimental note for 1080p50; audio tracks; start timecode with validation; filename template; marker time fields with Reset; loudness readout with the badge and Normalise to −23 LUFS (shows achieved loudness when peak-limited); Apply to All; "No music detected" state.
   - Success: Atlas pass over each control; an exported file reflects the chosen preset, tracks, timecode and name; Apply to All never changes a Done job.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
+  - Evidence (2026-11-27): merged as `84ac328` (task commit `4dc38b2`); full suite with FFmpeg 229 tests, 0 failures, 3 opt-in skips; `xcodebuild build` clean. Atlas pass on four synthetic files: loudness matches FFmpeg ebur128 for all four (−22.1, −42.2, −45.9, silent); badge and +19.2 dB Normalise gain; invalid TC shows the message and disables Export Selected, `1:2:3:4` → `01:02:03:04`; filename preview; `abc` marker error; Reset; "No music detected"; Experimental note on 1080p50; drags (Fade stops at End, End pulls Fade); Apply to All changed only the two Pending jobs; running job locked; Start Queue failed the bad-TC job with its reason and exported the rest; tab and queue restored after relaunch. Export of toneA (AVC-I 1080p25, 4 tracks, TC 10:00:00:00, `{name} {preset}`, Normalise): High 4:2:2 Intra 1080p25, four mono 24-bit tracks, TC 10:00:00:00, correct name, −23.0 LUFS. Fixed during the pass: a focused field that the user had not typed in did not follow the model (Fade start kept its old value after Tab from Music end), `ef78828`. Not checked: peak-limited Normalise line on screen (covered by tests), safe-zone Start Queue skip on screen (covered by tests).
 
 - [x] **4.2**: Appearance tab additions (spec D and F controls)
   - Depends on / external gates: 3.2; **U1**
@@ -411,7 +412,7 @@ Dependency graph (no cycles):
 | 2.1, 2.2, 2.3 | Parallel worktree agents (disjoint files); 2.3 started when 1.6 landed | 179 tests with FFmpeg; Atlas pass for 2.3 (12-track folder, cancel, retry, serial export); `public.folder` added to `Info.plist` | worktree merges + "Accept folders on the app icon" | Next: Wave 3 |
 | 3.1, 3.2, 3.3 | Parallel worktree agents; 3.3 dispatched when 2.3 landed | 214 tests; worst-block tolerance raised to 9 after markers (3.2) entered export frames; coordinator switched the queue to `MXFJobExporter` via `JobAudioLifetime`; Atlas pass found and fixed lost markers in exports | "Merge task 3.3; export queue jobs with the preset engine", "Keep detected markers in queue exports" | Next: Wave 4 |
 | 4.2, 4.3 | Worktree agents (4.2 after 3.2; 4.3 after 3.1) | 227 tests; Atlas pass for 4.2 (safe zones, guides, too-little-room disables export, Music end) | worktree merges, "Record task 4.3" (`366d513`) | 4.1 running at session close |
-| 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3) | not yet returned at session close (branch still at `478165e`, no task commit) | none yet | Next: if the branch has a 4.1 commit, review, merge, build, Atlas pass; otherwise re-dispatch 4.1 |
+| 4.1 | Worktree agent on branch `worktree-agent-ad3cdb93dabc3fdae` (dispatched after 3.3); coordinator merged and ran the Atlas pass | 229 tests with FFmpeg; `xcodebuild build` clean; Atlas pass (see task evidence); stale-field bug found and fixed | `84ac328`, `ef78828` | Next: 5.1 |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
