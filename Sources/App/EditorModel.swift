@@ -86,7 +86,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         guard QueueManager.blockingReason(for: job) == nil else { return false }
         if queue.isRunning && queue.isStopping { return false }
         switch job.status {
-        case .pending, .failed, .cancelled: return true
+        case .pending, .failed, .cancelled, .done: return true   // Done re-exports under a new name
         default: return false
         }
     }
@@ -930,15 +930,14 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     /// Export Selected (Command-E): the selected job, beside its source or its chosen folder.
+    /// A Done job is exported again under a new name; the file it wrote is never overwritten.
     func exportSelected() {
-        guard let job = selectedJob else { NSSound.beep(); return }
+        guard let job = selectedJob, canExportSelected else { NSSound.beep(); return }
         if case .done = job.status {
-            status = "This job is already exported. Add the file again to make another version."
-            NSSound.beep()
-            return
+            queue.reexport(job.id)
+        } else if job.status.canRetry {
+            queue.retry(job.id)
         }
-        guard canExportSelected else { NSSound.beep(); return }
-        if job.status.canRetry { queue.retry(job.id) }
         prepareForExport()
         queue.start(only: [job.id])
         if let current = queue.selectedJob, current.status == .pending, queue.isRunning {

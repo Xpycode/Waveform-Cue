@@ -270,7 +270,9 @@ public final class QueueManager {
         var edited = before
         change(&edited)
         edited.status = before.status
-        if Self.namingChanged(before, edited), !before.status.isFinished { edited.outputPath = nil }
+        // A Done job keeps the path of the file it wrote; any other job chooses its name again
+        // (so a Failed or Cancelled job's Retry does not reuse a name its settings no longer give).
+        if Self.namingChanged(before, edited), !Self.isDone(before.status) { edited.outputPath = nil }
         guard edited != before else { return true }
         jobs[index] = edited
         if deferringSave { schedulePersist() } else { persist() }
@@ -350,19 +352,42 @@ public final class QueueManager {
         producer?.cancel()
     }
 
-    /// Retry: returns a Failed or Cancelled job to Pending with a fresh destination that
-    /// collides with neither an existing file nor its previous attempt.
+    /// Retry: returns a Failed or Cancelled job to Pending. It keeps its previous destination
+    /// when nothing is there (a cancelled or failed attempt leaves no file) and no other job
+    /// claims it; otherwise it gets the next free name (" 2", " 3"…).
     @discardableResult
     public func retry(_ id: UUID) -> Bool {
         guard let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].status.canRetry else { return false }
+        jobs[index].status = .pending
+        if let previous = jobs[index].outputURL, isFree(previous, for: jobs[index]) {
+            jobs[index].outputPath = previous.path
+        } else {
+            jobs[index].outputPath = resolveOutput(for: jobs[index], avoiding: nil).path
+        }
+        enlistInRun(id)
+        persist()
+        return true
+    }
+
+    /// Re-export: returns a Done job to Pending with a fresh destination that collides with
+    /// neither an existing file, another job nor the file it already wrote, so that file is never
+    /// overwritten. The caller then starts it (Export Selected).
+    @discardableResult
+    public func reexport(_ id: UUID) -> Bool {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), Self.isDone(jobs[index].status) else { return false }
         let previous = jobs[index].outputURL
         jobs[index].status = .pending
         jobs[index].outputPath = resolveOutput(for: jobs[index], avoiding: previous).path
+        enlistInRun(id)
+        persist()
+        return true
+    }
+
+    /// Counts a job returned to Pending in the current run's progress when the run will export it.
+    private func enlistInRun(_ id: UUID) {
         if isRunning, runScope == nil || runScope?.contains(id) == true, !runJobIDs.contains(id) {
             runJobIDs.append(id)
         }
-        persist()
-        return true
     }
 
     /// The Paused jobs that write to `folder`, in list order.
@@ -576,6 +601,19 @@ public final class QueueManager {
             let key = candidate.standardizedFileURL.path
             return key == avoid || others.contains(key) || fileExists(candidate)
         }
+    }
+
+    /// True when `url` is in the job's folder, absent on disk and claimed by no other job.
+    private func isFree(_ url: URL, for job: CueJob) -> Bool {
+        let key = url.standardizedFileURL.path
+        guard Self.folderKey(url.deletingLastPathComponent()) == Self.folderKey(effectiveFolder(for: job)) else { return false }
+        if fileExists(url) { return false }
+        return !jobs.contains { $0.id != job.id && $0.outputURL?.standardizedFileURL.path == key }
+    }
+
+    private static func isDone(_ status: JobStatus) -> Bool {
+        if case .done = status { return true }
+        return false
     }
 
     private static func namingChanged(_ a: CueJob, _ b: CueJob) -> Bool {
