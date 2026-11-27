@@ -3,8 +3,8 @@
 > Execute with the shared `commands/execute.md` procedure when this plan is selected explicitly.
 > Task state and evidence are authoritative here. [TASKS.md](../TASKS.md) links here and holds backlog and inbox.
 
-**Progress:** 5/9. E1 and E2 remain open. D1, U2 and helper readiness passed 2026-11-27.
-**Status:** Wave 2 is complete on `feature/cue-appearance-playhead`. Wave 3 tasks 3.1 and 3.2 are ready.
+**Progress:** 7/9. E1 and E2 remain open. D1, U2 and helper readiness passed 2026-11-27.
+**Status:** Wave 3 is complete on `feature/cue-appearance-playhead`. Wave 4 task 4.1 is ready.
 **Task states:** unchecked = pending, implemented-unverified or blocked (name the gate); checked = complete with the required evidence.
 
 ## Goal
@@ -21,11 +21,11 @@ Build 11 keeps its own [acceptance and handoff plan](../IMPLEMENTATION_PLAN.md) 
 - [ ] Defaults and overrides: 1.1 (Save as Default), 2.1 (differences and reset), 4.1 (markers and Reset controls), 5.1
 - [ ] Fonts and visibility: 1.3, 2.1, 3.1, 4.1
 - [ ] Feature switches: 2.1, 3.2, 4.1
-- [ ] Centred close-up: 1.2, 2.1 (edge-held stays the default), 3.1
-- [ ] Zoom near end: 1.2, 3.1
+- [x] Centred close-up: 1.2, 2.1 (edge-held stays the default), 3.1
+- [x] Zoom near end: 1.2, 3.1
 - [ ] Close-up shading (added 2026-11-27 at the operator's request): 2.1, 3.1, 4.1; upcoming brighter by default (D1)
 - [ ] EVS layout: 2.2; clearance on the real output is external check E1
-- [ ] Compatibility: 2.1 (older settings and a build 11 queue), 3.1 (reference frames), 2.2 (the intentional safe-zone change)
+- [x] Compatibility: 2.1 (older settings and a build 11 queue), 3.1 (reference frames), 2.2 (the intentional safe-zone change)
 
 ## Planning findings (verified against the code, 2026-11-27)
 
@@ -79,7 +79,7 @@ U2 is approved, so no task waits on it. A control that turns out not to fit as t
 
 ## Execution schedule and ownership
 
-- **Scope and limits.** The operator selected Waves 1 and 2 in separate requests on 2026-11-27. Work on branch `feature/cue-appearance-playhead` until build 11's task 6.4 is closed, because 6.4 builds Release from the checkout. The coordinator sets `CURRENT_PROJECT_VERSION: "12"` in `project.yml` before 5.1; the Release build goes to `04_Exports/0.1-12-rc`. Pushes and app control keep their own authorization.
+- **Scope and limits.** The operator selected Waves 1, 2 and 3 in separate requests on 2026-11-27. Work on branch `feature/cue-appearance-playhead` until build 11's task 6.4 is closed, because 6.4 builds Release from the checkout. The coordinator sets `CURRENT_PROJECT_VERSION: "12"` in `project.yml` before 5.1; the Release build goes to `04_Exports/0.1-12-rc`. Pushes and app control keep their own authorization.
 - **Coordinator-owned:** `project.yml`, `WaveformCue.xcodeproj` (run `xcodegen generate` after any wave that adds app-target files), `Packages/CueCore/Package.swift`, `Core/CueTypes.swift`, Git, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, reference-hash re-recording, and the Atlas helper (one session at a time).
 - **Tests** means `swift test --package-path Packages/CueCore --scratch-path <the worker's own scratch folder> --filter '<SuiteA|SuiteB>'`. FFmpeg suites add `FFMPEG_EXECUTABLE=/Applications/Magpie.app/Contents/Resources/ffmpeg` in front; without it they pass by skipping. A new scratch folder fetches `swift-subprocess` once from the network.
 - **Build** means `xcodegen generate && xcodebuild -project WaveformCue.xcodeproj -scheme WaveformCue -configuration Debug -derivedDataPath <folder outside the project> build`. The coordinator runs it after merging each wave, including Wave 2, whose public types the app compiles against. A worktree worker may run it for itself but does not commit `project.pbxproj`. `build` launches nothing.
@@ -147,7 +147,7 @@ Dependency graph (no cycles):
 
 ### Wave 3 (parallel: two tasks, disjoint through 2.1's interface)
 
-- [ ] **3.1**: Render and hit-test the window, fonts, visibility and shading
+- [x] **3.1**: Render and hit-test the window, fonts, visibility and shading
   - Depends on / external gates: 1.2, 1.3, 2.1, 2.2
   - Owns: `Core/CuePicture.swift`, `Core/CueLayout.swift`, `App/Views/AppKit/MonitorView.swift`, `Tests/RenderTests.swift`, `Tests/CueLayoutTests.swift`, `Tests/BaselineTests.swift`, `Tests/CloseUpWindowTests.swift`, and the close-up and hit-test call sites in `Tests/CountdownTests.swift` (`:245–279`) and `Tests/TrimPreRollTests.swift` (`:218–236`). Also the `layout` property in `Core/CueAppearance.swift:115`, which 2.1 has finished with; 3.2 reads that file and does not edit it.
   - Detail:
@@ -158,7 +158,7 @@ Dependency graph (no cycles):
   - Success: reference hashes are unchanged for every legacy setting. New hash tests: each hidden element, each shading, centred mode at both clip boundaries (playhead stationary at the centre, 2.5 s blank on the outer side for a 5-second window), end zoom alone, and both together. Preview and export pictures match at whole 25-base frames; second-field export pictures match the window function at 20 ms steps. A hidden waveform returns no hit target. Because D1 makes upcoming-brighter the factory default, the coordinator re-records the affected default hashes once with `CUE_RECORD_BASELINE=1` and names them in the evidence.
   - Backpressure: tests `CloseUpWindowTests|CueLayoutTests|RenderTests|BaselineTests|CountdownTests|TrimPreRollTests` with `FFMPEG_EXECUTABLE`; Build.
 
-- [ ] **3.2**: Apply the feature switches to preview, validation and export
+- [x] **3.2**: Apply the feature switches to preview, validation and export
   - Depends on / external gates: 2.1
   - Owns: `App/EditorModel.swift`, `App/Queue/MXFJobExporter.swift`, `App/Views/MonitorPane.swift`, `App/Views/AppKit/MonitorRepresentable.swift`, validation in `Core/Queue/QueueManager.swift`, `Tests/QueueManagerTests.swift`, new `Tests/FeatureSwitchTests.swift`. Edits no file owned by 3.1.
   - Detail: feed 2.1's effective values everywhere the stored ones are read: the monitor inputs (`MonitorPane.swift:16–19`), preview timeline, the I and O keys, the loudness pass (`EditorModel.nextLoudnessJob`), the exporter's measurement and gain, and `QueueManager.blockingReason`. With trim off, pass no trim callback so the handles disappear. Safe-zone guides stay preview-only and hide while safe zones are off.
@@ -170,7 +170,7 @@ Dependency graph (no cycles):
 - [ ] **4.1**: Inspector controls, override markers and Reset
   - Depends on / external gates: 1.1, 1.3, 3.1, 3.2 (U2 approved); Atlas helper for the on-screen pass
   - Owns: `App/Views/AppKit/CueAppearanceSidebar.swift`, `App/Views/AppKit/AppearanceSidebarRepresentable.swift`, `App/Views/AppKit/InspectorControls.swift` (only if a wrapper is missing), `App/Views/InspectorPane.swift`, `App/Views/JobInspector.swift`, `App/EditorModel.swift`
-  - Detail: add the controls exactly as approved in U2. Push appearance into a live sidebar after Reset, Reset All and Save as Default. Disable Normalise while loudness analysis is off. Disable end-zoom choices that are not narrower than the current zoom.
+  - Detail: add the controls exactly as approved in U2. Push appearance into a live sidebar after Reset, Reset All and Save as Default. Disable Normalise while loudness analysis is off and suppress its gain prediction and waiting-for-measurement message. Disable end-zoom choices that are not narrower than the current zoom.
   - Success (Atlas pass): every new control changes the preview; values survive tab changes, job selection and a relaunch; the override dot appears on an edited setting and clears on Reset; Reset All returns the job to the saved default; a missing saved font shows the fallback without an error.
   - Backpressure: tests `CueJobTests|QueueManagerTests|CueFontsTests`; Build; Atlas pass.
 
@@ -237,9 +237,11 @@ Added at the operator's request: reversed close-up shading.
 | 1.3 | Fonts worker, independent review by appearance worker | Four tests cover fallback, default measurements, shaped digits, clock candidates and mixed-digit kerning. American Typewriter and Euphemia UCAS remain available for titles. Clock selection excludes both because their timecodes change width. | `3be2e93` | 3.1 and 4.1 |
 | 2.2 | Coordinator, independent review by appearance worker | At 11%/11%, Small Elapsed, Large Remaining and five-second zoom, the full track grew from 71 to 93 px and close-up from 182 to 244 px. Tick-to-clock clearance went from 95.17 to 12.17 px. Raster tests found only background in reserved bands. Larger reserves spend the residual after waveform reduction. Above-clock and no-reserve fixtures passed. | `dcd417e` | 3.1 and E1 |
 | 2.1 | One settings worker, independent migration reviewer, coordinator integration | 97 tests passed in the five required suites. Eight synthetic jobs written by the previous encoder retained every original field after a save and reload with both versions. Arm64 Debug build and signature verification passed. [Validation and commands](../sessions/2026-11-27.md#appearance-and-playhead-wave-2) | Local commit “Preserve saved cue appearances and expose per-job feature settings” | 3.1 and 3.2 ready |
+| 3.1 | Renderer worker, independent review, coordinator’s decoded-field test and Atlas check | All 20 legacy hashes matched. For the new factory shading, 15 hashes changed across default, custom title and warning at frames 0, 375, 625, 725 and 750. The five Zoom Off hashes matched. Ten new fixtures cover visibility, shading and window modes. Both real AVC-Intra MXFs matched the expected marker position on all 12 sampled fields. [Centered start](../sessions/evidence/appearance-wave3/centered-start.png) · [Centered end](../sessions/evidence/appearance-wave3/centered-end.png) · [Edge-held start](../sessions/evidence/appearance-wave3/edge-start.png) · [Edge-held end](../sessions/evidence/appearance-wave3/edge-end.png) | `d0ba334` | 4.1 |
+| 3.2 | Feature-switch worker, independent cancellation review, coordinator’s app export | The monitor, validation and exporter consume effective values. With stored trim, fades, pre-roll and normalisation all disabled, the first MXF audio track from Export Selected matched the entire original signal sample for sample. [Validation and handoff](../sessions/2026-11-27.md#appearance-and-playhead-wave-3) | `182b207` | 4.1. Interactive mid-measurement toggle remains in 5.1. |
 
-Wave 3 integration should pass the picture timeline's fractional clock-frame position in source seconds and its physical source range to `CloseUpWindow.interval`. The window may extend through the last padded field. Its intersection clips to the actual source. The end-zoom and font controls are scheduled for Wave 4.
+In Wave 3, drawing and hit-testing adopted the same source-time interval. Its intersection with the physical trim range excludes padded audio. The monitor uses the held interval during close-up drags. Wave 4 adds the controls for editing these settings.
 
-The regenerated Xcode project had no diff. The final Debug app passed deep, strict signature verification and opened in Atlas. Its [empty-selection footer](../sessions/evidence/appearance-wave1/final-build.png) shows the zero-target state. The earlier inspector test used identical task 1.1 code. The helper's original default was restored and its four previous Done rows remained after removing the test jobs.
+For Wave 1, the regenerated Xcode project had no diff. Its final Debug app passed deep, strict signature verification and opened in Atlas. Its [empty-selection footer](../sessions/evidence/appearance-wave1/final-build.png) shows the zero-target state. The earlier inspector test used identical task 1.1 code. The helper's original default was restored and its four previous Done rows remained after removing the test jobs.
 
-Final headless integration on the M4 Pro passed all 261 XCTest cases with zero skips. FFmpeg, both benchmarks and the slate image check were enabled. The 180-second AVC-Intra exports took 24.11 s at 1080p25 and 42.95 s at 1080i50. The local build and test transcripts are in `04_Exports/appearance-wave1-debug/`. Wave 2 is ready when selected.
+Wave 1 headless integration on the M4 Pro passed all 261 XCTest cases with zero skips. FFmpeg, both benchmarks and the slate image check were enabled. The 180-second AVC-Intra exports took 24.11 s at 1080p25 and 42.95 s at 1080i50. The local Wave 1 build and test transcripts are in `04_Exports/appearance-wave1-debug/`.

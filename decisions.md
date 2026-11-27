@@ -59,3 +59,7 @@ Rehearsal frames showed unused space above the clocks while the waveforms lost h
 Copying a batch look can disable trim, pre-roll, markers, safe zones or loudness analysis. Each job keeps its configured values, including its marker edits, trim points, fade lengths, pre-roll duration and loudness measurement. Preview and export can read the job’s effective settings and recover its original choices when a feature is enabled again.
 
 A saved job without a close-up shading choice gets played-brighter shading to preserve its build 11 look. The same missing choice in a saved import default selects upcoming-brighter for new jobs. Saving either choice makes it explicit for the next load. The existing Zoom Off choice continues to control close-up visibility. [Appearance and playhead plan](specs/cue-appearance-and-playhead-plan.md)
+
+## 2026-11-27 · Fonts for cue labels and time readings
+
+The title face also supplies the section labels. The clock face supplies the time readings and close-up tick labels, so the digits keep their width as the operator jogs. Preview, hit-testing and export use the same measured text geometry. The saved job needs only two font choices. [Appearance and playhead plan](specs/cue-appearance-and-playhead-plan.md)
