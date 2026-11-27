@@ -18,6 +18,6 @@
 <key>CFBundleTypeName</key><string>Audio</string>
 <key>CFBundleTypeRole</key><string>Viewer</string>
 <key>LSHandlerRank</key><string>Alternate</string>
-<key>LSItemContentTypes</key><array><string>public.audio</string></array>
+<key>LSItemContentTypes</key><array><string>public.audio</string><string>public.folder</string></array>
 </dict></array>
 </dict></plist>

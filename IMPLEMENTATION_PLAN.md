@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 12/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 13/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -241,13 +241,14 @@ Dependency graph (no cycles):
   - Backpressure: `FFMPEG_EXECUTABLE=… swift test --package-path Packages/CueCore --filter 'AudioTrackTests|JobWorkspaceTests|LoudnessAnalyzerTests'`
   - Evidence (2026-11-27): 21 new tests; full suite with FFmpeg 179 tests, 0 failures, 1 skip (benchmark); without FFmpeg 9 integration tests skip by name. Generated WAV: music end ≈ 8.0 s, fade start ≈ 7.98 s (±0.02); −23 LUFS tone within 0.5 LU; cancelling the analyzer kills FFmpeg; release deletes the CAF; six-job two-CAF pattern holds. Design: jobs store `TrackAnalysis` (peaks as base64 Float32, ~48 KB per 3 min); `AudioTrack(url:analysis:)` draws without audio; `JobWorkspace` actor (`acquire(for: UUID, source:)`) never evicts on its own — 3.3 owns that policy and must route `EditorModel` loading through it. Music end ignores the whole-frame padding.
 
-- [ ] **2.3**: Queue sidebar wired to the shell, exporting through the existing engine
+- [x] **2.3**: Queue sidebar wired to the shell, exporting through the existing engine
   - Depends on / external gates: 1.6, 1.7; **U1**
   - Owns: `Sources/App/Views/QueueSidebar.swift`, `Sources/App/Queue/**` (including `LegacyExportAdapter.swift`), `Sources/App/EditorModel.swift`, toolbar and menu wiring in `MainWindow.swift`
   - Detail: the thin end-to-end slice for B. Drop files or a folder on the sidebar or the app icon (folder contents sorted by name, unsupported files skipped with one summary line, a decode failure added as Failed). Rows show status, percentage, Cancel, Retry, Show in Finder and a log disclosure. Selecting a job loads it into the monitor; the running job's settings are locked while other jobs stay editable. Start Queue, Stop Queue and Export Selected in the toolbar; overall progress in the bottom bar. The exporter is an adapter over today's `MXFExport.run` (MPEG-2).
   - Interface: `LegacyExportAdapter: JobExporting`, replaced by 3.1's adapter.
   - Success: in Atlas, 12 dropped files become 12 jobs in order, the queue exports them one by one, Cancel leaves no partial file, and editing one job changes only that job.
   - Backpressure: `xcodebuild … build`, the full `swift test`, then the Atlas pass.
+  - Evidence (2026-11-27): build succeeded, 179 tests pass. Atlas pass on the fresh build: opening a folder of 12 tones plus `notes.txt` and a fake `Broken.wav` on the app icon (needed `public.folder` in `Info.plist`, added by the coordinator) gave 12 Pending jobs in name order plus 1 Failed, and "Skipped 1 file that is not audio"; editing job 3's text left job 4 unchanged and survived reselection; Start then Stop Queue left the job Cancelled with no `.mxf` or hidden temp file; Retry then Start Queue exported all 12 serially (18:24:40–18:24:44), rows Done with Show in Finder, "Queue finished. 12 done, 1 failed." Retry names the output `… - Cue 2.mxf` even when the cancelled attempt wrote nothing (captured in TASKS Inbox). Gaps owned by 3.3: sleep prevention, destination override, paused-folder prompt, restore polish, workspace-managed audio; Export Selected cannot re-export a Done job.
 
 ### Wave 3 (parallel — three tasks)
 
