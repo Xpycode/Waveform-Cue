@@ -163,7 +163,7 @@ Observed on 2026-11-27, on the operator's EVS output with OSD on, while playing 
 - **Bundled FFmpeg 8.1** (already in `Contents/Helpers`):
   - Uses: `libx264` with `-avcintra-class`, `mpeg2video`, the `mxf` muxer, and the `channelsplit`, `anullsrc`, `ebur128`, `afade` and `volume` filters.
   - It is a GPL build with x264, copied from Magpie. That is fine for personal use; redistribution needs licence review.
-- **AppShellKit** from `/Users/simpro/ProgrammingProjects/1-macOS/zPackages` (`.package(path: "../../zPackages")`): Theme, AppAppearance, FlatToolbarButtonStyle, split-view autosave.
+- **AppShellKit** from `1-macOS/zPackages` beside this project (`.package(path: "../../zPackages")` from `01_Project/`): Theme, AppAppearance, FlatToolbarButtonStyle, split-view autosave.
 - **ProcessKit** (zPackages): optional. It cannot write to a child's stdin, so the raw-frame pipe stays on `Process` and `Pipe` unless ProcessKit gains stdin support. Analysis passes (`ebur128`) can use it.
 - **No BBC bmx.** The decision is recorded under Decisions below.
 - **XcodeGen** `project.yml` gains the package dependency.

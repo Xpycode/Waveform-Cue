@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 18/25; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 21/26; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -54,8 +54,8 @@ Facts established while planning that change or sharpen the spec's technical not
 - FFmpeg is not the bottleneck: 250 piped 1080p frames encode in 1.3–1.8 s. Core Graphics rendering sets the export speed.
 
 **House packages and references**
-- `CueCore` depends on `zPackages` (`ProcessKit`) at `../../../../zPackages`; agent worktrees under `.claude/worktrees/` resolve it through the ignored symlink `.claude/zPackages`.
-- `zPackages` is one Swift package (tools 6.2, macOS 14) with products `AppShellKit` and `ProcessKit`. The path from this folder is `../../zPackages`. It pulls `swift-subprocess` from the network on first resolve.
+- `CueCore` depends on `zPackages` (`ProcessKit`) at `../../../../zPackages`, which after task 6.0 resolves from `01_Project/Packages/CueCore` to `1-macOS/zPackages`; agent worktrees under `.claude/worktrees/` need an ignored `.claude/worktrees/zPackages` symlink (before 6.0 it was `.claude/zPackages`).
+- `zPackages` is one Swift package (tools 6.2, macOS 14) with products `AppShellKit` and `ProcessKit`. The path from `01_Project/` is `../../zPackages` (`1-macOS/zPackages`; `~/ProgrammingProjects/zPackages` on the M1 Max is a stale copy without these products). It pulls `swift-subprocess` from the network on first resolve.
 - No existing app consumes AppShellKit through XcodeGen, so task 0.2 is the first to prove that wiring.
 - AppShellKit offers `FlatToolbarButtonStyle`, `PaneToggleButton`, `View.autosaveSplitView(named:)`, `AppAppearancePreference` with `View.appAppearance(_:)` and `AppAppearanceCommands`, and `Theme`. It has no window helper; the app sets `.windowStyle(.hiddenTitleBar)` and `.toolbarRole(.editor)` itself.
 - ProcessKit cannot write to a child's stdin, and a cancelled stream ends without an exit event. The frame pipe stays on `Process` and `Pipe`. ProcessKit is used only for the loudness pass.
@@ -107,6 +107,7 @@ Until U1 is confirmed, 1.7 may build the three-pane shell with single-track pari
 ## Execution schedule and ownership
 
 - **Execution scope/limits:** 2026-11-27, "execute next steps": continue through ready waves. U1 approved 2026-11-27. Pushes and app control keep their own authorization; nothing has been pushed (41+ local commits on `main`).
+- **Layout (task 6.0, 2026-11-27):** code paths below are relative to `01_Project/` (for example `Packages/CueCore` is `01_Project/Packages/CueCore`); docs are in `docs/`. Evidence recorded before 6.0 keeps the old root-relative paths.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` after each wave), `Info.plist`, `Packages/CueCore/Package.swift`, `Sources/CueCore/CueTypes.swift` after 0.3, `Scripts/`, Git, `IMPLEMENTATION_PLAN.md`, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
 - **Shared build resources:** parallel tasks run `swift test` with their own `--scratch-path` (the task's scratch folder) and a `--filter` for their own test class. Only the coordinator runs the full suite and `xcodebuild build`, using a `-derivedDataPath` outside the project.
 - **Interfaces to establish before dispatch:** the shared value types in 0.3, and the frozen signatures named in each task's Interface line.
@@ -326,11 +327,19 @@ Dependency graph (no cycles):
 
 ### Wave 6 (verification and handoff)
 
+- [ ] **6.0**: Directions folder structure (operator request, 2026-11-27)
+  - Depends on: 5.1, 5.2; runs before 6.1–6.4 so their evidence is on the final layout
+  - Owns: the move itself, `project.yml`/`Package.swift` path checks, `CLAUDE.md`, `README.md`, `decisions.md`
+  - Detail: Xcode project, `project.yml`, `Info.plist`, `Sources`, `Resources`, `Scripts`, `Packages/CueCore` → `01_Project/`; state, plan, tasks, decisions, sessions, specs → `docs/`. The original relative house-package paths already resolve correctly from the new depth.
+  - Success: `xcodegen generate` changes nothing but the move; Debug build succeeds; the full suite with FFmpeg passes with the same count as before (239 tests, 3 opt-in skips).
+  - Backpressure: `xcodebuild … build`, `FFMPEG_EXECUTABLE=… swift test --package-path 01_Project/Packages/CueCore`
+
+
 - [ ] **6.1**: Full integration run and performance record
-  - Depends on: 5.1, 5.2
+  - Depends on: 5.1, 5.2, 6.0
   - Owns: evidence in the Execution Log; `PerformanceTests.swift`
   - Success: the whole suite passes with FFmpeg present (no skipped integration tests); a 3-minute AVC-I 100 1080p25 and 1080i50 export each finish in under 3 minutes, times recorded; the 50-job CAF cap test passes.
-  - Backpressure: `FFMPEG_EXECUTABLE=… CUE_BENCH=1 swift test --package-path Packages/CueCore` with zero failures and zero skips
+  - Backpressure: `FFMPEG_EXECUTABLE=… CUE_BENCH=1 swift test --package-path 01_Project/Packages/CueCore` with zero failures and zero skips
 
 - [ ] **6.2**: Acceptance pass in the Atlas helper
   - Depends on: 5.1

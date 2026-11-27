@@ -18,7 +18,7 @@
 
 **Context:** any `xcodebuild test` is app-hosted and launches Waveform Cue on the operator's desktop.
 **Alternatives:** app-hosted XCTest; no automated tests.
-**Decision:** models, rendering, analysis and export live in `Packages/CueCore`; the app target keeps the shell and views. Tests run with `swift test --package-path Packages/CueCore`.
+**Decision:** models, rendering, analysis and export live in `Packages/CueCore` (now `01_Project/Packages/CueCore`); the app target keeps the shell and views. Tests run with `swift test --package-path 01_Project/Packages/CueCore`.
 **Consequences:** the API the app uses is `public`. Render baselines are SHA-256 hashes pinned to this macOS release.
 
 ## 2026-11-27 · Clock base stays 25
@@ -45,3 +45,9 @@
 **Context:** FFmpeg 8.1 ignored `-color_primaries` and `-color_trc` for libx264 AVC-Intra output, so files read `bt709/unknown/unknown`.
 **Decision:** the AVC-Intra filter chain adds `setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709`. MPEG-2 keeps build 10's arguments.
 **Consequences:** AVC-Intra files report all three tags as BT.709; MPEG-2 output stays identical to build 10.
+
+## 2026-11-27 · Directions folder structure
+
+**Context:** the Xcode project, sources and Directions docs all sat at the repository root, unlike the standard layout (`13_folder-structure.md`).
+**Decision:** move the Xcode project, `project.yml`, `Info.plist`, `Sources`, `Resources`, `Scripts` and `Packages/CueCore` into `01_Project/`, and the state, plan, tasks, decisions, sessions and specs into `docs/`. The repository stays at the project root.
+**Consequences:** the house-package paths (`../../zPackages` in `project.yml`, `../../../../zPackages` in the `CueCore` manifest) now resolve to `1-macOS/zPackages` beside the project. Commands use `01_Project/Packages/CueCore` and `cd 01_Project && xcodegen generate`. Agent worktrees need an ignored `.claude/worktrees/zPackages` symlink instead of `.claude/zPackages`. Older session logs and execution evidence keep their original paths.

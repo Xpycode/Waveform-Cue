@@ -2,7 +2,7 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 21/25; next Wave 6. The plan owns task status and evidence.
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 21/26; Wave 6 running. The plan owns task status and evidence.
 
 ## Backlog
 

@@ -10,8 +10,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.library(name: "CueCore", targets: ["CueCore"])],
     dependencies: [
-        // House packages, beside this project's folder. Agent worktrees reach them through
-        // the ignored `.claude/zPackages` symlink.
+        // House packages, beside this project's folder (`1-macOS/zPackages`). Agent worktrees reach
+        // them through an ignored `.claude/worktrees/zPackages` symlink.
         .package(path: "../../../../zPackages")
     ],
     targets: [

@@ -26,6 +26,6 @@ Import decodes the first audio stream to temporary stereo PCM using the bundled 
 
 ## Build
 
-Open `WaveformCue.xcodeproj` in Xcode and build the WaveformCue scheme. The local testing build targets macOS 14 or later. The bundled encoder in this build requires Apple silicon.
+Open `01_Project/WaveformCue.xcodeproj` in Xcode and build the WaveformCue scheme. The local testing build targets macOS 14 or later. The bundled encoder in this build requires Apple silicon.
 
-The build phase in `Scripts/bundle-ffmpeg.sh` copies a self-contained FFmpeg executable into the app. On this Mac it uses the copy supplied with Magpie. To build on another machine, set the Xcode build setting `FFMPEG_EXECUTABLE` to a self-contained macOS FFmpeg with the required audio decoders, MPEG-2 video encoder, PCM encoder, CAF and MXF muxers. A completed app runs independently of Magpie. The build uses ad hoc signing for local testing. `project.yml` is the XcodeGen project definition.
+The build phase in `01_Project/Scripts/bundle-ffmpeg.sh` copies a self-contained FFmpeg executable into the app. On this Mac it uses the copy supplied with Magpie. To build on another machine, set the Xcode build setting `FFMPEG_EXECUTABLE` to a self-contained macOS FFmpeg with the required audio decoders, MPEG-2 video encoder, PCM encoder, CAF and MXF muxers. A completed app runs independently of Magpie. The build uses ad hoc signing for local testing. `01_Project/project.yml` is the XcodeGen project definition; run `xcodegen generate` in `01_Project` after changing it. The app depends on the house packages in `zPackages`, which sits beside this project's folder. Project documentation is in `docs/`.
