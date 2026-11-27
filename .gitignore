@@ -9,3 +9,4 @@ DerivedData/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/zPackages
+.fastembed_cache/

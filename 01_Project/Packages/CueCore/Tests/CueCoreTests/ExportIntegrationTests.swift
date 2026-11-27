@@ -412,10 +412,11 @@ final class ExportIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(control, 20, "\(name): control frame must differ")
     }
 
-    /// Measures the export rate. Opt in with `CUE_EXPORT_BENCH=1` (and FFmpeg); 30 s at 1080i50.
+    /// Measures the export rate. Opt in with `CUE_EXPORT_BENCH=1` or `CUE_BENCH=1` (and FFmpeg); 30 s clips.
     func testExportRateBenchmark() throws {
-        guard ProcessInfo.processInfo.environment["CUE_EXPORT_BENCH"] == "1" else {
-            throw XCTSkip("Set CUE_EXPORT_BENCH=1 to measure the export rate.")
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CUE_EXPORT_BENCH"] == "1" || environment["CUE_BENCH"] == "1" else {
+            throw XCTSkip("Set CUE_EXPORT_BENCH=1 or CUE_BENCH=1 to measure the export rate.")
         }
         let ffmpeg = try TestAudio.ffmpeg()
         let dir = try TestAudio.temporaryDirectory("export-bench")
