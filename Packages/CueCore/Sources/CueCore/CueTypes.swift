@@ -53,6 +53,16 @@ public struct MusicMarkers: Codable, Sendable, Equatable, Hashable {
     public var fadeStart: Double? { noMusic ? nil : editedFadeStart ?? detectedFadeStart }
     public var isEdited: Bool { editedMusicEnd != nil || editedFadeStart != nil }
 
+    /// These detected values with the operator's edits from `edits` laid on top. A queue job
+    /// stores only edits (its detection lives in the track analysis), so exporters combine the
+    /// two this way; passing the job's markers alone would drop the detected music end.
+    public func applyingEdits(from edits: MusicMarkers) -> MusicMarkers {
+        var merged = self
+        merged.editedMusicEnd = edits.editedMusicEnd ?? editedMusicEnd
+        merged.editedFadeStart = edits.editedFadeStart ?? editedFadeStart
+        return merged
+    }
+
     /// Discard the operator's edits and return to the detected values.
     public mutating func resetToDetected() {
         editedMusicEnd = nil

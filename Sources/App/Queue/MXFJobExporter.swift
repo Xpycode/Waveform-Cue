@@ -59,7 +59,8 @@ struct MXFJobExporter: JobExporting {
         let worker = Task.detached(priority: .userInitiated) { () throws -> URL in
             let track = try stored.map { AudioTrack(url: job.sourceURL, analysis: $0, audio: pcm) }
                 ?? AudioTrack.analyse(job.sourceURL, audio: pcm)
-            let timeline = MXFExport.timeline(for: track, preset: preset, trim: job.trim, markers: job.markers,
+            let timeline = MXFExport.timeline(for: track, preset: preset, trim: job.trim,
+                                              markers: track.markers.applyingEdits(from: job.markers),
                                               target: appearance.countdownTarget)
             try timeline.validate()
             let snapshot = MXFExport.Snapshot(track: track, label: job.label, appearance: appearance,

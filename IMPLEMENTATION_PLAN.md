@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 15/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
+**Progress:** 17/24; external acceptance: X1, X2, X3, X4 open (G1 and U1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -270,29 +270,31 @@ Dependency graph (no cycles):
   - Backpressure: `swift test --package-path Packages/CueCore --filter 'BaselineTests|RenderTests|CountdownTests'`
   - Evidence (2026-11-27): baseline hashes unchanged; 7 `CountdownTests` + 2 new `RenderTests` (Remaining matches a clip trimmed at the marker at frames 0–650 incl. fade start, solid-red threshold and the marker; holds red 00:00:00 after it; no marker/no music/no tail identical for both targets; guides never in `CuePicture` output; clocks move as a pair; marker hit-test and drag mapping). Full suite with FFmpeg 189 tests, 0 failures. Rendered preview checked by the coordinator: dashed blue "Fade" and solid yellow "End" lines on both waveforms. Open items moved to 4.1: wire `MonitorView.onMarkerChanged`/`markers` through `MonitorRepresentable` into the job; keep fade start ≤ music end while dragging. Remaining turns red past a Music-end target even with the warning Off (per spec).
 
-- [ ] **3.3**: Queue integration: persistence, lifetime and failure handling (spec B, edge cases, error states)
+- [x] **3.3**: Queue integration: persistence, lifetime and failure handling (spec B, edge cases, error states)
   - Depends on: 2.2, 2.3
   - Owns: `Sources/App/Queue/**` except the exporter adapters, `QueueSidebar.swift`, `Queue/QueueManager.swift` and its tests, `SleepAssertion.swift`
   - Detail: store at `~/Library/Application Support/Waveform Cue/queue.json`; restore on launch; `IOPMAssertionCreateWithName` for the whole batch; quit and close ask to stop the queue first; queue-wide destination override in the sidebar footer; jobs sharing an unwritable folder pause and the operator is asked for a new folder; workspaces acquired only for the selected job and the running job; stored peaks and markers mean a restored job needs no re-analysis until it is selected or run.
   - Interface: none new; consumes `JobWorkspace` and `QueueManager`.
   - Success: unit tests for the workspace cap (50 jobs, never more than two CAFs), restore rules and pause-on-unwritable; Atlas pass: quit with pending and done jobs, relaunch, queue restored; a missing source reads "Source not found".
   - Backpressure: full `swift test`, `xcodebuild … build`, then the Atlas pass.
+  - Evidence (2026-11-27): Merged with 192 tests passing; the 50-job cap test fails (peak 3 CAFs) when its wait-for-releases step is removed. Coordinator integration: queue switched from `LegacyExportAdapter` (deleted) to `MXFJobExporter`, which now decodes through `JobAudioLifetime` and reuses the stored `TrackAnalysis`; toolbar readout/tooltip from the job's preset (default AVC-I 100 1080i50). Atlas pass on the fresh build: a stale helper queue restored as "Restored 13 jobs. 1 source not found." (Done kept, unfinished → "Failed: Source not found"); quit while idle, moved Cue 3's source, relaunch → order kept, Cue 1 Done, Cue 2 Pending with its appearance (Music end, Custom 10/30, guides), Cue 3 "Failed: Source not found"; `pmset -g assertions` showed "Waveform Cue is exporting a queue" during the run and none after; app-made 1080i50 file: High 4:2:2 Intra 10-bit, bt709, top first, 2 mono 24-bit tracks. The pass found the export dropping detected markers (job's empty edits replaced the track's detection) — fixed with `MusicMarkers.applyingEdits(from:)` + test, re-verified: exported frame at 9 s shows Fade/End and Remaining 00:00:00 red. Not exercised on screen: the unwritable-folder pause prompt and the Stop-Queue-and-Close sheet (unit-tested pause logic only). Risk noted: `queue.json` holds every job's peaks (~48 KB per 3 min) and is rewritten on each status change.
 
 ### Wave 4 (parallel — three tasks)
 
 - [ ] **4.1**: Job tab: export settings, markers, loudness, Apply to All (spec C, D, E controls)
   - Depends on / external gates: 3.1, 3.3; **U1**
   - Owns: `Sources/App/Views/JobInspector.swift`, `InspectorPane.swift`, `Sources/App/Views/AppKit/**`
-  - Detail: also wire marker drags from 3.2 (`MonitorView.onMarkerChanged`, `markers` set after `track` in `MonitorRepresentable`) into the selected job's `MusicMarkers` edits, keeping fade start ≤ music end. AppKit-wrapped pop-up, text field, checkbox and button components. Preset picker with the format readout and the Experimental note for 1080p50; audio tracks; start timecode with validation; filename template; marker time fields with Reset; loudness readout with the badge and Normalise to −23 LUFS (shows achieved loudness when peak-limited); Apply to All; "No music detected" state.
+  - Detail: also make Start Queue skip or fail a job whose `appearance.layout.fits` is false with "Safe zones leave too little room" (4.2 disables only Export Selected). Wire marker drags from 3.2 (`MonitorView.onMarkerChanged`, `markers` set after `track` in `MonitorRepresentable`) into the selected job's `MusicMarkers` edits, keeping fade start ≤ music end. AppKit-wrapped pop-up, text field, checkbox and button components. Preset picker with the format readout and the Experimental note for 1080p50; audio tracks; start timecode with validation; filename template; marker time fields with Reset; loudness readout with the badge and Normalise to −23 LUFS (shows achieved loudness when peak-limited); Apply to All; "No music detected" state.
   - Success: Atlas pass over each control; an exported file reflects the chosen preset, tracks, timecode and name; Apply to All never changes a Done job.
   - Backpressure: `xcodebuild … build`, full `swift test`, Atlas pass.
 
-- [ ] **4.2**: Appearance tab additions (spec D and F controls)
+- [x] **4.2**: Appearance tab additions (spec D and F controls)
   - Depends on / external gates: 3.2; **U1**
   - Owns: `CueAppearanceSidebar.swift`
   - Detail: Countdown target, Clock position, Overlay safe zones (None, EVS OSD, Custom with four 0–30 % steppers), Show safe-zone guides, and the "Safe zones leave too little room" message, which also disables export for that job. Settings persist with the appearance and are part of the job snapshot.
   - Success: Atlas pass: each control updates the preview at once; relaunch keeps the settings; the too-little-room case disables Export Selected.
   - Backpressure: `xcodebuild … build`, Atlas pass.
+  - Evidence (2026-11-27): Atlas pass: Safe zones EVS OSD and Custom, Show guides, Countdown to Music end (Remaining 00:07:23 instead of 00:10:00 on a 10 s tone with a tail), steppers 0–30; Custom top 30 + bottom 30 shows "Safe zones leave too little room" and disables Export Selected (coordinator applied the `canExportSelected` rule); top 10 % draws hatched guides and re-lays out the picture; settings per job and kept across relaunch; an export with Custom 10/30 keeps the bottom 30 % empty. Clock position Above was set in tests only (key presses went to the queue list). Start Queue does not yet skip a job whose layout does not fit (captured for 4.1).
 
 - [ ] **4.3**: Trim, fades and pre-roll through the timeline (spec E engine)
   - Depends on: 1.3, 3.1, 3.2
@@ -364,6 +366,7 @@ Dependency graph (no cycles):
 - [ ] **X3**: Check the −60 and −40 dB thresholds on five real tracks with fades and reverb tails
   - Depends on: 3.2
   - Gates: the default thresholds only. They are constants in `MusicEndDetector`.
+  - Note (2026-11-27 Atlas pass): on a linear 3 s fade the −40 dB-below-peak rule puts "fade start" within ~0.1 s of music end, not where the fade audibly begins. Check whether the operator wants fade start nearer the audible start (e.g. −6 dB below peak).
 
 - [ ] **X4**: Remaining open questions, proceeding on the spec's defaults
   - Defaults in force: start timecode 00:00:00:00 with the music at the start timecode; Apply to All copies appearance and preset only; the filename is the clip name; the slate shows "Starts in" and clocks start at the first music frame; MPEG-2 kept as the legacy preset.

@@ -84,6 +84,18 @@ final class CueTypesTests: XCTestCase {
         XCTAssertNil(MusicMarkers(detectedMusicEnd: 5, noMusic: true).musicEnd)
     }
 
+    func testApplyingEditsKeepsDetection() {
+        let detected = MusicMarkers(detectedMusicEnd: 7.9, detectedFadeStart: 7.8)
+        // A job that stores no edits must keep the track's detected markers (Atlas pass, 2026-11-27:
+        // the export lost its music end when the job's empty markers replaced the detection).
+        XCTAssertEqual(detected.applyingEdits(from: .none), detected)
+        XCTAssertEqual(detected.applyingEdits(from: .none).musicEnd, 7.9)
+        let edited = detected.applyingEdits(from: MusicMarkers(editedMusicEnd: 7.5))
+        XCTAssertEqual(edited.musicEnd, 7.5)
+        XCTAssertEqual(edited.fadeStart, 7.8)
+        XCTAssertNil(MusicMarkers.silent.applyingEdits(from: MusicMarkers(editedMusicEnd: 3)).musicEnd)
+    }
+
     func testSafeZoneInsetsAreClampedAndPerPreset() {
         let wild = SafeZones.Insets(top: -4, bottom: 55, left: 30, right: 31)
         XCTAssertEqual(wild, SafeZones.Insets(top: 0, bottom: 30, left: 30, right: 30))
