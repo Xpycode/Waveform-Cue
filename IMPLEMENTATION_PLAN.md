@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 0/24; external acceptance: G1, U1, X1, X2, X3, X4 open.
+**Progress:** 1/24; external acceptance: U1, X1, X2, X3, X4 open (G1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -105,7 +105,7 @@ Until U1 is confirmed, 1.7 may build the three-pane shell with single-track pari
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** awaiting execution. Planning was requested; `/execute` was not. No commits are possible until G1.
+- **Execution scope/limits:** awaiting execution. Planning was requested; `/execute` was not. Only task 0.1 was requested and done.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` after each wave), `Info.plist`, `Packages/CueCore/Package.swift`, `Sources/CueCore/CueTypes.swift` after 0.3, `Scripts/`, Git, `IMPLEMENTATION_PLAN.md`, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
 - **Shared build resources:** parallel tasks run `swift test` with their own `--scratch-path` (the task's scratch folder) and a `--filter` for their own test class. Only the coordinator runs the full suite and `xcodebuild build`, using a `-derivedDataPath` outside the project.
 - **Interfaces to establish before dispatch:** the shared value types in 0.3, and the frozen signatures named in each task's Interface line.
@@ -126,7 +126,7 @@ Dependency graph (no cycles):
 
 ### Wave 0 (serial foundations — coordinator; each step changes what the next builds on)
 
-- [ ] **0.1**: Create the Git repository and push it to origin
+- [x] **0.1**: Create the Git repository and push it to origin
   - Depends on / external gates: **G1**
   - Owns: `.git`, `.gitignore`
   - Detail: this is a re-founding, not a bootstrap. No repository exists on GitHub or on any Mac; all work so far was done on M4 Pro. `git init -b main`, check `.gitignore` (keep `04_Exports/` ignored, add `.build/`, `DerivedData/`, `.swiftpm/`, `*.sync-conflict-*`; confirm `IMPLEMENTATION_PLAN.md` is not ignored), verify identity, snapshot-commit with the history loss stated in the message, `gh repo create … --private --source . --push`, then add a `Repo/git:` line to the project `CLAUDE.md`.
@@ -324,8 +324,8 @@ Dependency graph (no cycles):
 
 ## External checks
 
-- [ ] **G1**: Confirm creating a private GitHub repository for this project
-  - Requires: the operator's yes, and a name (proposed: `Xpycode/WaveformCue`, private)
+- [x] **G1**: Confirm creating a GitHub repository for this project
+  - Result (2026-11-27): confirmed as public, named Waveform Cue. GitHub names cannot contain spaces, so it is `Xpycode/Waveform-Cue`.
   - Gates: 0.1 and therefore every commit. Nothing may be committed before it.
   - While unavailable: no implementation starts; planning documents stay uncommitted on this Mac.
 
@@ -365,7 +365,6 @@ Dependency graph (no cycles):
 
 ## Blocked Tasks
 
-- 0.1 — waiting on G1. Affects everything.
 - 2.3, 4.1, 4.2, 5.1 — waiting on U1.
 
 ---
@@ -374,6 +373,7 @@ Dependency graph (no cycles):
 
 | Wave / task IDs | Assignments or serial reason | Validation / evidence | Commits or exception | Remaining gates / next action or stop reason |
 |---|---|---|---|---|
+| 0.1 | Coordinator, serial | `git status -sb` → `## main...origin/main`; https://github.com/Xpycode/Waveform-Cue (public) | `b51eee8` | Next: 0.2, then 0.3; execution not yet requested |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution

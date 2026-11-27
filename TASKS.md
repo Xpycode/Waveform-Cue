@@ -2,7 +2,7 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). First ready: Wave 0 (0.1, 0.2, 0.3), once gate G1 is confirmed. The plan owns task status and evidence.
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). First ready: 0.2, then 0.3 (0.1 is done). The plan owns task status and evidence.
 
 ## Backlog
 

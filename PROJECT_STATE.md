@@ -8,7 +8,7 @@ Build 10 is the local testing candidate. Its native MPEG-2 export still needs an
 
 Next feature round is specified in [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md) and planned in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md): 24 tasks in 7 waves. Funnel: plan complete, ready for build.
 
-**Execution:** not yet requested. First is Wave 0 (0.1 Git repository, 0.2 `CueCore` package and baseline tests, 0.3 shared types), run serially. 0.1 is blocked on gate G1 (confirm creating a private GitHub repository). Gate U1 (control placement) blocks the tasks that add controls: 2.3, 4.1, 4.2, 5.1.
+**Execution:** not yet requested. Task 0.1 is done: the repository is at https://github.com/Xpycode/Waveform-Cue (public). Next ready are 0.2 (`CueCore` package and baseline tests) and 0.3 (shared types), run serially. Gate U1 (control placement) blocks the tasks that add controls: 2.3, 4.1, 4.2, 5.1.
 
 ## Recent
 
