@@ -1,4 +1,5 @@
 import AppKit
+import CueCore
 
 private final class SidebarDocument: NSView {
     override var isFlipped: Bool { true }

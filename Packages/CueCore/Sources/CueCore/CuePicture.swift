@@ -1,37 +1,42 @@
 import AppKit
 import CoreText
 
-struct CueLabel {
-    var text = ""
+public struct CueLabel {
+    public var text = ""
     // Fraction of available travel inside the title-safe margin, bottom-left origin.
-    var position = CGPoint(x: 0, y: 1)
+    public var position = CGPoint(x: 0, y: 1)
+
+    public init(text: String = "", position: CGPoint = CGPoint(x: 0, y: 1)) {
+        self.text = text
+        self.position = position
+    }
 }
 
-enum CuePicture {
-    static let size = CGSize(width: 1920, height: 1080)
-    static let wave = CGRect(x: 96, y: 742, width: 1728, height: 100)
-    static let detail = CGRect(x: 96, y: 361, width: 1728, height: 265)
+public enum CuePicture {
+    public static let size = CGSize(width: 1920, height: 1080)
+    public static let wave = CGRect(x: 96, y: 742, width: 1728, height: 100)
+    public static let detail = CGRect(x: 96, y: 361, width: 1728, height: 265)
 
-    static func overviewRect(for zoom: ZoomWindow) -> CGRect {
+    public static func overviewRect(for zoom: ZoomWindow) -> CGRect {
         zoom == .off ? CGRect(x: wave.minX, y: detail.minY, width: wave.width, height: wave.maxY - detail.minY) : wave
     }
 
     // Center the playhead in the travelling window. Against either end of
     // the clip the window holds still and the cursor crosses the waveform.
-    static func closeUp(frame: Int, total: Int, zoom: ZoomWindow) -> Range<Int> {
+    public static func closeUp(frame: Int, total: Int, zoom: ZoomWindow) -> Range<Int> {
         let length = zoom.frameCount(for: total)
         let start = min(max(0, frame - length / 2), total - length)
         return start..<(start + length)
     }
-    static let paper = rgb(0.91, 0.94, 0.94)
-    static let dim = rgb(0.55, 0.63, 0.65)
-    static let mint = rgb(0.39, 0.89, 0.75)
+    public static let paper = rgb(0.91, 0.94, 0.94)
+    public static let dim = rgb(0.55, 0.63, 0.65)
+    public static let mint = rgb(0.39, 0.89, 0.75)
 
-    static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> CGColor {
+    public static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> CGColor {
         CGColor(srgbRed: r, green: g, blue: b, alpha: 1)
     }
 
-    static func waveform(_ peaks: [Float], in rect: CGRect = wave, expandQuiet: Bool = false) -> CGPath {
+    public static func waveform(_ peaks: [Float], in rect: CGRect = wave, expandQuiet: Bool = false) -> CGPath {
         let path = CGMutablePath()
         guard !peaks.isEmpty else { return path }
         let step = rect.width / CGFloat(peaks.count)
@@ -49,7 +54,7 @@ enum CuePicture {
         return path
     }
 
-    static func line(_ text: String, font: String, size: CGFloat, color: CGColor) -> CTLine {
+    public static func line(_ text: String, font: String, size: CGFloat, color: CGColor) -> CTLine {
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName(font as CFString, size, nil),
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): color
@@ -57,7 +62,7 @@ enum CuePicture {
         return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
     }
 
-    static func caption(_ label: CueLabel) -> (CTLine, CGRect) {
+    public static func caption(_ label: CueLabel) -> (CTLine, CGRect) {
         let titleSize: CGFloat = 48
         let color = rgb(0.83, 0.87, 0.87)
         let original = line(label.text, font: "HelveticaNeue-Medium", size: titleSize, color: color)
@@ -74,7 +79,7 @@ enum CuePicture {
         return (fitted, rect)
     }
 
-    static func draw(in ctx: CGContext, rect: CGRect, track: AudioTrack, path: CGPath,
+    public static func draw(in ctx: CGContext, rect: CGRect, track: AudioTrack, path: CGPath,
                      frame: Int, label: CueLabel, appearance: CueAppearance = CueAppearance(), heldRange: Range<Int>? = nil) {
         ctx.saveGState()
         defer { ctx.restoreGState() }

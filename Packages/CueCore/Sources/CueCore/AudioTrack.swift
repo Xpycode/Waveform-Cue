@@ -1,24 +1,24 @@
 import AVFoundation
 import Accelerate
 
-struct CueError: LocalizedError {
-    let message: String
-    init(_ message: String) { self.message = message }
-    var errorDescription: String? { message }
+public struct CueError: LocalizedError {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+    public var errorDescription: String? { message }
 }
 
-struct AudioTrack {
-    let url: URL
-    let pcm: PreparedAudio
-    let seconds: Double
-    let detailPeaks: [Float]
-    let peaks: [Float]
-    static let fps = 25
-    var frames: Int { max(1, Int(ceil(seconds * Double(Self.fps) - 1e-8))) }
+public struct AudioTrack {
+    public let url: URL
+    public let pcm: PreparedAudio
+    public let seconds: Double
+    public let detailPeaks: [Float]
+    public let peaks: [Float]
+    public static let fps = 25
+    public var frames: Int { max(1, Int(ceil(seconds * Double(Self.fps) - 1e-8))) }
 
     // Each bucket covers its exact fraction of the track. Keep the loudest
     // channel so out-of-phase stereo still gives the operator a visible cue.
-    static func read(_ url: URL, encoder: URL = PreparedAudio.encoder) throws -> AudioTrack {
+    public static func read(_ url: URL, encoder: URL = PreparedAudio.encoder) throws -> AudioTrack {
         let pcm = try PreparedAudio.decode(url, encoder: encoder)
         let file = try AVAudioFile(forReading: pcm.url, commonFormat: .pcmFormatFloat32, interleaved: false)
         let length = file.length
@@ -62,7 +62,7 @@ struct AudioTrack {
                           detailPeaks: peaks, peaks: overview)
     }
 
-    static func reducePeaks(_ slice: ArraySlice<Float>, columns: Int) -> [Float] {
+    public static func reducePeaks(_ slice: ArraySlice<Float>, columns: Int) -> [Float] {
         guard slice.count > columns else { return Array(slice) }
         return (0..<columns).map { column in
             let first = slice.startIndex + column * slice.count / columns
@@ -71,14 +71,14 @@ struct AudioTrack {
         }
     }
 
-    func peaks(in range: Range<Double>, columns: Int) -> [Float] {
+    public func peaks(in range: Range<Double>, columns: Int) -> [Float] {
         let rate = Double(detailPeaks.count) * Double(Self.fps) / Double(frames)
         let first = min(detailPeaks.count - 1, max(0, Int(floor(range.lowerBound * rate))))
         let end = min(detailPeaks.count, max(first + 1, Int(ceil(range.upperBound * rate))))
         return Self.reducePeaks(detailPeaks[first..<end], columns: columns)
     }
 
-    static func clock(_ frame: Int) -> String {
+    public static func clock(_ frame: Int) -> String {
         let s = max(0, frame) / fps
         return String(format: "%02d:%02d:%02d", s / 60, s % 60, max(0, frame) % fps)
     }

@@ -2,17 +2,28 @@ name: WaveformCue
 options:
   deploymentTarget:
     macOS: "14.0"
+packages:
+  CueCore:
+    path: Packages/CueCore
+  zPackages:
+    path: ../../zPackages
 settings:
   base:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: FDMSRXXN73
     MARKETING_VERSION: "0.1"
-    CURRENT_PROJECT_VERSION: "10"
+    CURRENT_PROJECT_VERSION: "11"
 targets:
   WaveformCue:
     type: application
     platform: macOS
     sources: [Sources, Resources]
+    dependencies:
+      - package: CueCore
+      - package: zPackages
+        product: AppShellKit
+      - package: zPackages
+        product: ProcessKit
     settings:
       base:
         PRODUCT_NAME: Waveform Cue

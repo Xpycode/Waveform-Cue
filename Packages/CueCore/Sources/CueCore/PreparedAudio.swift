@@ -3,13 +3,13 @@ import AudioToolbox
 
 /// One PCM source gives waveform analysis, playback and export the same sample zero
 /// and end sample, including encoder delay and padding on compressed music.
-final class PreparedAudio {
-    let url: URL
-    static let sessionDirectory = FileManager.default.temporaryDirectory
+public final class PreparedAudio {
+    public let url: URL
+    public static let sessionDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("WaveformCue-" + UUID().uuidString, isDirectory: true)
-    static var encoder: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ffmpeg") }
+    public static var encoder: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/ffmpeg") }
 
-    private init(url: URL) { self.url = url }
+    init(url: URL) { self.url = url }
     deinit { try? FileManager.default.removeItem(at: url) }
 
     // AAC packets may decode past a file's declared end. Honor a packet table
@@ -26,7 +26,7 @@ final class PreparedAudio {
         return ["-af", "atrim=end_sample=" + String(table.mNumberValidFrames)]
     }
 
-    static func decode(_ source: URL, encoder: URL) throws -> PreparedAudio {
+    public static func decode(_ source: URL, encoder: URL) throws -> PreparedAudio {
         let fm = FileManager.default
         try fm.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
         let base = sessionDirectory.appendingPathComponent(UUID().uuidString)

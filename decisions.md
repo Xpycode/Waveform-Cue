@@ -13,3 +13,22 @@
 **Alternatives:** an AppKit drawer; a separate queue window.
 **Decision:** a SwiftUI shell using AppShellKit: queue | monitor | inspector in an autosaved HSplitView, flat toolbar, Theme. `MonitorView` stays AppKit inside `NSViewRepresentable`.
 **Consequences:** the build 8 Appearance sidebar moves into the inspector. Exact control placement follows the UI changes protocol during planning. Spec: [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md).
+
+## 2026-11-27 · `CueCore` local package for headless tests
+
+**Context:** any `xcodebuild test` is app-hosted and launches Waveform Cue on the operator's desktop.
+**Alternatives:** app-hosted XCTest; no automated tests.
+**Decision:** models, rendering, analysis and export live in `Packages/CueCore`; the app target keeps the shell and views. Tests run with `swift test --package-path Packages/CueCore`.
+**Consequences:** the API the app uses is `public`. Render baselines are SHA-256 hashes pinned to this macOS release.
+
+## 2026-11-27 · Clock base stays 25
+
+**Context:** 1080i50 and 1080p50 render 50 images per second.
+**Decision:** `AudioTrack.fps` (25) remains the display and clock base. Render and encode rates come from `VideoStandard`.
+**Consequences:** clocks read the same on every preset; 50 Hz positions are fields between 25 Hz frames.
+
+## 2026-11-27 · Appearance sidebar stays AppKit
+
+**Context:** the shell moves to SwiftUI, and raw SwiftUI controls are not allowed outside the toolbar.
+**Decision:** `CueAppearanceSidebar` is hosted in the inspector through `NSViewRepresentable`, unchanged.
+**Consequences:** no rewrite of a working, already-compliant control panel.

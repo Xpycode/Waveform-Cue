@@ -2,8 +2,8 @@ import Foundation
 import CoreGraphics
 import Darwin
 
-enum MXFExport {
-    static func run(track: AudioTrack, label: CueLabel, appearance: CueAppearance = CueAppearance(), encoder: URL, destination: URL,
+public enum MXFExport {
+    public static func run(track: AudioTrack, label: CueLabel, appearance: CueAppearance = CueAppearance(), encoder: URL, destination: URL,
                     progress: (Double) -> Void) throws {
         let fm = FileManager.default
         let folder = destination.deletingLastPathComponent()

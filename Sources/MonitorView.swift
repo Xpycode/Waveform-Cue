@@ -1,4 +1,5 @@
 import AppKit
+import CueCore
 import UniformTypeIdentifiers
 
 final class MonitorView: NSView {

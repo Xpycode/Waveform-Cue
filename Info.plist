@@ -12,6 +12,7 @@
 <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>UIDesignRequiresCompatibility</key><true/>
 <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Luces Umbrarum</string>
 <key>CFBundleDocumentTypes</key><array><dict>
 <key>CFBundleTypeName</key><string>Audio</string>

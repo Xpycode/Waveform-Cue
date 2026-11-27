@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 1/24; external acceptance: U1, X1, X2, X3, X4 open (G1 passed 2026-11-27).
+**Progress:** 2/24; external acceptance: U1, X1, X2, X3, X4 open (G1 passed 2026-11-27).
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -105,7 +105,7 @@ Until U1 is confirmed, 1.7 may build the three-pane shell with single-track pari
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** awaiting execution. Planning was requested; `/execute` was not. Only task 0.1 was requested and done.
+- **Execution scope/limits:** 2026-11-27, "execute next steps": continue through ready waves. Gate U1 still blocks 2.3, 4.1, 4.2, 5.1. Pushes and app control keep their own authorization.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` after each wave), `Info.plist`, `Packages/CueCore/Package.swift`, `Sources/CueCore/CueTypes.swift` after 0.3, `Scripts/`, Git, `IMPLEMENTATION_PLAN.md`, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
 - **Shared build resources:** parallel tasks run `swift test` with their own `--scratch-path` (the task's scratch folder) and a `--filter` for their own test class. Only the coordinator runs the full suite and `xcodebuild build`, using a `-derivedDataPath` outside the project.
 - **Interfaces to establish before dispatch:** the shared value types in 0.3, and the frozen signatures named in each task's Interface line.
@@ -133,7 +133,7 @@ Dependency graph (no cycles):
   - Success: `git status -sb` shows `main...origin/main` with nothing ahead; build 10 sources are the first commit.
   - Backpressure: `git fetch && git status -sb | head -1`
 
-- [ ] **0.2**: Extract `CueCore`, add the package dependencies and capture the build 10 baseline
+- [x] **0.2**: Extract `CueCore`, add the package dependencies and capture the build 10 baseline
   - Depends on: 0.1
   - Owns: `Packages/CueCore/**` (new), `project.yml`, `Info.plist`, `decisions.md`
   - Detail:
@@ -144,6 +144,7 @@ Dependency graph (no cycles):
   - Interface: module `CueCore`; `CuePicture.draw(in:rect:track:path:frame:label:appearance:heldRange:)` unchanged.
   - Success: the app builds and behaves as build 10; baseline tests pass; the benchmark number is recorded.
   - Backpressure: `swift test --package-path Packages/CueCore` and `xcodegen generate && xcodebuild -scheme WaveformCue -configuration Debug -derivedDataPath <scratch>/dd build`
+  - Evidence (2026-11-27): 7 baseline tests pass in debug and release (benchmark skipped without `CUE_BENCH`); 20 render hashes pinned (4 appearances × 5 frames, including a countdown-warning case); `xcodebuild build` succeeded with `CueCore`, `AppShellKit` and `ProcessKit` linked. Behaviour unchanged by construction (files moved, only `public` and a `CueLabel` init added); no launch was made.
 
 - [ ] **0.3**: Shared value types
   - Depends on: 0.2
@@ -361,6 +362,8 @@ Dependency graph (no cycles):
 - 1080p50 AVC-I cannot be labelled correctly by FFmpeg at any version checked.
 - `xcodebuild test` would launch the app on the operator's desktop; `swift test` on `CueCore` is the only automated test path.
 - `~/ProgrammingProjects` is mode 700, so Atlas fixtures must be copied into the helper.
+- `CuePicture.draw` renders 254 frames/s at 1920 × 1080 in release on M4 Pro (`CUE_BENCH=1`, 500 frames, 180 s track). A 3-minute 1080i50 cue needs 9,000 images, about 35 s of rendering, so the 3-minute target needs no parallel rendering.
+- Render hashes match between debug and release builds.
 - This Mac is M4 Pro (label in `~/.config/directions/this-mac`; `~/.claude/this-mac` is absent). The app signs ad hoc, so the missing Apple Development certificate does not matter here.
 
 ## Blocked Tasks
@@ -374,6 +377,7 @@ Dependency graph (no cycles):
 | Wave / task IDs | Assignments or serial reason | Validation / evidence | Commits or exception | Remaining gates / next action or stop reason |
 |---|---|---|---|---|
 | 0.1 | Coordinator, serial | `git status -sb` → `## main...origin/main`; https://github.com/Xpycode/Waveform-Cue (public) | `b51eee8` | Next: 0.2, then 0.3; execution not yet requested |
+| 0.2 | Coordinator, serial (foundation every later task builds on) | `swift test --package-path Packages/CueCore` 7 tests, 0 failures, 1 skip (benchmark); release run with `CUE_BENCH=1` 254 frames/s; `xcodebuild … build` succeeded | see commit "Extract CueCore" | Next: 0.3 |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
