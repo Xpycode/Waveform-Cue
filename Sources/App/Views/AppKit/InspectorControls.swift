@@ -92,7 +92,11 @@ struct AppKitTextField: NSViewRepresentable {
         coordinator.onChange = onChange
         coordinator.onCommit = onCommit
         coordinator.text = text
-        if field.currentEditor() == nil, field.stringValue != text { field.stringValue = text }
+        // A focused field the user has not typed in yet still follows the model: tabbing out of
+        // Music end can move Fade start while focus lands in it.
+        if field.currentEditor() == nil || !coordinator.isDirty, field.stringValue != text {
+            field.stringValue = text
+        }
         field.placeholderString = placeholder
         field.toolTip = toolTip
         field.setAccessibilityLabel(accessibilityLabel)
@@ -109,14 +113,20 @@ struct AppKitTextField: NSViewRepresentable {
         var text = ""
         var onChange: ((String) -> Void)?
         var onCommit: ((String) -> Void)?
+        /// True once the user has typed since focus arrived.
+        var isDirty = false
+
+        func controlTextDidBeginEditing(_ obj: Notification) { isDirty = false }
 
         func controlTextDidChange(_ obj: Notification) {
             guard let field else { return }
+            isDirty = true
             onChange?(field.stringValue)
         }
 
         func controlTextDidEndEditing(_ obj: Notification) {
             guard let field else { return }
+            isDirty = false
             onCommit?(field.stringValue)
             // Show the model's value; when it changed, SwiftUI's next update brings the new one.
             if field.currentEditor() == nil, field.stringValue != text { field.stringValue = text }
