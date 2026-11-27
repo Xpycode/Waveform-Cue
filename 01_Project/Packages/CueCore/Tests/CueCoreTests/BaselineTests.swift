@@ -49,18 +49,18 @@ final class BaselineTests: XCTestCase {
     }
 
     static var cases: [Case] {
-        var zoomOff = CueAppearance()
+        var zoomOff = CueAppearance.build10
         zoomOff.zoom = .off
-        var warning = CueAppearance()
+        var warning = CueAppearance.build10
         warning.warning = .ten
         warning.solidRedAt = .oneSecond
         warning.fadeFullTrack = true
         return [
-            Case(name: "default", label: CueLabel(text: "Baseline Track"), appearance: CueAppearance()),
+            Case(name: "default", label: CueLabel(text: "Baseline Track"), appearance: .build10),
             Case(name: "zoomOff", label: CueLabel(text: "Baseline Track"), appearance: zoomOff),
             Case(name: "customTitle", label: CueLabel(text: "A Much Longer Cue Title For Position",
                                                       position: CGPoint(x: 0.3, y: 0.6)),
-                 appearance: CueAppearance()),
+                 appearance: .build10),
             Case(name: "warning", label: CueLabel(text: "Baseline Track"), appearance: warning),
         ]
     }

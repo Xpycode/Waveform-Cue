@@ -238,7 +238,9 @@ final class MonitorView: NSView {
     private func closeUpRange() -> Range<Int> {
         guard let timeline else { return 0..<1 }
         let playhead = Int(CuePicture.playheadFrame(timeline: timeline, position: frameNumber))
-        return heldDetail ?? CuePicture.closeUp(frame: playhead, total: timeline.clockFrames, zoom: cueAppearance.zoom)
+        return heldDetail ?? CuePicture.closeUp(frame: playhead, total: timeline.clockFrames, zoom: cueAppearance.zoom,
+                                                centerAtStart: cueAppearance.centerAtStart,
+                                                centerAtEnd: cueAppearance.centerAtEnd)
     }
 
     /// Click precedence: title, then a marker, then a trim handle (only once `onTrimChanged` is

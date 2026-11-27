@@ -99,6 +99,11 @@ public struct CueAppearance: Codable, Sendable, Equatable {
     public var fadeCloseUp = true
     public var fadeFullTrack = false
     public var zoom: ZoomWindow = .auto
+    /// Keep the close-up playhead centred over the first half-window, with empty space before
+    /// the music. Off is build 10's behaviour: the window holds still and the playhead travels.
+    public var centerAtStart = true
+    /// As `centerAtStart`, for the last half-window, with empty space after the file end.
+    public var centerAtEnd = true
     public var elapsed = ClockStyle(color: CueColor(0.84, 0.88, 0.88), size: .medium)
     public var remaining = ClockStyle(color: CueColor(0.93, 0.77, 0.52), size: .medium)
     /// Bands kept clear for a server overlay (spec F). None is build 10's layout.
@@ -134,6 +139,9 @@ public struct CueAppearance: Codable, Sendable, Equatable {
         fadeCloseUp = try values.decodeIfPresent(Bool.self, forKey: .fadeCloseUp) ?? false
         fadeFullTrack = try values.decodeIfPresent(Bool.self, forKey: .fadeFullTrack) ?? false
         zoom = try values.decodeIfPresent(ZoomWindow.self, forKey: .zoom) ?? .auto
+        // Added after build 12; saved appearances take the new centred default (operator, 2026-11-28).
+        centerAtStart = (try? values.decodeIfPresent(Bool.self, forKey: .centerAtStart)) ?? true
+        centerAtEnd = (try? values.decodeIfPresent(Bool.self, forKey: .centerAtEnd)) ?? true
         // Added in the batch round; build 10 appearances have none of these keys.
         safeZones = (try? values.decodeIfPresent(SafeZones.self, forKey: .safeZones)) ?? .none
         clockPosition = (try? values.decodeIfPresent(ClockPosition.self, forKey: .clockPosition)) ?? .below

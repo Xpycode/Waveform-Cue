@@ -38,28 +38,32 @@ struct MainWindow: View {
         .background(Theme.primaryBackground)
         .background(WindowReader { model.attach(window: $0) })
         .frame(minWidth: 690, minHeight: 530)
+        // The panes run under the toolbar; a solid band keeps the queue and inspector backgrounds
+        // and the split dividers out of it (Penumbra's approach). `.visible` is required or macOS
+        // keeps its own material and ignores the colour.
+        .toolbarBackground(Theme.secondaryBackground, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
         .toolbar { toolbarContent }
         .toolbarRole(.editor)
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // Pane toggles at the far edges, the actions together in the centre (operator, 2026-11-28).
         ToolbarItemGroup(placement: .navigation) {
-            HStack(spacing: 6) {
-                PaneToggleButton(isOn: $showQueue, iconName: "sidebar.leading",
-                                 help: "Show or hide the queue.", highlightsWhenOn: false)
+            PaneToggleButton(isOn: $showQueue, iconName: "sidebar.leading",
+                             help: "Show or hide the queue.", highlightsWhenOn: false)
+                .buttonStyle(.borderless)
+        }
+        .withoutSharedBackground()
+        ToolbarItemGroup(placement: .principal) {
+            HStack(spacing: 8) {
                 Button(action: model.chooseAudio) {
                     toolbarLabel("Add Audio…", systemImage: "plus")
                 }
                 .buttonStyle(FlatToolbarButtonStyle(isOn: .constant(false)))
                 .focusEffectDisabled()
                 .help("Add audio files or a folder to the queue (Command-O).")
-            }
-            .buttonStyle(.borderless)
-        }
-        .withoutSharedBackground()
-        ToolbarItemGroup(placement: .primaryAction) {
-            HStack(spacing: 8) {
                 Text(model.toolbarReadout)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -85,10 +89,14 @@ struct MainWindow: View {
                 .focusEffectDisabled()
                 .disabled(!model.canExportSelected)
                 .help(EditorModel.exportHelp)
-                PaneToggleButton(isOn: $showInspector, iconName: "sidebar.trailing",
-                                 help: "Show or hide appearance settings.", highlightsWhenOn: false)
             }
             .buttonStyle(.borderless)
+        }
+        .withoutSharedBackground()
+        ToolbarItemGroup(placement: .primaryAction) {
+            PaneToggleButton(isOn: $showInspector, iconName: "sidebar.trailing",
+                             help: "Show or hide appearance settings.", highlightsWhenOn: false)
+                .buttonStyle(.borderless)
         }
         .withoutSharedBackground()
     }

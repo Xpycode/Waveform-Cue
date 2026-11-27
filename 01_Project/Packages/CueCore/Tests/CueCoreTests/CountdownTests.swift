@@ -189,8 +189,8 @@ final class CountdownTests: XCTestCase {
     func testNoMarkersKeepsBaseline() {
         let track = BaselineTests.syntheticTrack()
         for frame in BaselineTests.frames(for: track) {
-            let image = Self.render(track, timeline: CuePicture.timeline(for: track, appearance: CueAppearance()),
-                                    position: frame, appearance: CueAppearance(), label: CueLabel(text: "Baseline Track"))
+            let image = Self.render(track, timeline: CuePicture.timeline(for: track, appearance: .build10),
+                                    position: frame, appearance: .build10, label: CueLabel(text: "Baseline Track"))
             XCTAssertEqual(BaselineTests.hash(Data(image)), BaselineTests.expected["default@\(frame)"])
         }
     }
@@ -199,7 +199,7 @@ final class CountdownTests: XCTestCase {
 
     func testMarkersDrawnOnBothWaveforms() {
         let track = Self.track()
-        let appearance = CueAppearance()
+        let appearance = CueAppearance.build10
         let layout = appearance.layout
         let timeline = Self.timeline(track, appearance)
         // Playhead 640: close-up window 500..<750 holds both markers.

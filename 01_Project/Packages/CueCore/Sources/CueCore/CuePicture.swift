@@ -44,11 +44,15 @@ public enum CuePicture {
         zoom == .off ? CGRect(x: wave.minX, y: detail.minY, width: wave.width, height: wave.maxY - detail.minY) : wave
     }
 
-    // Center the playhead in the travelling window. Against either end of
-    // the clip the window holds still and the cursor crosses the waveform.
-    public static func closeUp(frame: Int, total: Int, zoom: ZoomWindow) -> Range<Int> {
+    // Center the playhead in the travelling window. At an end whose centring is off the window
+    // holds still and the cursor crosses the waveform; with it on, the window runs past the
+    // track and the space beyond it stays empty.
+    public static func closeUp(frame: Int, total: Int, zoom: ZoomWindow,
+                               centerAtStart: Bool = false, centerAtEnd: Bool = false) -> Range<Int> {
         let length = zoom.frameCount(for: total)
-        let start = min(max(0, frame - length / 2), total - length)
+        var start = frame - length / 2
+        if !centerAtEnd { start = min(start, total - length) }
+        if !centerAtStart { start = max(0, start) }
         return start..<(start + length)
     }
     public static let paper = rgb(0.91, 0.94, 0.94)
@@ -204,7 +208,8 @@ public enum CuePicture {
         let playhead = playheadFrame(timeline: timeline, position: position)
         let warningFraction = appearance.warning.fraction(framesLeft: framesLeft, solidAt: appearance.solidRedAt)
         let window = heldRange.map { Window(lower: Double($0.lowerBound), count: $0.count) }
-            ?? Window.closeUp(playhead: playhead, total: total, zoom: appearance.zoom)
+            ?? Window.closeUp(playhead: playhead, total: total, zoom: appearance.zoom,
+                              centerAtStart: appearance.centerAtStart, centerAtEnd: appearance.centerAtEnd)
         let fps = Double(AudioTrack.fps)
         func xForFrame(_ frame: Double, in range: Window, rect: CGRect) -> CGFloat {
             rect.minX + rect.width * CGFloat(frame - range.lower) / CGFloat(range.count)
@@ -264,8 +269,9 @@ public enum CuePicture {
 
         let full = Window(lower: 0, count: total)
         let overview = layout.overview
-        let lo = xForFrame(window.lower, in: full, rect: overview)
-        let hi = xForFrame(window.upper, in: full, rect: overview)
+        // A centred window can run past the track; its box on the full track stays inside it.
+        let lo = xForFrame(max(0, window.lower), in: full, rect: overview)
+        let hi = xForFrame(min(Double(total), window.upper), in: full, rect: overview)
         let panel = rgb(0.071, 0.102, 0.111)
         fill(CGRect(origin: .zero, size: size), background)
         drawText("Full track", overview.minX, layout.overviewLabelBaseline, M.overviewLabelSize, dim)
@@ -286,8 +292,8 @@ public enum CuePicture {
             fill(detail, panel)
             // Align ticks to track time so a fade ending at 1:20 keeps its mark while scrolling.
             let tickStep = [1, 5, 10, 25, 50, 125, 250].first { $0 * 10 >= window.count } ?? 250
-            let firstTick = Int((window.lower / Double(tickStep)).rounded(.up)) * tickStep
-            let lastTick = Int(window.upper.rounded(.down))
+            let firstTick = Int((max(0, window.lower) / Double(tickStep)).rounded(.up)) * tickStep
+            let lastTick = Int(min(Double(total), window.upper).rounded(.down))
             let tickBaseline = detail.minY - M.tickLabelOffset
             for tick in stride(from: firstTick, through: lastTick, by: tickStep) {
                 let tickX = xForFrame(Double(tick), in: window, rect: detail)
@@ -303,9 +309,23 @@ public enum CuePicture {
                     drawText(value, left, tickBaseline, M.tickLabelSize, dim, mono: true)
                 }
             }
+            // Only the part of the window inside the track has audio; outside it the panel stays empty.
             let start = timeline.sourceRange.lowerBound
-            let timeRange = (start + window.lower / fps)..<(start + window.upper / fps)
-            let detailPath = waveform(track.peaks(in: timeRange, columns: 1600), in: detail, expandQuiet: true)
+            let shown = max(0, window.lower)..<max(max(0, window.lower), min(Double(total), window.upper))
+            let detailPath: CGPath
+            if shown.lowerBound == window.lower && shown.upperBound == window.upper {
+                let timeRange = (start + window.lower / fps)..<(start + window.upper / fps)
+                detailPath = waveform(track.peaks(in: timeRange, columns: 1600), in: detail, expandQuiet: true)
+            } else if shown.isEmpty {
+                detailPath = CGMutablePath()
+            } else {
+                let left = xForFrame(shown.lowerBound, in: window, rect: detail)
+                let right = xForFrame(shown.upperBound, in: window, rect: detail)
+                let part = CGRect(x: left, y: detail.minY, width: right - left, height: detail.height)
+                let columns = max(1, Int((1600 * (shown.upperBound - shown.lowerBound) / Double(window.count)).rounded()))
+                let timeRange = (start + shown.lowerBound / fps)..<(start + shown.upperBound / fps)
+                detailPath = waveform(track.peaks(in: timeRange, columns: columns), in: part, expandQuiet: true)
+            }
             let cursor = xForFrame(playhead, in: window, rect: detail)
             paintEnvelope(detailPath, rect: detail, cursor: cursor,
                           played: appearance.detailColor ?? CueAppearance.defaultDetail,
@@ -464,9 +484,12 @@ public enum CuePicture {
         var upper: Double { lower + Double(count) }
 
         /// `closeUp(frame:total:zoom:)` for a fractional playhead; identical for whole frames.
-        static func closeUp(playhead: Double, total: Int, zoom: ZoomWindow) -> Window {
+        static func closeUp(playhead: Double, total: Int, zoom: ZoomWindow,
+                            centerAtStart: Bool = false, centerAtEnd: Bool = false) -> Window {
             let length = zoom.frameCount(for: total)
-            let start = min(max(0, playhead - Double(length / 2)), Double(total - length))
+            var start = playhead - Double(length / 2)
+            if !centerAtEnd { start = min(start, Double(total - length)) }
+            if !centerAtStart { start = max(0, start) }
             return Window(lower: start, count: length)
         }
     }

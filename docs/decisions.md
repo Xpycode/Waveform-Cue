@@ -51,3 +51,15 @@
 **Context:** the Xcode project, sources and Directions docs all sat at the repository root, unlike the standard layout (`13_folder-structure.md`).
 **Decision:** move the Xcode project, `project.yml`, `Info.plist`, `Sources`, `Resources`, `Scripts` and `Packages/CueCore` into `01_Project/`, and the state, plan, tasks, decisions, sessions and specs into `docs/`. The repository stays at the project root.
 **Consequences:** the house-package paths (`../../zPackages` in `project.yml`, `../../../../zPackages` in the `CueCore` manifest) now resolve to `1-macOS/zPackages` beside the project. Commands use `01_Project/Packages/CueCore` and `cd 01_Project && xcodegen generate`. Agent worktrees need an ignored `.claude/worktrees/zPackages` symlink instead of `.claude/zPackages`. Older session logs and execution evidence keep their original paths.
+
+## 2026-11-28 · Close-up centred to both ends
+
+**Context:** the close-up window held still for the first and last half-window, so the playhead walked to the panel edge at the start and end of every cue. The operator wants it centred throughout.
+**Decision:** `CueAppearance.centerAtStart` and `centerAtEnd` (both on by default, also for saved appearances without the keys) let the window run past the track; the space beyond it is drawn empty, and the full-track box and the tick labels stay inside the track. Two checkboxes under Appearance → Waveform. `CuePicture.closeUp(frame:total:zoom:)` keeps build 10's clamped window when called without the flags.
+**Consequences:** exports change in the first and last half-window of the close-up. The render baselines pin build 10's look through the test-only `CueAppearance.build10` (both flags off); `CenteredCloseUpTests` covers the centred default.
+
+## 2026-11-28 · Solid toolbar band with centred actions
+
+**Context:** on the macOS 27 SDK the panes show through the toolbar, so the queue and inspector backgrounds and the split dividers ran up into it (build 12).
+**Decision:** as in Penumbra, `.toolbarBackground(Theme.secondaryBackground)` with `.visible`, and every group's shared glass background hidden. Layout changed from U1: the queue toggle stays at the left edge and the inspector toggle at the right edge; Add Audio, the format readout, Start Queue and Export Selected sit together in the centre (`.principal`). Approved by the operator.
+**Consequences:** one solid band across the window whatever panes are shown.
