@@ -19,6 +19,15 @@ final class CueAppearanceSidebar: NSView {
     private let fadeFullTrack = NSButton(checkboxWithTitle: "Fade full track to red", target: nil, action: nil)
     private let fadeCloseUp = NSButton(checkboxWithTitle: "Fade close-up to red", target: nil, action: nil)
     private let zoom = NSPopUpButton()
+    private let countdownTarget = NSPopUpButton()
+    private let clockPosition = NSPopUpButton()
+    private let safeZonePreset = NSPopUpButton()
+    private let showGuides = NSButton(checkboxWithTitle: "Show safe-zone guides", target: nil, action: nil)
+    private let zoneNames = ["Top", "Bottom", "Left", "Right"]
+    private let zoneSteppers = (0..<4).map { _ in NSStepper() }
+    private let zoneValues = (0..<4).map { _ in NSTextField(labelWithString: "0 %") }
+    private let roomMessage = NSTextField(wrappingLabelWithString: "Safe zones leave too little room")
+    private var zoneGrid = NSGridView()
     private var settings: CueAppearance
     private let changed: (CueAppearance) -> Void
 
@@ -70,7 +79,39 @@ final class CueAppearanceSidebar: NSView {
             checkbox.target = self
             checkbox.action = #selector(edit(_:))
         }
-        for picker in [elapsedSize, remainingSize, zoom, warning, solidRedAt] {
+        countdownTarget.addItems(withTitles: CountdownTarget.allCases.map { $0.title })
+        countdownTarget.setAccessibilityLabel("Countdown target")
+        countdownTarget.toolTip = "Count down to the end of the file or to the end of the music."
+        clockPosition.addItems(withTitles: ClockPosition.allCases.map { $0.title })
+        clockPosition.setAccessibilityLabel("Clock position")
+        clockPosition.toolTip = "Place the clocks below or above the waveforms."
+        safeZonePreset.addItems(withTitles: SafeZonePreset.allCases.map { $0.title })
+        safeZonePreset.setAccessibilityLabel("Overlay safe zones")
+        safeZonePreset.toolTip = "Keep the picture free where a server overlay draws."
+        showGuides.toolTip = "Draw the safe zones in the preview and in the exported file."
+        showGuides.setAccessibilityLabel("Show safe-zone guides")
+        roomMessage.font = .systemFont(ofSize: 11)
+        roomMessage.textColor = .systemRed
+        roomMessage.setAccessibilityLabel("Safe zones leave too little room")
+        for (index, stepper) in zoneSteppers.enumerated() {
+            stepper.minValue = Double(SafeZones.range.lowerBound)
+            stepper.maxValue = Double(SafeZones.range.upperBound)
+            stepper.increment = 1
+            stepper.valueWraps = false
+            stepper.setAccessibilityLabel(zoneNames[index] + " safe zone, percent")
+            stepper.toolTip = zoneNames[index] + " safe zone in percent"
+            stepper.target = self
+            stepper.action = #selector(edit(_:))
+            zoneValues[index].alignment = .right
+            zoneValues[index].widthAnchor.constraint(equalToConstant: 40).isActive = true
+        }
+        for control in [countdownTarget, clockPosition, safeZonePreset] {
+            control.target = self
+            control.action = #selector(edit(_:))
+        }
+        showGuides.target = self
+        showGuides.action = #selector(edit(_:))
+        for picker in [elapsedSize, remainingSize, zoom, warning, solidRedAt, countdownTarget, clockPosition, safeZonePreset] {
             picker.widthAnchor.constraint(equalToConstant: 119).isActive = true
         }
         func section(_ title: String) -> NSTextField {
@@ -102,17 +143,22 @@ final class CueAppearanceSidebar: NSView {
         ])
         let timing = grid([
             [NSTextField(labelWithString: "Fade to red"), warning],
-            [NSTextField(labelWithString: "Solid red at"), solidRedAt]
+            [NSTextField(labelWithString: "Solid red at"), solidRedAt],
+            [NSTextField(labelWithString: "Countdown to"), countdownTarget]
         ])
+        let clockPlacement = grid([[NSTextField(labelWithString: "Clock position"), clockPosition]])
+        let zonePreset = grid([[NSTextField(labelWithString: "Safe zones"), safeZonePreset]])
+        zoneGrid = grid((0..<4).map { [NSTextField(labelWithString: zoneNames[$0]), zoneSteppers[$0], zoneValues[$0]] })
         let title = NSTextField(labelWithString: "Appearance")
         title.font = .systemFont(ofSize: 17, weight: .semibold)
         let reset = NSButton(title: "Restore Defaults", target: self, action: #selector(reset))
-        let stack = NSStackView(views: [title, overlayTitle, labelField, placement, clocks, waveforms, section("End warning"),
-                                        timing, fadeCloseUp, fadeFullTrack, reset])
+        let stack = NSStackView(views: [title, overlayTitle, labelField, placement, clocks, clockPlacement, waveforms,
+                                        section("End warning"), timing, fadeCloseUp, fadeFullTrack,
+                                        section("Overlay safe zones"), zonePreset, zoneGrid, showGuides, roomMessage, reset])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
-        for view in [title, placement, clocks, waveforms, fadeFullTrack] as [NSView] {
+        for view in [title, placement, clockPlacement, waveforms, fadeFullTrack, showGuides] as [NSView] {
             stack.setCustomSpacing(20, after: view)
         }
 
@@ -184,8 +230,21 @@ final class CueAppearanceSidebar: NSView {
         case solidRedAt: settings.solidRedAt = SolidRedThreshold.allCases[solidRedAt.indexOfSelectedItem]
         case fadeCloseUp: settings.fadeCloseUp = fadeCloseUp.state == .on
         case fadeFullTrack: settings.fadeFullTrack = fadeFullTrack.state == .on
+        case countdownTarget: settings.countdownTarget = CountdownTarget.allCases[countdownTarget.indexOfSelectedItem]
+        case clockPosition: settings.clockPosition = ClockPosition.allCases[clockPosition.indexOfSelectedItem]
+        case safeZonePreset:
+            settings.safeZones.preset = SafeZonePreset.allCases[safeZonePreset.indexOfSelectedItem]
+            updateSafeZoneControls()
+        case showGuides: settings.showGuides = showGuides.state == .on
+        case let stepper as NSStepper where zoneSteppers.contains(stepper):
+            var custom = settings.safeZones.custom
+            let values = zoneSteppers.map { Int($0.integerValue) }
+            custom = SafeZones.Insets(top: values[0], bottom: values[1], left: values[2], right: values[3])
+            settings.safeZones.custom = custom
+            updateSafeZoneControls()
         default: return
         }
+        roomMessage.isHidden = settings.layout.fits
         changed(settings)
     }
 
@@ -206,6 +265,11 @@ final class CueAppearanceSidebar: NSView {
         fadeCloseUp.state = settings.fadeCloseUp ? .on : .off
         fadeFullTrack.state = settings.fadeFullTrack ? .on : .off
         updateWarningControls()
+        countdownTarget.selectItem(withTitle: settings.countdownTarget.title)
+        clockPosition.selectItem(withTitle: settings.clockPosition.title)
+        safeZonePreset.selectItem(withTitle: settings.safeZones.preset.title)
+        showGuides.state = settings.showGuides ? .on : .off
+        updateSafeZoneControls()
         zoom.selectItem(withTitle: settings.zoom.title)
         elapsedColor.color = settings.elapsed.color.nsColor
         remainingColor.color = settings.remaining.color.nsColor
@@ -215,5 +279,19 @@ final class CueAppearanceSidebar: NSView {
         solidRedAt.isEnabled = settings.warning != .off
         fadeCloseUp.isEnabled = settings.warning != .off && settings.zoom != .off
         fadeFullTrack.isEnabled = settings.warning != .off
+    }
+
+    private func updateSafeZoneControls() {
+        let custom = settings.safeZones.custom
+        let values = [custom.top, custom.bottom, custom.left, custom.right]
+        let editable = settings.safeZones.preset == .custom
+        for index in 0..<4 {
+            zoneSteppers[index].integerValue = values[index]
+            zoneValues[index].stringValue = "\(values[index]) %"
+            zoneSteppers[index].isEnabled = editable
+            zoneValues[index].textColor = editable ? .labelColor : .disabledControlTextColor
+        }
+        zoneGrid.isHidden = !editable
+        roomMessage.isHidden = settings.layout.fits
     }
 }
