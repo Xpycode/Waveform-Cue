@@ -20,15 +20,30 @@ public enum MXFExport {
         public var startTimecode: Timecode
         /// Linear loudness gain in dB; 0 leaves the audio untouched.
         public var gainDB: Double
+        /// The source's measured loudness (before `gainDB`), shown on the pre-roll slate; nil
+        /// when not measured.
+        public var loudness: LoudnessMeasurement?
 
         public init(track: AudioTrack, label: CueLabel, appearance: CueAppearance = CueAppearance(),
-                    layout: AudioLayout = .default, startTimecode: Timecode = .start, gainDB: Double = 0) {
+                    layout: AudioLayout = .default, startTimecode: Timecode = .start, gainDB: Double = 0,
+                    loudness: LoudnessMeasurement? = nil) {
             self.track = track
             self.label = label
             self.appearance = appearance
             self.layout = layout
             self.startTimecode = startTimecode
             self.gainDB = gainDB
+            self.loudness = loudness
+        }
+
+        /// The loudness the clip carries: the measurement moved by the linear gain (integrated
+        /// and true peak shift by `gainDB`; the range does not change).
+        public var clipLoudness: LoudnessMeasurement? {
+            guard var m = loudness else { return nil }
+            guard gainDB.isFinite, gainDB != 0 else { return m }
+            m.integratedLUFS = m.integratedLUFS.map { $0 + gainDB }
+            m.truePeakDBTP = m.truePeakDBTP.map { $0 + gainDB }
+            return m
         }
     }
 
@@ -135,7 +150,8 @@ public enum MXFExport {
         // One layout for the whole export, the same value the preview computes.
         let track = snapshot.track
         let layout = snapshot.appearance.layout
-        let path = CuePicture.overviewPath(track, layout: layout)
+        let path = CuePicture.overviewPath(track, layout: layout, timeline: timeline)
+        let loudness = snapshot.clipLoudness
         let rect = CGRect(x: 0, y: 0, width: width, height: height)
         let count = timeline.positionCount
         let bytes = bitmap.bytesPerRow * bitmap.height
@@ -145,7 +161,7 @@ public enum MXFExport {
             autoreleasepool {
                 CuePicture.draw(in: bitmap, rect: rect, track: track, path: path, timeline: timeline,
                                 layout: layout, position: position, label: snapshot.label,
-                                appearance: snapshot.appearance)
+                                appearance: snapshot.appearance, loudness: loudness)
             }
             // One whole frame per image: a short write is resumed, never split across frames.
             var offset = 0
