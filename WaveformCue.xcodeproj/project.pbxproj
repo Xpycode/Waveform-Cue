@@ -7,25 +7,43 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		34272279A1CB88514D5960AF /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F59E9DE791B4F659455F4C21 /* MonitorView.swift */; };
+		042366648BEC760C42CE00A3 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6FB5801C154716BA548ED36 /* MainWindow.swift */; };
+		2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */; };
+		468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */; };
 		47CD199208A574368D145D2F /* CueCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5290EC1FEDA9CFC55BFAE0A9 /* CueCore */; };
+		64A66B6CF832348F75D83E9B /* AppKitButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 432B9F05919250B0355A4D2E /* AppKitButton.swift */; };
+		6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */; };
+		69C2B6BBFA026CB2F118F512 /* WindowReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 598A11E249649DBE0B31CE2E /* WindowReader.swift */; };
+		72284B3F02D321E8846024C7 /* MonitorRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */; };
 		73A56F168C6522B560C11AED /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A5E3FF4D2DFB625EA4A54C8 /* ProcessKit */; };
+		7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */; };
 		8BA42A9957F25211E3F85814 /* AppShellKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0FB5306E6FFEE9D3E2315288 /* AppShellKit */; };
 		913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */ = {isa = PBXBuildFile; fileRef = DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */; };
-		A26818F8855135B636B108FD /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2D62F5F702C22D9FA0AC16 /* main.swift */; };
-		DB59915C7B39CA18CA7E3A44 /* CueAppearanceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F7D30660D1825E4BA0E8E3 /* CueAppearanceSidebar.swift */; };
-		F237F25431FF90D82959D575 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DA05A1555994F8F0D43E59 /* AppController.swift */; };
+		BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */; };
+		DA2853F40580865E8F0DF404 /* AppearanceSidebarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */; };
+		E7110E1C3EFC4E6138B63988 /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DF670FE79893C490F0C8939 /* MonitorView.swift */; };
+		ED01D10D9DB4D915812CE74F /* InspectorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2AE10376D843166203E40F /* InspectorPane.swift */; };
+		F5FDDFEAD0B86F8D7FB7D1A0 /* EditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		2DF670FE79893C490F0C8939 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
 		3F59DF60304D0AB83FCF1105 /* zPackages */ = {isa = PBXFileReference; lastKnownFileType = folder; name = zPackages; path = ../../zPackages; sourceTree = SOURCE_ROOT; };
-		44DA05A1555994F8F0D43E59 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
-		5E2D62F5F702C22D9FA0AC16 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		D2F7D30660D1825E4BA0E8E3 /* CueAppearanceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearanceSidebar.swift; sourceTree = "<group>"; };
+		432B9F05919250B0355A4D2E /* AppKitButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitButton.swift; sourceTree = "<group>"; };
+		4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformCueApp.swift; sourceTree = "<group>"; };
+		598A11E249649DBE0B31CE2E /* WindowReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReader.swift; sourceTree = "<group>"; };
+		7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorModel.swift; sourceTree = "<group>"; };
+		7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportRepresentable.swift; sourceTree = "<group>"; };
+		8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRepresentable.swift; sourceTree = "<group>"; };
+		A6FB5801C154716BA548ED36 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
+		A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSidebar.swift; sourceTree = "<group>"; };
+		B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearanceSidebar.swift; sourceTree = "<group>"; };
+		CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorPane.swift; sourceTree = "<group>"; };
 		DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = WaveformCue.icns; sourceTree = "<group>"; };
+		EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSidebarRepresentable.swift; sourceTree = "<group>"; };
 		F19F0C4416F740B942425864 /* WaveformCue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WaveformCue.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F59E9DE791B4F659455F4C21 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
 		FD7906994D6DC6A01A9A12CD /* CueCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CueCore; path = Packages/CueCore; sourceTree = SOURCE_ROOT; };
+		FF2AE10376D843166203E40F /* InspectorPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorPane.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -42,12 +60,34 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0DC235EFCB81E4D710E07C67 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FF2AE10376D843166203E40F /* InspectorPane.swift */,
+				A6FB5801C154716BA548ED36 /* MainWindow.swift */,
+				CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */,
+				A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */,
+				C40D563B42818EABA8F5AD0B /* AppKit */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		60D5AB550A55F0DE23FACC13 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 				DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		A5CD8373324D63CC9B9988DA /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */,
+				4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */,
+				0DC235EFCB81E4D710E07C67 /* Views */,
+			);
+			path = App;
 			sourceTree = "<group>";
 		};
 		B2C53258EF17F58F999F26E1 = {
@@ -58,6 +98,20 @@
 				FC52918E1B150EE1774BDA82 /* Sources */,
 				FA30E6898F74CF5B3B69E9DA /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		C40D563B42818EABA8F5AD0B /* AppKit */ = {
+			isa = PBXGroup;
+			children = (
+				EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */,
+				432B9F05919250B0355A4D2E /* AppKitButton.swift */,
+				B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */,
+				8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */,
+				2DF670FE79893C490F0C8939 /* MonitorView.swift */,
+				7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */,
+				598A11E249649DBE0B31CE2E /* WindowReader.swift */,
+			);
+			path = AppKit;
 			sourceTree = "<group>";
 		};
 		D1469A68C4B650A1D235D44D /* Packages */ = {
@@ -80,10 +134,7 @@
 		FC52918E1B150EE1774BDA82 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				44DA05A1555994F8F0D43E59 /* AppController.swift */,
-				D2F7D30660D1825E4BA0E8E3 /* CueAppearanceSidebar.swift */,
-				5E2D62F5F702C22D9FA0AC16 /* main.swift */,
-				F59E9DE791B4F659455F4C21 /* MonitorView.swift */,
+				A5CD8373324D63CC9B9988DA /* App */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -190,10 +241,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F237F25431FF90D82959D575 /* AppController.swift in Sources */,
-				DB59915C7B39CA18CA7E3A44 /* CueAppearanceSidebar.swift in Sources */,
-				34272279A1CB88514D5960AF /* MonitorView.swift in Sources */,
-				A26818F8855135B636B108FD /* main.swift in Sources */,
+				64A66B6CF832348F75D83E9B /* AppKitButton.swift in Sources */,
+				DA2853F40580865E8F0DF404 /* AppearanceSidebarRepresentable.swift in Sources */,
+				BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */,
+				F5FDDFEAD0B86F8D7FB7D1A0 /* EditorModel.swift in Sources */,
+				ED01D10D9DB4D915812CE74F /* InspectorPane.swift in Sources */,
+				042366648BEC760C42CE00A3 /* MainWindow.swift in Sources */,
+				6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */,
+				72284B3F02D321E8846024C7 /* MonitorRepresentable.swift in Sources */,
+				E7110E1C3EFC4E6138B63988 /* MonitorView.swift in Sources */,
+				2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */,
+				7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */,
+				468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */,
+				69C2B6BBFA026CB2F118F512 /* WindowReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
