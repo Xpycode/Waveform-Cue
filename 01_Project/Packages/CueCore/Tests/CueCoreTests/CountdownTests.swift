@@ -260,11 +260,11 @@ final class CountdownTests: XCTestCase {
         XCTAssertEqual(hit(detailEnd - 3, detail.midY), .marker(.musicEnd, onCloseUp: true))
         XCTAssertEqual(hit(detailFade + 5, detail.midY), .marker(.fadeStart, onCloseUp: true))
         XCTAssertEqual(hit(detail.midX - 300, detail.midY), .detail)
-        // The title is tested first; a waveform-free point is none.
+        // The title band and the background both ignore marker and scrub gestures.
         let title = CuePicture.caption(label, layout: layout).1
-        XCTAssertEqual(hit(title.midX, title.midY), .title)
+        XCTAssertEqual(hit(title.midX, title.midY), .none)
         XCTAssertEqual(hit(960, 20), CuePicture.HitTarget.none)
-        // Without markers the hit-test is build 10's.
+        // Without a marker, the same point on the waveform scrubs.
         let bare = CuePicture.timeline(for: BaselineTests.syntheticTrack(), appearance: appearance)
         XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: endX, y: y), label: label, layout: layout,
                                             timeline: bare, closeUp: closeUp), .overview)
