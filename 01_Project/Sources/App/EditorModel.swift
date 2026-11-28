@@ -4,7 +4,7 @@ import CueCore
 import Observation
 import UniformTypeIdentifiers
 
-/// The editor: the batch queue, plus loading, playback and label placement for the selected job.
+/// The editor: the batch queue, plus loading, playback and appearance for the selected job.
 ///
 /// Every track is a queue job. Dropping or opening audio adds jobs (decoded once on the way in,
 /// so a file that cannot be decoded arrives as a Failed job); selecting a job loads it into the
@@ -18,10 +18,6 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
-    static let anchors = ["Top left", "Top center", "Top right", "Middle left", "Center",
-                          "Middle right", "Bottom left", "Bottom center", "Bottom right"]
-    /// Index of the "Custom" item that follows the nine anchors in the position pop-up.
-    static let customPositionIndex = anchors.count
     static let exportHelp = "Export the selected job beside its audio file (Command-E). Use File → Export Selected to Folder… to choose another location."
 
     // MARK: Observed state
@@ -40,7 +36,6 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     /// The playhead: a position of `previewTimeline` (see Playback).
     private(set) var frame = 0
     private(set) var isPlaying = false
-    private(set) var positionIndex = 0
     private(set) var placeholder = "Drop audio files"
     private(set) var status = "Drop tracks or a folder on the queue to begin."
     private(set) var statusHelp: String?
@@ -176,6 +171,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
             guard let self, id == self.selectedJobID else { return }
             self.endEditing()
         }
+        queue.didLockJob = { [weak self] id in self?.appearanceSidebar?.jobDidLock(id) }
         scheduleLoudness()
     }
 
@@ -504,7 +500,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     // MARK: Selection
 
-    /// Selects a job and loads it into the monitor with its own text, position and appearance.
+    /// Selects a job and loads it into the monitor with its own text and appearance.
     /// A job with stored analysis shows its waveform at once; its audio is then decoded through
     /// the workspace for playback (no re-analysis). Selecting the already selected job does
     /// nothing, unless its audio is not loaded yet (for example after a failed read) or `force`.
@@ -528,13 +524,11 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         guard let job = queue.selectedJob else {
             ingestedTrack = nil
             label = CueLabel()
-            positionIndex = 0
             appearance = savedAppearance
             placeholder = queue.jobs.isEmpty ? "Drop audio files" : "Select a job in the queue"
             return
         }
         label = job.label
-        positionIndex = Self.positionIndex(for: job.label.position)
         appearance = job.appearance
         markerMessage = nil
         trimMessage = nil
@@ -656,7 +650,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
                 audio.currentTime = min(audio.duration, timeline.sourceSeconds(at: frame))
             }
             if !queue.isRunning, pendingAdds == 0 {
-                status = "Click the waveform to cue. Drag the text to position it."
+                status = "Click the waveform to cue."
             }
         } catch {
             placeholder = "Couldn’t play this job’s audio"
@@ -673,14 +667,6 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         if let measuring = measuringJobID, removed.contains(measuring) { refreshLoudness() }
         for id in removed { loudnessFailures[id] = nil }
         if wasSelected, queue.selectedJobID == nil { selectJob(nil, force: true) }
-    }
-
-    static func positionIndex(for point: CGPoint) -> Int {
-        anchors.indices.first { anchorPoint($0) == point } ?? customPositionIndex
-    }
-
-    private static func anchorPoint(_ index: Int) -> CGPoint {
-        CGPoint(x: Double(index % 3) / 2, y: 1 - Double(index / 3) / 2)
     }
 
     // MARK: Playback
@@ -805,61 +791,36 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     // MARK: Label and appearance (selected job only)
 
     func setLabelText(_ text: String) {
-        guard canEdit else { return }
-        label.text = text
-        storeLabel(deferringSave: true)
-    }
-
-    /// Title drag in the monitor.
-    func placeLabel(at point: CGPoint) {
-        guard canEdit else { return }
-        label.position = point
-        positionIndex = Self.customPositionIndex
-        storeLabel(deferringSave: true)
-    }
-
-    /// Position pop-up: one of the nine anchors, or Custom.
-    func selectPosition(_ index: Int) {
-        guard canEdit else { return }
-        positionIndex = index
-        guard Self.anchors.indices.contains(index) else {
-            status = "Drag the text in the monitor to position it."
+        guard let id = selectedJobID else { return }
+        guard queue.update(id, deferringSave: true, { $0.labelText = text }) else {
+            reportLockedSettings()
             return
         }
-        label.position = Self.anchorPoint(index)
-        storeLabel()
+        label.text = text
+    }
+
+    func reportLockedSettings() {
+        status = "This job is exporting. Its settings are locked."
+        statusHelp = nil
     }
 
     /// An accepted edit becomes the look used by subsequent imports.
     func updateAppearance(_ appearance: CueAppearance) {
-        guard canEdit else { return }
         let previous = self.appearance
         let trimChanged = previous.trimAndFadesEnabled != appearance.trimAndFadesEnabled
             || previous.preRollEnabled != appearance.preRollEnabled
         let oldTimeline = trimChanged ? previewTimeline : nil
+        if let id = selectedJobID, !queue.update(id, { $0.appearance = appearance }) {
+            reportLockedSettings()
+            return
+        }
         self.appearance = appearance
-        if let id = selectedJobID {
-            queue.update(id) { $0.appearance = appearance }
+        if selectedJobID != nil {
             if trimChanged { remapPlayhead(from: oldTimeline) }
             if previous.loudnessAnalysisEnabled != appearance.loudnessAnalysisEnabled { refreshLoudness() }
         }
         savedAppearance = appearance
         appearance.save()
-    }
-
-    /// Typing and dragging defer the save (`queue.json` holds every job's waveform), so a burst
-    /// of keystrokes writes the file once.
-    private func storeLabel(deferringSave: Bool = false) {
-        guard let id = selectedJobID else { return }
-        let label = self.label
-        guard queue.update(id, deferringSave: deferringSave, { $0.label = label }) else {
-            status = "This job is exporting. Its settings are locked."
-            return
-        }
-        // Subsequent inspector edits write this entire cached appearance back to the job.
-        if let alignment = selectedJob?.appearance.titleAlignment, appearance.titleAlignment != alignment {
-            appearance.titleAlignment = alignment
-        }
     }
 
     // MARK: Job settings (Job tab, selected job only)

@@ -38,7 +38,7 @@ struct InspectorPane: View {
                                                appearance: model.appearance,
                                                clockFrames: model.inspectorClockFrames,
                                                labelText: model.label.text,
-                                               positionIndex: model.positionIndex,
+                                               jobID: model.selectedJobID,
                                                labelEditable: model.isReady,
                                                isInteractive: model.canEdit)
                     .frame(maxHeight: .infinity)
@@ -55,13 +55,13 @@ struct InspectorPane: View {
         let count = model.applyToAllCount
         VStack(alignment: .leading, spacing: 6) {
             AppKitPushButton(title: "Apply to All",
-                             toolTip: "Copy this job’s look, title position and export settings to every other job that is not Done or exporting.") {
+                             toolTip: "Copy this job’s look, layout and export settings to every other job that is not Done or exporting.") {
                 model.applyToAll()
             }
             .disabled(count == 0 || !model.canEdit)
             Text(count == 0
                  ? "No other jobs to copy to. Done and exporting jobs are never changed."
-                 : "Copies look, title position and export settings to \(count) other job\(count == 1 ? "" : "s"). Done and exporting jobs are left alone; title text, trim and markers stay per track.")
+                 : "Copies look, layout and export settings to \(count) other job\(count == 1 ? "" : "s"). Done and exporting jobs are left alone. Title text, trim and markers stay per track.")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

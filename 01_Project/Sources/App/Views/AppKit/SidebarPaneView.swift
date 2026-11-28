@@ -9,19 +9,20 @@ final class SidebarPaneView: NSStackView, NSMenuDelegate {
     private let moveMenu = NSMenu()
     var onGripDown: ((NSEvent) -> Void)?
     var willOpenMoveMenu: (() -> Void)?
-    var onMove: ((Int) -> Void)?
+    var onMove: ((Int) -> Bool)?
     var canMove: (Int) -> Bool = { _ in false }
+    var canInteract: () -> Bool = { true }
     var willCollapse: (() -> Void)?
+    var didToggle: ((Bool) -> Void)?
 
     var isCollapsed = false {
         didSet {
             guard oldValue != isCollapsed else { return }
             if isCollapsed { willCollapse?() }
-            body.isHidden = isCollapsed
+            Self.updateLayout(in: self) { body.isHidden = isCollapsed }
             triangle.state = isCollapsed ? .off : .on
             triangle.setAccessibilityExpanded(!isCollapsed)
-            window?.contentView?.layoutSubtreeIfNeeded()
-            window?.recalculateKeyViewLoop()
+            didToggle?(isCollapsed)
         }
     }
 
@@ -78,7 +79,7 @@ final class SidebarPaneView: NSStackView, NSMenuDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     func showMoveMenu() {
-        guard let grip else { return }
+        guard let grip, canInteract() else { return }
         moveMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: grip.bounds.minY), in: grip)
     }
 
@@ -88,14 +89,42 @@ final class SidebarPaneView: NSStackView, NSMenuDelegate {
         for item in menu.items { item.isEnabled = canMove(item.tag) }
     }
 
-    @objc private func toggle() { isCollapsed.toggle() }
-    @objc private func move(_ sender: NSMenuItem) { onMove?(sender.tag) }
+    /// Moving existing arranged views and hiding bodies both change the stack's constraints.
+    static func updateLayout(in view: NSView, changes: () -> Void) {
+        guard let window = view.window, let root = window.contentView else { changes(); return }
+        root.layoutSubtreeIfNeeded()
+        NSAnimationContext.runAnimationGroup { context in
+            context.allowsImplicitAnimation = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            context.duration = context.allowsImplicitAnimation ? 0.15 : 0
+            changes()
+            root.layoutSubtreeIfNeeded()
+        }
+        window.recalculateKeyViewLoop()
+    }
+
+    override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
+        guard grip != nil, canInteract() else { return nil }
+        return moveMenu.items.filter { canMove($0.tag) }.map { item in
+            NSAccessibilityCustomAction(name: item.title) { [weak self] in
+                guard let self, self.canMove(item.tag) else { return false }
+                self.willOpenMoveMenu?()
+                return self.onMove?(item.tag) ?? false
+            }
+        }
+    }
+
+    @objc private func toggle() {
+        if canInteract() { isCollapsed.toggle() }
+        triangle.state = isCollapsed ? .off : .on
+    }
+    @objc private func move(_ sender: NSMenuItem) { _ = onMove?(sender.tag) }
 }
 
 private final class PaneGrip: NSView {
     var pressed: ((NSEvent) -> Void)?
     var showMenu: (() -> Void)?
-    private let symbol = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil)
+    private let symbol = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil)?
+        .withSymbolConfiguration(.init(paletteColors: [.secondaryLabelColor]))
 
     init(title: String) {
         super.init(frame: .zero)

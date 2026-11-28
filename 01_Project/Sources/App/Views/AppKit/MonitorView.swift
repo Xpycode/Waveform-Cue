@@ -83,13 +83,10 @@ final class MonitorView: NSView {
     var onChoose: (() -> Void)?
     var onSeek: ((Int) -> Void)?
     var onScrubChanged: ((Bool) -> Void)?
-    var onPlace: ((CGPoint) -> Void)?
     var editingEnabled = true
     var placeholder = "Drop an audio file" { didSet { needsDisplay = true } }
     private var path = CGMutablePath() as CGPath
     private var hovered = false
-    private var labelOrigin: CGPoint?
-    private var down: CGPoint?
     private var scrubRange: ClosedRange<Double>?
     private var heldDetail: CloseUpWindow?
     private var markerDrag: (kind: MarkerKind, range: ClosedRange<Double>)?
@@ -242,7 +239,7 @@ final class MonitorView: NSView {
         heldDetail ?? CuePicture.closeUp(timeline: timeline, position: frameNumber, appearance: cueAppearance)
     }
 
-    /// Click precedence: title, then a marker, then a trim handle (only once `onTrimChanged` is
+    /// Click precedence: a marker, then a trim handle (only once `onTrimChanged` is
     /// wired), then scrubbing (see `CuePicture.hitTarget`). A scrub from the slate seeks into
     /// the music.
     private func hitTarget(_ p: CGPoint) -> CuePicture.HitTarget {
@@ -276,11 +273,7 @@ final class MonitorView: NSView {
         window?.makeFirstResponder(self)
         guard track != nil, let timeline else { onChoose?(); return }
         let p = point(event)
-        down = p
         switch hitTarget(p) {
-        case .title:
-            labelOrigin = label.position
-            return
         case .marker(let kind, let onCloseUp):
             if onCloseUp {
                 let window = closeUpWindow(timeline)
@@ -301,8 +294,8 @@ final class MonitorView: NSView {
             let window = closeUpWindow(timeline)
             heldDetail = window
             scrubRange = window.visible
-        case .none:
-            break
+        default:
+            break // The title band and the rest of the background ignore drags.
         }
         if scrubRange != nil {
             onScrubChanged?(true)
@@ -320,13 +313,9 @@ final class MonitorView: NSView {
                 trim = edited
                 onTrimChanged?(edited)
             }
-        } else if let origin = labelOrigin, let down {
-            onPlace?(CuePicture.draggedTitlePosition(origin: origin, down: down, to: p, label: label, layout: layout))
         } else if scrubRange != nil { scrub(p) }
     }
     override func mouseUp(with event: NSEvent) {
-        labelOrigin = nil
-        down = nil
         if trimDrag != nil {
             trimDrag = nil
             updateOverview()

@@ -293,8 +293,14 @@ final class QueueManagerTests: XCTestCase {
         let a = job("A"), b = job("B")
         files.existing.remove(a.sourcePath)
         manager.add([a, b])
+        var locks: [UUID] = []
+        manager.didLockJob = { [unowned manager] id in
+            XCTAssertTrue(manager.isLocked(id))
+            locks.append(id)
+        }
         manager.start()
         await eventually("B runs") { exporter.calls.count == 1 }
+        XCTAssertEqual(locks, [b.id])
         XCTAssertEqual(exporter.calls[0].job.id, b.id)
         XCTAssertEqual(status(manager, a.id), .failed(reason: QueueManager.sourceNotFound, log: ""))
         exporter.succeed(0)

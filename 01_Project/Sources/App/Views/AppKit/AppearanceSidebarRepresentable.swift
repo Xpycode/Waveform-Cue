@@ -2,15 +2,14 @@ import AppKit
 import CueCore
 import SwiftUI
 
-/// Hosts build 10's `CueAppearanceSidebar` in the inspector, together with the overlay
-/// text field and position pop-up it lays out.
+/// Hosts the appearance panes and keeps the title field bound to the selected job.
 struct AppearanceSidebarRepresentable: NSViewRepresentable {
     let model: EditorModel
     let appearance: CueAppearance
     let clockFrames: Int?
     let labelText: String
-    let positionIndex: Int
-    /// Overlay text and position need a loaded track.
+    let jobID: UUID?
+    /// Editing title text needs a loaded track.
     let labelEditable: Bool
     /// False while exporting: the sidebar is dimmed and ignores clicks.
     let isInteractive: Bool
@@ -25,19 +24,15 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
         field.setAccessibilityLabel("Overlay text")
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let position = coordinator.position
-        position.addItems(withTitles: EditorModel.anchors + ["Custom"])
-        position.lastItem?.toolTip = "Drag the text in the monitor to set a custom position."
-        position.autoenablesItems = false
-        position.target = coordinator
-        position.action = #selector(Coordinator.placeFromMenu)
-        position.setAccessibilityLabel("Text position")
-
+        coordinator.jobID = jobID
         let sidebar = CueAppearanceSidebar(settings: appearance, clockFrames: clockFrames, labelField: field,
-                                           position: position) { [weak model, weak coordinator] appearance in
+                                            reorderTarget: { [weak model, weak coordinator] in
+            guard let model, let coordinator, model.selectedJobID == coordinator.jobID else { return nil }
+            return (model.selectedJobID, model.appearance, model.canEdit)
+        }, reportLocked: { [weak model] in model?.reportLockedSettings() }) { [weak model, weak coordinator] appearance in
             guard let model else { return }
-            model.updateAppearance(appearance)
-            coordinator?.sidebar?.display(settings: model.appearance, clockFrames: model.inspectorClockFrames)
+            if let coordinator, coordinator.jobID == model.selectedJobID { model.updateAppearance(appearance) }
+            coordinator?.sidebar?.sync(to: model.appearance, clockFrames: model.inspectorClockFrames)
         }
         let container = InspectorContainerView()
         container.addSubview(sidebar)
@@ -56,15 +51,15 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
 
     func updateNSView(_ container: InspectorContainerView, context: Context) {
         let coordinator = context.coordinator
-        coordinator.sidebar?.display(settings: appearance, clockFrames: clockFrames)
+        coordinator.sidebar?.sync(to: appearance, clockFrames: clockFrames)
+        if coordinator.jobID != jobID {
+            coordinator.labelField.abortEditing()
+            coordinator.jobID = jobID
+        }
         if coordinator.labelField.currentEditor() == nil, coordinator.labelField.stringValue != labelText {
             coordinator.labelField.stringValue = labelText
         }
-        if coordinator.position.indexOfSelectedItem != positionIndex {
-            coordinator.position.selectItem(at: positionIndex)
-        }
-        coordinator.labelField.isEnabled = labelEditable
-        coordinator.position.isEnabled = labelEditable
+        coordinator.labelField.isEnabled = labelEditable && isInteractive
         container.isInteractive = isInteractive
     }
 
@@ -80,14 +75,15 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextFieldDelegate {
         let model: EditorModel
         let labelField = NSTextField()
-        let position = NSPopUpButton()
+        var jobID: UUID?
         weak var sidebar: CueAppearanceSidebar?
 
         init(model: EditorModel) { self.model = model }
 
-        func controlTextDidChange(_ obj: Notification) { model.setLabelText(labelField.stringValue) }
-
-        @objc func placeFromMenu() { model.selectPosition(position.indexOfSelectedItem) }
+        func controlTextDidChange(_ obj: Notification) {
+            guard jobID == model.selectedJobID else { return }
+            model.setLabelText(labelField.stringValue)
+        }
     }
 }
 

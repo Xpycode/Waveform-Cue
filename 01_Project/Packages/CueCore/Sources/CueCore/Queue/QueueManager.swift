@@ -144,6 +144,8 @@ public final class QueueManager {
     /// Called on the main actor just before the queue checks and copies a job to export it, so the
     /// app can commit an edit in progress on that job first.
     @ObservationIgnored public var willStartJob: ((UUID) -> Void)?
+    /// Delivered synchronously once preflight succeeds, even if the exporter immediately fails.
+    @ObservationIgnored public var didLockJob: ((UUID) -> Void)?
 
     @ObservationIgnored private let store: QueueStore
     @ObservationIgnored private let exporter: any JobExporting
@@ -477,6 +479,7 @@ public final class QueueManager {
             jobs[index].outputPath = resolveOutput(for: jobs[index], avoiding: nil).path
         }
         jobs[index].status = .preparing
+        didLockJob?(id)
         persist()
 
         let job = jobs[index]

@@ -17,16 +17,25 @@ final class PaneDragController {
     private let line = PaneInsertionLine()
     private let panes: () -> [SidebarPaneView]
     private let context: () -> PaneReorder.Context?
-    private let completed: (Int, Int) -> Void
+    private let completed: (PaneReorder.Context, Int, Int) -> Void
+    private let locked: () -> Void
     var didEndTracking: (() -> Void)?
     private(set) var isTracking = false
+    private var trackedJobID: UUID?
+    private var lockedDuringTracking = false
+
+    func jobDidLock(_ id: UUID) {
+        if isTracking && trackedJobID == id { lockedDuringTracking = true }
+    }
 
     init(scroll: NSScrollView, document: NSView, panes: @escaping () -> [SidebarPaneView],
-         context: @escaping () -> PaneReorder.Context?, completed: @escaping (Int, Int) -> Void) {
+         context: @escaping () -> PaneReorder.Context?, locked: @escaping () -> Void,
+         completed: @escaping (PaneReorder.Context, Int, Int) -> Void) {
         self.scroll = scroll
         self.document = document
         self.panes = panes
         self.context = context
+        self.locked = locked
         self.completed = completed
         line.isHidden = true
         document.addSubview(line)
@@ -44,6 +53,8 @@ final class PaneDragController {
         var chosenGap: Int?
         var mask: NSEvent.EventTypeMask = [.leftMouseDragged, .leftMouseUp, .periodic, .keyDown]
         if #available(macOS 26.0, *) { mask.insert(.mouseCancelled) }
+        trackedJobID = initialContext.jobID
+        lockedDuringTracking = false
         isTracking = true
         NSEvent.startPeriodicEvents(afterDelay: 0.08, withPeriod: 0.05)
         do {
@@ -51,6 +62,7 @@ final class PaneDragController {
                 NSEvent.stopPeriodicEvents()
                 line.isHidden = true
                 isTracking = false
+                trackedJobID = nil
                 didEndTracking?()
             }
             window.trackEvents(matching: mask, timeout: 0.5, mode: .eventTracking) { event, stop in
@@ -86,9 +98,14 @@ final class PaneDragController {
             }
         }
         // didEndTracking may have applied a deferred job switch, lock or rearrangement.
-        guard pane.window === window, initialPanes == panes(), initialContext.permitsMove(in: context()) else { return }
+        guard pane.window === window, let current = context(), initialContext.jobID == current.jobID else { return }
+        if lockedDuringTracking || !current.isEditable {
+            if dragging { locked() }
+            return
+        }
+        guard initialPanes == panes(), initialContext.permitsMove(in: current) else { return }
         if click { pane.showMoveMenu() }
-        if let chosenGap { completed(from, chosenGap) }
+        if let chosenGap { completed(initialContext, from, chosenGap) }
     }
 
     private func scrollNearEdge(at location: NSPoint) {

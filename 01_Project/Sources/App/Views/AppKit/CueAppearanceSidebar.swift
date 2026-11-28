@@ -28,8 +28,6 @@ private final class FontPickers {
             (picker.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
             picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
-        family.widthAnchor.constraint(equalToConstant: 129).isActive = true
-        style.widthAnchor.constraint(equalToConstant: 82).isActive = true
     }
 
     func display(_ name: String?) {
@@ -76,43 +74,54 @@ final class CueAppearanceSidebar: NSView {
     private let zoom = NSPopUpButton()
     private let centerAtStart = NSButton(checkboxWithTitle: "Center playhead at start", target: nil, action: nil)
     private let centerAtEnd = NSButton(checkboxWithTitle: "Center playhead at end", target: nil, action: nil)
-    private let dimPlayedCloseUp = NSButton(checkboxWithTitle: "Dim played audio in close-up", target: nil, action: nil)
+    private let dimPlayedCloseUp = NSButton(checkboxWithTitle: "Dim played audio", target: nil, action: nil)
     private let endZoom = NSPopUpButton()
     private let titleFont = FontPickers(role: .title, label: "Title")
     private let clockFont = FontPickers(role: .clock, label: "Clock")
-    private let showTitle = NSButton(checkboxWithTitle: "Title", target: nil, action: nil)
-    private let showElapsed = NSButton(checkboxWithTitle: "Elapsed", target: nil, action: nil)
-    private let showRemaining = NSButton(checkboxWithTitle: "Remaining", target: nil, action: nil)
-    private let showFullTrack = NSButton(checkboxWithTitle: "Full track", target: nil, action: nil)
+    private let showTitle = NSButton(checkboxWithTitle: "Show title", target: nil, action: nil)
+    private let showElapsed = NSButton(checkboxWithTitle: "Show elapsed clock", target: nil, action: nil)
+    private let showRemaining = NSButton(checkboxWithTitle: "Show remaining clock", target: nil, action: nil)
+    private let showFullTrack = NSButton(checkboxWithTitle: "Show full track", target: nil, action: nil)
     private let safeZonesEnabled = NSButton(checkboxWithTitle: "Safe zones", target: nil, action: nil)
     private let countdownTarget = NSPopUpButton()
-    private let clockPosition = NSPopUpButton()
+    private let alignment = NSSegmentedControl(labels: TitleAlignment.allCases.map { $0.rawValue.capitalized },
+                                               trackingMode: .selectOne, target: nil, action: nil)
+    private let leftClock = NSSegmentedControl(labels: LeftClock.allCases.map { $0.rawValue.capitalized },
+                                               trackingMode: .selectOne, target: nil, action: nil)
     private let safeZonePreset = NSPopUpButton()
     private let showGuides = NSButton(checkboxWithTitle: "Show safe-zone guides", target: nil, action: nil)
     private let zoneNames = ["Top", "Bottom", "Left", "Right"]
     private let zoneSteppers = (0..<4).map { _ in NSStepper() }
     private let zoneValues = (0..<4).map { _ in NSTextField(labelWithString: "0 %") }
     private let roomMessage = NSTextField(wrappingLabelWithString: "Safe zones leave too little room")
-    private var zoneGrid = NSGridView()
+    private var customZoneRows: [NSGridRow] = []
+    private var roomMessageRow: NSGridRow?
+    private var offsetRows: [PicturePane: NSGridRow] = [:]
+    private static let collapsedKey = "WaveformCue.collapsedPanes"
     private var settings: CueAppearance
     private let factory = CueAppearance()
+    private var paneViews: [PicturePane: SidebarPaneView] = [:]
+    private let paneStack = NSStackView()
+    private var dragController: PaneDragController?
+    private var pendingDisplay: (CueAppearance, Int?)?
     private var clockFrames: Int?
     private var overrideRows: [(label: NSControl, title: String, settings: [CueAppearance.Setting])] = []
+    typealias ReorderTarget = (jobID: UUID?, appearance: CueAppearance, isEditable: Bool)
+    private let reorderTarget: () -> ReorderTarget?
     private let changed: (CueAppearance) -> Void
 
-    init(settings: CueAppearance, clockFrames: Int?, labelField: NSTextField, position: NSPopUpButton,
+    init(settings: CueAppearance, clockFrames: Int?, labelField: NSTextField,
+         reorderTarget: @escaping () -> ReorderTarget?, reportLocked: @escaping () -> Void,
          changed: @escaping (CueAppearance) -> Void) {
         self.settings = settings
         self.clockFrames = clockFrames
+        self.reorderTarget = reorderTarget
         self.changed = changed
         super.init(frame: .zero)
 
-        func heading(_ title: String) -> NSTextField {
-            let field = NSTextField(labelWithString: title)
-            field.font = .systemFont(ofSize: 11, weight: .medium)
-            field.textColor = .secondaryLabelColor
-            return field
-        }
+        if #available(macOS 26.0, *) { prefersCompactControlSizeMetrics = true }
+        alignment.setAccessibilityLabel("Title alignment")
+        leftClock.setAccessibilityLabel("Left clock")
         for (name, picker) in [("Elapsed", elapsedSize), ("Remaining", remainingSize)] {
             picker.addItems(withTitles: ClockSize.allCases.map { $0.rawValue })
             picker.setAccessibilityLabel(name + " size")
@@ -154,9 +163,6 @@ final class CueAppearanceSidebar: NSView {
         countdownTarget.addItems(withTitles: CountdownTarget.allCases.map { $0.title })
         countdownTarget.setAccessibilityLabel("Countdown target")
         countdownTarget.toolTip = "Count down to the end of the file or to the end of the music."
-        clockPosition.addItems(withTitles: ClockPosition.allCases.map { $0.title })
-        clockPosition.setAccessibilityLabel("Clock position")
-        clockPosition.toolTip = "Place the clocks below or above the waveforms."
         safeZonePreset.addItems(withTitles: SafeZonePreset.allCases.map { $0.title })
         safeZonePreset.setAccessibilityLabel("Overlay safe zones")
         safeZonePreset.toolTip = "Keep the picture free where a server overlay draws."
@@ -177,7 +183,7 @@ final class CueAppearanceSidebar: NSView {
             zoneValues[index].alignment = .right
             zoneValues[index].widthAnchor.constraint(equalToConstant: 40).isActive = true
         }
-        for control in [countdownTarget, clockPosition, safeZonePreset, fadeFullTrack, fadeCloseUp,
+        for control in [countdownTarget, alignment, leftClock, safeZonePreset, fadeFullTrack, fadeCloseUp,
                         centerAtStart, centerAtEnd, endZoom, dimPlayedCloseUp, titleFont.family, titleFont.style, clockFont.family,
                         clockFont.style, showTitle, showElapsed, showRemaining, showFullTrack, safeZonesEnabled] as [NSControl] {
             control.target = self
@@ -185,29 +191,37 @@ final class CueAppearanceSidebar: NSView {
         }
         showGuides.target = self
         showGuides.action = #selector(edit(_:))
-        for picker in [elapsedSize, remainingSize, zoom, warning, solidRedAt, countdownTarget, clockPosition] {
-            picker.widthAnchor.constraint(equalToConstant: 119).isActive = true
+        for control in [elapsedSize, remainingSize, zoom, endZoom, warning, solidRedAt, countdownTarget,
+                        safeZonePreset, titleFont.family, titleFont.style, clockFont.family, clockFont.style] {
+            control.widthAnchor.constraint(equalToConstant: 119).isActive = true
         }
-        func section(_ title: String) -> NSTextField {
-            let label = NSTextField(labelWithString: title)
-            label.font = .systemFont(ofSize: 13, weight: .semibold)
-            return label
-        }
-        func grid(_ rows: [[NSView]]) -> NSGridView {
-            let grid = NSGridView(views: rows)
-            grid.column(at: 0).width = 85
+        let labelWidth: CGFloat = 85
+        func grid() -> NSGridView {
+            let grid = NSGridView()
+            for width: CGFloat in [labelWidth, 119, 48] {
+                grid.addColumn(with: []).width = width
+            }
             grid.xPlacement = .leading
             grid.yPlacement = .center
-            grid.rowSpacing = 8
+            grid.rowSpacing = 5
             grid.columnSpacing = 8
             return grid
         }
-        let overlayTitle = section("Overlay text")
-        let placement = grid([[NSTextField(labelWithString: "Position"), position]])
-        position.widthAnchor.constraint(equalToConstant: 134).isActive = true
-        func label(_ title: String, _ settings: [(CueAppearance.Setting, String)]) -> NSTextField {
-            let field = NSTextField(labelWithString: title)
-            registerOverrides(field, title: title, settings: settings)
+        // Controls that use the whole row (checkboxes), or the remaining two columns
+        // (text and segments), span cells without changing the common colour column.
+        @discardableResult
+        func wideRow(_ grid: NSGridView, _ view: NSView, label: NSTextField? = nil) -> NSGridRow {
+            let row = grid.addRow(with: label.map { [$0, view] } ?? [view])
+            let first = label == nil ? 0 : 1
+            row.mergeCells(in: NSRange(location: first, length: 3 - first))
+            return row
+        }
+        func label(_ title: String, _ settings: [(CueAppearance.Setting, String)] = []) -> NSTextField {
+            let field = NSTextField(wrappingLabelWithString: title)
+            field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            field.preferredMaxLayoutWidth = labelWidth
+            field.widthAnchor.constraint(equalToConstant: labelWidth).isActive = true
+            if !settings.isEmpty { registerOverrides(field, title: title, settings: settings) }
             return field
         }
         for (box, setting) in [(fadeCloseUp, .fadeCloseUp), (fadeFullTrack, .fadeFullTrack),
@@ -216,59 +230,97 @@ final class CueAppearanceSidebar: NSView {
                                (showGuides, .showGuides), (safeZonesEnabled, .safeZonesEnabled)] as [(NSButton, CueAppearance.Setting)] {
             registerOverrides(box, title: box.title, settings: [(setting, box.title)])
         }
-        let fonts = grid([
-            [NSView(), heading("Family"), heading("Style")],
-            [label("Title", [(.titleFontName, "Title font")]), titleFont.family, titleFont.style],
-            [label("Clock", [(.clockFontName, "Clock font")]), clockFont.family, clockFont.style]
-        ])
-        fonts.column(at: 0).width = 44
-        let visibility = grid([[showTitle, showElapsed], [showRemaining, showFullTrack]])
-        visibility.column(at: 0).width = 126
-        let clocks = grid([
-            [heading("Clock"), heading("Size"), heading("Color")],
-            [label("Elapsed", [(.elapsedSize, "Size"), (.elapsedColor, "Color")]), elapsedSize, elapsedColor],
-            [label("Remaining", [(.remainingSize, "Size"), (.remainingColor, "Color")]), remainingSize, remainingColor]
-        ])
-        let waveforms = grid([
-            [heading("Waveform"), heading("Zoom window"), heading("Color")],
-            [label("Full track", [(.overviewColor, "Full track color")]), NSView(), overviewColor],
-            [label("Close-up", [(.zoom, "Zoom window"), (.detailColor, "Color")]), zoom, detailColor]
-        ])
-        let closeUpOptions = grid([
-            [label("Zoom near end", [(.endZoom, "Zoom near end")]), endZoom]
-        ])
-        closeUpOptions.column(at: 0).width = 119
-        endZoom.widthAnchor.constraint(equalToConstant: 144).isActive = true
-        let timing = grid([
-            [label("Fade to red", [(.warning, "Fade to red")]), warning],
-            [label("Solid red at", [(.solidRedAt, "Solid red at")]), solidRedAt],
-            [label("Countdown to", [(.countdownTarget, "Countdown to")]), countdownTarget]
-        ])
-        let clockPlacement = grid([[label("Clock position", [(.clockPosition, "Clock position")]), clockPosition]])
-        let presetMenuLabel = label("Preset", [(.safeZonePreset, "Safe-zone preset")])
-        let presetGroup = NSStackView(views: [presetMenuLabel, safeZonePreset])
-        presetGroup.spacing = 5
-        safeZonePreset.widthAnchor.constraint(equalToConstant: 105).isActive = true
-        let zonePreset = grid([[safeZonesEnabled, presetGroup]])
-        zonePreset.column(at: 0).width = 96
-        timing.column(at: 0).width = 105
-        clockPlacement.column(at: 0).width = 105
+        let title = grid()
+        wideRow(title, labelField, label: label("Text"))
+        labelField.widthAnchor.constraint(equalToConstant: 175).isActive = true
+        wideRow(title, alignment, label: label("Alignment"))
+        title.addRow(with: [label("Font family", [(.titleFontName, "Title font")]), titleFont.family])
+        title.addRow(with: [label("Font style", [(.titleFontName, "Title font")]), titleFont.style])
+        wideRow(title, showTitle)
+
+        let fullTrack = grid()
+        fullTrack.addRow(with: [label("Color", [(.overviewColor, "Full track color")]), NSGridCell.emptyContentView, overviewColor])
+        wideRow(fullTrack, showFullTrack)
+
+        let closeUp = grid()
+        closeUp.addRow(with: [label("Zoom window", [(.zoom, "Zoom window")]), zoom])
+        closeUp.addRow(with: [label("Color", [(.detailColor, "Color")]), NSGridCell.emptyContentView, detailColor])
+        for box in [centerAtStart, centerAtEnd, dimPlayedCloseUp] { wideRow(closeUp, box) }
+        closeUp.addRow(with: [label("Zoom near end", [(.endZoom, "Zoom near end")]), endZoom])
+
+        let clocks = grid()
+        clocks.addRow(with: [label("Elapsed", [(.elapsedSize, "Size"), (.elapsedColor, "Color")]), elapsedSize, elapsedColor])
+        clocks.addRow(with: [label("Remaining", [(.remainingSize, "Size"), (.remainingColor, "Color")]), remainingSize, remainingColor])
+        wideRow(clocks, leftClock, label: label("Left clock"))
+        clocks.addRow(with: [label("Font family", [(.clockFontName, "Clock font")]), clockFont.family])
+        clocks.addRow(with: [label("Font style", [(.clockFontName, "Clock font")]), clockFont.style])
+        wideRow(clocks, showElapsed)
+        wideRow(clocks, showRemaining)
+
+        let endWarning = grid()
+        endWarning.addRow(with: [label("Fade to red", [(.warning, "Fade to red")]), warning])
+        endWarning.addRow(with: [label("Solid red at", [(.solidRedAt, "Solid red at")]), solidRedAt])
+        endWarning.addRow(with: [label("Countdown to", [(.countdownTarget, "Countdown to")]), countdownTarget])
+        wideRow(endWarning, fadeCloseUp)
+        wideRow(endWarning, fadeFullTrack)
+
+        let safeZones = grid()
+        wideRow(safeZones, safeZonesEnabled)
+        safeZones.addRow(with: [label("Preset", [(.safeZonePreset, "Safe-zone preset")]), safeZonePreset])
         let sides: [CueAppearance.Setting] = [.safeZoneTop, .safeZoneBottom, .safeZoneLeft, .safeZoneRight]
-        zoneGrid = grid(sides.indices.map { [label(zoneNames[$0], [(sides[$0], zoneNames[$0])]), zoneSteppers[$0], zoneValues[$0]] })
-        let title = NSTextField(labelWithString: "Appearance")
-        title.font = .systemFont(ofSize: 17, weight: .semibold)
-        let reset = NSButton(title: "Restore Defaults", target: self, action: #selector(reset))
-        let stack = NSStackView(views: [title, overlayTitle, labelField, placement, section("Fonts"), fonts,
-                                        section("Show"), visibility, clocks, clockPlacement, waveforms, centerAtStart, centerAtEnd, dimPlayedCloseUp, closeUpOptions,
-                                        section("End warning"), timing, fadeCloseUp, fadeFullTrack,
-                                        section("Overlay safe zones"), zonePreset, zoneGrid, showGuides, roomMessage, reset])
+        for index in sides.indices {
+            let controls = NSStackView(views: [zoneSteppers[index], zoneValues[index]])
+            let row = safeZones.addRow(with: [label(zoneNames[index], [(sides[index], zoneNames[index])]), controls])
+            customZoneRows.append(row)
+        }
+        wideRow(safeZones, showGuides)
+        roomMessageRow = wideRow(safeZones, roomMessage)
+        let stack = paneStack
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
-        for view in [title, placement, visibility, clockPlacement, closeUpOptions, fadeFullTrack, showGuides] as [NSView] {
-            stack.setCustomSpacing(20, after: view)
+        stack.wantsLayer = true
+        func addPane(_ pane: SidebarPaneView, key: String) {
+            pane.isCollapsed = UserDefaults.standard.stringArray(forKey: Self.collapsedKey)?.contains(key) == true
+            pane.didToggle = { collapsed in
+                var keys = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedKey) ?? [])
+                if collapsed { keys.insert(key) } else { keys.remove(key) }
+                UserDefaults.standard.set(keys.sorted(), forKey: Self.collapsedKey)
+            }
+            pane.canInteract = { [weak self] in self?.reorderTarget()?.isEditable == true }
+            pane.willCollapse = { [weak self] in self?.closeColorPicker() }
+            stack.addArrangedSubview(pane)
+            pane.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
-
+        let bodies: [PicturePane: NSGridView] = [.title: title, .fullTrack: fullTrack, .closeUp: closeUp, .clocks: clocks]
+        for id in settings.paneOrder {
+            guard let body = bodies[id] else { continue }
+            let offsetRow = body.addRow(with: [])
+            offsetRow.isHidden = true
+            offsetRows[id] = offsetRow
+            let pane = SidebarPaneView(title: id.displayName, movable: true, body: body)
+            paneViews[id] = pane
+            addPane(pane, key: id.rawValue)
+            pane.onGripDown = { [weak self, weak pane] event in
+                guard let pane else { return }
+                self?.dragController?.track(from: pane, event: event)
+            }
+            var menuContext: PaneReorder.Context?
+            pane.willOpenMoveMenu = { [weak self] in menuContext = self?.reorderContext() }
+            pane.canMove = { [weak self] direction in
+                guard let context = self?.reorderContext(), context.isEditable,
+                      let index = context.order.firstIndex(of: id) else { return false }
+                return direction < 0 ? PaneReorder.canMoveUp(from: index, count: context.order.count)
+                    : PaneReorder.canMoveDown(from: index, count: context.order.count)
+            }
+            pane.onMove = { [weak self] direction in
+                guard let self, let menuContext, let from = menuContext.order.firstIndex(of: id) else { return false }
+                return self.setOrder(from: from, toGap: direction < 0 ? from - 1 : from + 2, context: menuContext)
+            }
+        }
+        addPane(SidebarPaneView(title: "End warning", movable: false, body: endWarning), key: "endWarning")
+        addPane(SidebarPaneView(title: "Overlay safe zones", movable: false, body: safeZones), key: "safeZones")
+        stack.addArrangedSubview(NSButton(title: "Restore Defaults", target: self, action: #selector(reset)))
         let border = NSView()
         border.wantsLayer = true
         border.layer?.backgroundColor = NSColor.separatorColor.cgColor
@@ -297,16 +349,58 @@ final class CueAppearanceSidebar: NSView {
             document.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
             document.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            labelField.widthAnchor.constraint(equalTo: stack.widthAnchor),
             stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -16),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 16),
             stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 16),
             stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -16)
         ])
+        dragController = PaneDragController(scroll: scroll, document: document, panes: { [weak self] in
+            guard let self else { return [] }
+            return self.settings.paneOrder.compactMap { self.paneViews[$0] }
+        }, context: { [weak self] in self?.reorderContext() }, locked: reportLocked, completed: { [weak self] context, from, gap in
+            _ = self?.setOrder(from: from, toGap: gap, context: context)
+        })
+        dragController?.didEndTracking = { [weak self] in
+            guard let self, let (look, frames) = self.pendingDisplay else { return }
+            self.pendingDisplay = nil
+            self.sync(to: look, clockFrames: frames)
+        }
+        for control in [alignment, leftClock, elapsedSize, remainingSize, overviewColor, detailColor,
+                        elapsedColor, remainingColor, warning, solidRedAt, zoom, endZoom, countdownTarget,
+                        titleFont.family, titleFont.style, clockFont.family, clockFont.style, safeZonePreset] as [NSControl] {
+            control.controlSize = .small
+        }
         refresh()
     }
 
+    private func reorderContext() -> PaneReorder.Context? {
+        guard let target = reorderTarget(), target.appearance.paneOrder == settings.paneOrder else { return nil }
+        return PaneReorder.Context(jobID: target.jobID, order: target.appearance.paneOrder, isEditable: target.isEditable)
+    }
+
+    @discardableResult
+    private func setOrder(from: Int, toGap: Int, context: PaneReorder.Context) -> Bool {
+        guard context.permitsMove(in: reorderContext()), let target = reorderTarget() else { return false }
+        let order = PaneReorder.move(context.order, from: from, toGap: toGap)
+        guard order != context.order else { return false }
+        let id = context.order[from]
+        var proposed = target.appearance
+        proposed.paneOrder = order
+        changed(proposed)
+        // The model synchronously feeds the accepted appearance back through sync(to:).
+        guard settings.paneOrder == order, let to = order.firstIndex(of: id) else { return false }
+        let message = "\(id.displayName), \(to + 1) of \(order.count)"
+        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested, userInfo: [
+            .announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue
+        ])
+        return true
+    }
+
     required init?(coder: NSCoder) { fatalError() }
+
+    func jobDidLock(_ id: UUID) {
+        dragController?.jobDidLock(id)
+    }
 
     func closeColorPicker() {
         for well in [elapsedColor, remainingColor, overviewColor, detailColor] where well.isActive {
@@ -332,12 +426,17 @@ final class CueAppearanceSidebar: NSView {
 
     @objc private func resetSetting(_ sender: NSMenuItem) {
         guard let setting = sender.representedObject as? CueAppearance.Setting else { return }
-        settings = settings.resetting(setting, to: factory)
+        guard let target = reorderTarget() else { return }
+        settings = target.appearance.resetting(setting, to: factory)
         refresh()
         changed(settings)
     }
 
-    func display(settings: CueAppearance, clockFrames: Int?) {
+    func sync(to settings: CueAppearance, clockFrames: Int?) {
+        if dragController?.isTracking == true {
+            pendingDisplay = (settings, clockFrames)
+            return
+        }
         guard self.settings != settings || self.clockFrames != clockFrames else { return }
         self.settings = settings
         self.clockFrames = clockFrames
@@ -345,6 +444,8 @@ final class CueAppearanceSidebar: NSView {
     }
 
     @objc private func edit(_ sender: NSControl) {
+        guard let target = reorderTarget() else { return }
+        settings = target.appearance
         switch sender {
         case elapsedSize: settings.elapsed.size = ClockSize.allCases[elapsedSize.indexOfSelectedItem]
         case remainingSize: settings.remaining.size = ClockSize.allCases[remainingSize.indexOfSelectedItem]
@@ -375,7 +476,8 @@ final class CueAppearanceSidebar: NSView {
         case fadeCloseUp: settings.fadeCloseUp = fadeCloseUp.state == .on
         case fadeFullTrack: settings.fadeFullTrack = fadeFullTrack.state == .on
         case countdownTarget: settings.countdownTarget = CountdownTarget.allCases[countdownTarget.indexOfSelectedItem]
-        case clockPosition: settings.clockPosition = ClockPosition.allCases[clockPosition.indexOfSelectedItem]
+        case alignment: settings.titleAlignment = TitleAlignment.allCases[alignment.selectedSegment]
+        case leftClock: settings.leftClock = LeftClock.allCases[leftClock.selectedSegment]
         case safeZonePreset:
             settings.safeZones.preset = SafeZonePreset.allCases[safeZonePreset.indexOfSelectedItem]
         case showGuides: settings.showGuides = showGuides.state == .on
@@ -397,14 +499,25 @@ final class CueAppearanceSidebar: NSView {
     }
 
     private func refresh() {
+        let orderedPanes = settings.paneOrder.compactMap { paneViews[$0] }
+        if Array(paneStack.arrangedSubviews.prefix(orderedPanes.count)) != orderedPanes {
+            closeColorPicker()
+            SidebarPaneView.updateLayout(in: self) {
+                for (index, pane) in orderedPanes.enumerated() where paneStack.arrangedSubviews[index] !== pane {
+                    paneStack.insertArrangedSubview(pane, at: index)
+                }
+            }
+            NSAccessibility.post(element: paneStack, notification: .layoutChanged)
+        }
         let differences = settings.differences(from: factory)
+        let closeUpSettings: Set<CueAppearance.Setting> = [.detailColor, .centerAtStart, .centerAtEnd, .closeUpShading, .endZoom]
         for row in overrideRows {
             let overridden = !differences.isDisjoint(with: row.settings)
             let title = overridden ? "• " + row.title : row.title
             if let field = row.label as? NSTextField { field.stringValue = title }
             if let box = row.label as? NSButton { box.title = title }
             for (setting, item) in zip(row.settings, row.label.menu?.items ?? []) {
-                item.isEnabled = differences.contains(setting)
+                item.isEnabled = differences.contains(setting) && (settings.zoom != .off || !closeUpSettings.contains(setting))
             }
         }
         titleFont.display(settings.titleFontName)
@@ -437,7 +550,8 @@ final class CueAppearanceSidebar: NSView {
         fadeFullTrack.state = settings.fadeFullTrack ? .on : .off
         updateWarningControls()
         countdownTarget.selectItem(withTitle: settings.countdownTarget.title)
-        clockPosition.selectItem(withTitle: settings.clockPosition.title)
+        alignment.selectedSegment = TitleAlignment.allCases.firstIndex(of: settings.titleAlignment)!
+        leftClock.selectedSegment = LeftClock.allCases.firstIndex(of: settings.leftClock)!
         safeZonePreset.selectItem(withTitle: settings.safeZones.preset.title)
         showGuides.state = settings.showGuides ? .on : .off
         updateSafeZoneControls()
@@ -464,7 +578,7 @@ final class CueAppearanceSidebar: NSView {
             zoneSteppers[index].isEnabled = editable
             zoneValues[index].textColor = editable ? .labelColor : .disabledControlTextColor
         }
-        zoneGrid.isHidden = !editable
-        roomMessage.isHidden = settings.layout.fits
+        for row in customZoneRows { row.isHidden = !editable }
+        roomMessageRow?.isHidden = settings.layout.fits
     }
 }

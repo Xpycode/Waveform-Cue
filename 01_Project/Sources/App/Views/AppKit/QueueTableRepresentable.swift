@@ -371,7 +371,7 @@ final class QueueJobCell: NSTableCellView {
         let tick = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Same settings as the selected job")
         matches.image = tick?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
         matches.contentTintColor = .controlAccentColor
-        matches.toolTip = "Same look, title position and export settings as the selected job."
+        matches.toolTip = "Same look, layout and export settings as the selected job."
         matches.setContentHuggingPriority(.required, for: .horizontal)
         matches.setContentCompressionResistancePriority(.required, for: .horizontal)
 

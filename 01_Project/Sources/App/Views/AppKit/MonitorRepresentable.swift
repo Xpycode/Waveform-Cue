@@ -68,7 +68,6 @@ struct MonitorRepresentable: NSViewRepresentable {
             // A timeline position; the monitor only scrubs inside the trimmed music.
             view.onSeek = { [weak model] position in model?.seek(frame: position) }
             view.onScrubChanged = { [weak model] began in model?.scrubChanged(began: began) }
-            view.onPlace = { [weak model] point in model?.placeLabel(at: point) }
             // Each drag step is stored as the job's marker edit (saved once the drag settles);
             // the model keeps fade start at or before music end and the view shows its value.
             view.onMarkerChanged = { [weak model] kind, seconds in
