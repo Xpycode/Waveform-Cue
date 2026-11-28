@@ -133,3 +133,8 @@ The two centering controls remain independent. Saved Wave 4 playhead and shading
 Build 17 rounded waveform and clock positions to the nearest picture pixel. In the 64 reference layouts with 30% top and bottom safe zones, export was already disabled, and rounding could leave only 11.5 pixels between neighbours.
 
 The operator chose the new 12-pixel minimum for those previews. The layout rounds an element farther down when rounding up would close the gap. All 256 exportable reference layouts keep their recorded geometry. The tests retain the original fixture and specify the small vertical changes allowed in the blocked previews. [Appearance panes plan](IMPLEMENTATION_PLAN-appearance-panes.md)
+
+
+## 2026-11-28 · Build 18 migration and picture verification
+
+Build 18 stores the four pane positions, offsets, title alignment and left clock in each job’s appearance. Build 17 clock placement and top-row title anchors survive migration. Old floating titles move to the top band, aligned to the nearest horizontal third. Matching frame hashes for all three original top anchors and a decoded, reordered MXF frame verified those choices on macOS 15. The separate acceptance gates cover EVS playback, VoiceOver and macOS 27. [Integration measurements](sessions/evidence/appearance-panes-wave4/integration.md)

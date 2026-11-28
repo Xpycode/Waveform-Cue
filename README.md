@@ -6,7 +6,7 @@ A Mac app that turns music files into MXF cue clips for a replay server such as 
 
 1. **Add tracks.** Drop audio files or a folder on the queue sidebar or the app icon, or choose **File → Add Audio…** (Command-O). Each track becomes a job in drop order. A folder adds the audio inside it, sorted by name. Finder aliases are followed. Files that are not audio are skipped and counted in the status bar, and a file that cannot be decoded is added as Failed with the decoder's reason.
 2. **Preview a job.** Select it in the queue. Press **Space** to play or pause, click or drag across a waveform to cue, and use **Left Arrow** and **Right Arrow** to step one frame.
-3. **Set it up in the inspector.** The **Job** tab holds the export settings, markers, loudness and trim. The **Appearance** tab holds the title, clocks, waveforms, end warning and safe zones. **Apply to All** copies the selected job's appearance and preset to every Pending job.
+3. **Set it up in the inspector.** The **Job** tab holds the export settings, markers, loudness and trim. The **Appearance** tab holds the title, clocks, waveforms, end warning and safe zones. **Apply to All** copies shared appearance and export settings to the other jobs that are eligible for editing. Done and running jobs keep their settings. Each track keeps its title text.
 4. **Export.** **Start Queue** (Command-Return) exports every Pending job in list order. **Export Selected** (Command-E) exports only the selected job; on a Done job it exports again under a new name. Each row shows Pending, Preparing, Exporting with a percentage, Done with **Show in Finder**, Failed with the encoder log, or Cancelled. **Cancel** stops a job and leaves no partial file. **Retry** returns a Failed or Cancelled job to Pending.
 
 The queue is saved as you go and restored at the next launch. A job that was exporting when the app quit returns to Pending. Quitting while the queue runs asks first. Settings of a job that is exporting are locked.
@@ -25,11 +25,16 @@ The queue is saved as you go and restored at the next launch. A job that was exp
 
 ### Appearance tab
 
-- **Overlay text** and **Position**, or drag the text in the monitor.
-- **Clocks**: size and colour for Elapsed and Remaining, and **Clock position** (below or above the waveforms).
-- **Waveforms**: colours for the full track and the close-up, and the close-up **Zoom window** (Auto, 2 to 60 s, or Off for one enlarged full-track waveform).
-- **End warning**: **Fade to red** over the last 5 or 10 seconds, **Solid red at** the last frame or the last second, optional red fades for the close-up and full-track waveforms, and **Countdown to** File end or Music end.
-- **Overlay safe zones**: None, EVS OSD (provisional 10 % top and 20 % bottom bands, to be measured on the server) or Custom, so the server's on-screen display does not cover the clocks or title. Elements give way in a fixed order: waveforms shrink, then gaps, then clocks step down a size, then the title. **Show safe-zone guides** hatches the reserved bands in the monitor only; guides never appear in an export.
+The first four panes control the picture from top to bottom. Drag a pane by its grip, or click the grip and choose **Move Up** or **Move Down**. The viewer and the exported MXF use the same order. Click a pane name or disclosure triangle to collapse it. The app remembers which panes are open.
+
+- **Title** holds the text, font and visibility. Choose Left, Center or Right to align the title inside its own band.
+- **Full track** controls the overview waveform's color and visibility. **Close-up** controls its waveform color, zoom window, playhead centering and shading. Choosing Off for the zoom window gives the full track more room.
+- **Clocks** controls size, color and visibility for Elapsed and Remaining. Use **Left clock** to swap their sides. The warning color follows Remaining.
+- **Offset** moves just that pane’s element in whole picture pixels. Type a value or hold the stepper. Positive moves up and negative moves down. Movement stops at a neighbor or safe-zone limit. Both clocks move together.
+- **End warning** sets when Remaining fades to red, when it becomes solid red and whether either waveform also changes color. **Countdown to** selects File end or Music end.
+- **Overlay safe zones** reserves space for the server display. Choose None, EVS OSD (8% top and 17% bottom), or Custom. **Show safe-zone guides** draws the reserved bands in the viewer only.
+
+**Restore Defaults** resets the selected look, including pane order and offsets, and keeps its title text. Jobs saved by build 17 retain their below/above waveform clock placement. A former floating title moves into the top band at the alignment nearest its old horizontal position.
 
 The clocks read minutes, seconds and frames at 25 fps on every preset. The first frame shows zero elapsed and the full clip duration remaining; the last frame shows one frame remaining.
 
