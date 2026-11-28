@@ -2,6 +2,8 @@ import CoreGraphics
 
 /// Whole-pixel offsets for the visible extents of a fitting automatic layout.
 /// Supply spans in picture order (top first) in Core Graphics coordinates (positive Y is up).
+/// Automatic spans must already have the minimum gap. Pixel rounding during automatic placement
+/// may leave an extent half a pixel past a frame edge. That pane can stay there or move inward.
 public enum OffsetResolver {
     /// A downward request from the upper pane has first use of a shared gap when neighbours
     /// move toward each other. Panes moving in the same direction can use space their neighbour
@@ -27,8 +29,8 @@ public enum OffsetResolver {
                               frame: ClosedRange<CGFloat>, gap: CGFloat) -> ClosedRange<Int> {
         precondition(spans.count == inUse.count && spans.indices.contains(index))
         let span = spans[index]
-        var low = Int((frame.lowerBound - span.lowerBound).rounded(.up))
-        var high = Int((frame.upperBound - span.upperBound).rounded(.down))
+        var low = min(0, Int((frame.lowerBound - span.lowerBound).rounded(.up)))
+        var high = max(0, Int((frame.upperBound - span.upperBound).rounded(.down)))
         if index > 0 {
             let slack = spans[index - 1].lowerBound - span.upperBound - gap
             high = min(high, inUse[index - 1] + Int(slack.rounded(.down)))

@@ -20,6 +20,24 @@ final class OffsetResolverTests: XCTestCase {
                        -10...2)
     }
 
+    func testRoundedAutomaticEdgesAllowZeroAndInwardMovementOnly() {
+        // With the title hidden, build 17's full track can reach 1025.5 at a 1025 frame edge.
+        // Give the bottom pane the symmetric half-pixel protrusion.
+        let frame: ClosedRange<CGFloat> = 55...1025
+        let spans: [ClosedRange<CGFloat>] = [950...1025.5, 54.5...920]
+        let automatic = [0, 0]
+        XCTAssertEqual(OffsetResolver.resolve(stored: [1, -1], spans: spans, frame: frame, gap: gap),
+                       automatic)
+        XCTAssertEqual(OffsetResolver.limits(index: 0, inUse: automatic, spans: spans, frame: frame, gap: gap),
+                       -18...0)
+        XCTAssertEqual(OffsetResolver.limits(index: 1, inUse: automatic, spans: spans, frame: frame, gap: gap),
+                       0...18)
+        for requested in [automatic, [-18, 0], [0, 18], [-9, 9]] {
+            XCTAssertEqual(OffsetResolver.resolve(stored: requested, spans: spans, frame: frame, gap: gap),
+                           requested)
+        }
+    }
+
     func testTouchingFrameAndMinimumGapsLeaveNoRoom() {
         let spans: [ClosedRange<CGFloat>] = [65...85, 33...53, 1...21]
         let frame: ClosedRange<CGFloat> = 1...85
