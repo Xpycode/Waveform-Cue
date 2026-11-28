@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 7/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
+**Progress:** 9/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -137,7 +137,7 @@ The spike (P1.3) prototypes the header on a branch that is not merged as it stan
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** Waves 0, 1 and 2 requested on 2026-11-28. PU1 approved. Wave 3 and later require a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
+- **Execution scope/limits:** Waves 0 through 3 requested on 2026-11-28. PU1 approved. Wave 4 requires a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
 - **Branch:** `feature/appearance-panes`, created locally from the reconciled build 17 branch in P0.1. Publishing the branch to the other Mac needs separate authorization. The work changes saved-job handling and the picture, so `main` stays at build 17 until P4.4. Merge to `main` is a fast-forward at the build 18 handoff.
 - **Paths:** code paths are relative to `01_Project/`; docs are in `docs/`.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` when files are added), Git and merges, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
@@ -230,14 +230,14 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 ### Wave 3 (parallel — two tasks; one in the app, one in the package)
 
-- [ ] **P3.1**: Offset rows (spec C controls, performance)
+- [x] **P3.1**: Offset rows (spec C controls, performance)
   - Depends on / external gates: P2.1, P2.2; **PU1**
   - Owns: `CueAppearanceSidebar.swift`, `SidebarPaneView.swift`, new `Sources/App/Views/AppKit/OffsetFormatter.swift`; `EditorModel.updateAppearance` (deferred save)
   - Detail: each movable pane gets a field and a stepper fed by one clamping setter. The field and stepper show the offset in use (`layout.offsetsInUse`), not the stored value, and refresh after every appearance change. An edit clamps to `layout.offsetLimits(for:)` and stores the offsets in use of all four panes with the edited one changed (planning findings). Stepper: `valueWraps = false`, explicit range, autorepeat. Field: `OffsetFormatter` over `OffsetText`; unparsable text returns to the value in use. Stepper edits use a deferred save; the viewer redraws on every step. Accessibility labels carry the pane name ("Clocks vertical offset") and the value reads as "plus 12 pixels".
   - Success: Atlas pass over spec C: one step moves one element by one pixel; holding repeats; typed 500 lands on the nearest allowed offset; at 12 pixels from a neighbour or at the frame edge the value stays; the Clocks pair moves together; after a reorder or a safe-zone change the fields show the offsets in use; setting the safe zones back restores the picture; a moved pane keeps its Offset. `queue.json` is written once after a burst of steps, not per step.
   - Backpressure: the app build command; full suite; Atlas screenshots; modification times of `queue.json` in the helper during a held stepper
 
-- [ ] **P3.2**: Remove the old forms (spec F; the refactor's removal gate)
+- [x] **P3.2**: Remove the old forms (spec F; the refactor's removal gate)
   - Depends on / external gates: P2.1, P2.2
   - Owns: `CueAppearance.swift`, `Queue/CueJob.swift`, `CueTypes.swift`, `CuePicture.swift` (removals only), `Queue/QueueManager.swift` if it names the fields; `CueJobTests.swift`, `QueueManagerTests.swift`, `CueTypesTests.swift`, and any test still building `CueLabel` with a position
   - Removal gate: `grep -rnE 'clockPosition|labelX|labelY|draggedTitlePosition|placeLabel|selectPosition|positionIndex|label\.position|HitTarget\.title|case \.title' 01_Project/Sources` finds no use of the old members.
@@ -324,6 +324,8 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 | 1 / P1.3 | Fresh sidebar agent, coordinator built and drove the Atlas helper, independent reviewer checked job identity and lock | 3 pure tests; 10/10 releases in the real sidebar. Control values and title focus held. Click menus, collapse and reopen checked. [Wave 1 validation](sessions/2026-11-28.md#appearance-panes-wave-1) | Feature `ede37a5`, `591f60d`. Prototype wiring on `wave1/sidebar-trial` at `adecd01`. | Keep dragging for P2.2. Physical Escape and stationary edge scrolling remain in PX1. |
 | 2 / P2.1 | Fresh package worktree, reviewed independently and integrated by coordinator | 61 focused tests passed. All 320 geometry fixtures and protected macOS 15 hashes passed, including 9,408 additional offset cases and ink checks of both clock sides. [Picture checks](sessions/evidence/appearance-panes-wave2/README.md#picture) | `d140edd` | P3.1 and P3.2 ready with P2.2. PX3 needs macOS 27. |
 | 2 / P2.2 | Fresh sidebar worktree, independent review, coordinator handled queue integration and Atlas | Full suite 336/336. All 48 queue tests reran after the synchronous lock correction. Atlas verified pane order, menu and grip moves, job selection, alignment, clock sides, export locking, restored defaults and collapse after relaunch. [Inspector checks](sessions/evidence/appearance-panes-wave2/README.md#inspector) | `ec1c3d2` | Selected Wave 2 complete. Wave 3 is ready. PX1–PX3 remain open. |
+| 3 / P3.1 | Fresh app worktree, independent review, coordinator integrated the queue delay and verified the real inspector | 338/338 suite. A single held step advanced twice, updated the viewer before release and produced one queue write. Limits, safe-zone restoration, invalid edits and pane moves passed. [Offset evidence](sessions/evidence/appearance-panes-wave3/README.md#offset-controls) | `2f03818` | Wave 4 starts at P4.1. PX2 covers speech. |
+| 3 / P3.2 | Fresh package worktree, independent review, coordinator updated the monitor adapter | 121 focused tests. The build 17 queue saved without the three old keys and reloaded to the same pixels. Apply to All, match ticks, import and Restore Defaults passed. The signed app built and ran. [Saved jobs](sessions/evidence/appearance-panes-wave3/README.md#saved-jobs-and-defaults) | `4ad214a` | Selected Wave 3 complete. PX1–PX3 remain open. |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution

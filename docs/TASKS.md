@@ -2,7 +2,7 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). Progress 7/13. Wave 3 is ready for the Offset fields and steppers (P3.1) and removal of the old saved-position API (P3.2). The control placement (PU1) was approved on 2026-11-28. The plan owns task status and evidence. It carries two inbox items of 2026-11-28: swappable positions (the whole plan) and the Color column drift (task P2.2, spec A).
+[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). Progress 9/13. Wave 4 starts with P4.1, comparing the viewer against an exported frame and checking render performance. The control placement (PU1) was approved on 2026-11-28. The plan owns task status and evidence. It carries two inbox items of 2026-11-28: swappable positions (the whole plan) and the Color column drift (task P2.2, spec A).
 
 Earlier plan, still open on external gates: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done. X1 passed, X2 partly passed; X2–X4 still open. The plan owns task status and evidence.
 
