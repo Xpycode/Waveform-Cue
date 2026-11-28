@@ -280,7 +280,8 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
   - Success / verification: the eight points are confirmed or corrected, and this section is updated with the date.
   - While unavailable: Waves 0 and 1 and P2.1 proceed.
 
-- [ ] **PX1**: Operator acceptance of build 18
+- [ ] **PX1**: Operator acceptance of the Appearance panes
+  - Current candidate is build 19. The operator reported a successful export. The hands-on journey and EVS playback remain open. [Handoff](sessions/2026-11-28.md#resume-after-build-19-export)
   - Depends on: P4.4
   - Requires: the operator, on the desktop and on the EVS
   - Gates: the journey's observable outcome and overall completion.

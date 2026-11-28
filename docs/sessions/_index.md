@@ -2,6 +2,7 @@
 
 | Date | Focus | Outcome |
 | --- | --- | --- |
+| [2026-11-28 (M4 Pro, build 19)](2026-11-28.md#build-19-and-operator-export) | Verify the reported safe-zone steps and record operator feedback | Both steps moved about 10 px in Atlas. Operator export succeeded. [Resume after the show](2026-11-28.md#resume-after-build-19-export) for PX1. |
 | [2026-11-28 (M4 Pro, safe zones)](2026-11-28.md#safe-zone-jump) | Correct the adjacent Bottom percentage jump | Close-up displacement fell from 165 px to 10 px. The preview and MXF agree, and all 343 tests passed. [Resume](2026-11-28.md#resume-after-the-safe-zone-fix). |
 | [2026-11-28 (M4 Pro, panes Wave 4)](2026-11-28.md#appearance-panes-wave-4) | Verify the picture and hand off build 18 | Final wave complete. All 342 tests passed. The release exported an EVS check clip and local main fast-forwarded. [Resume for acceptance](2026-11-28.md#resume-after-appearance-panes-wave-4). |
 | [2026-11-28 (M4 Pro, panes Wave 3)](2026-11-28.md#appearance-panes-wave-3) | Edit pane offsets and retire old job positions | 338 tests passed. A held stepper updated the viewer and saved once. Build 17 jobs retained their migrated picture. [Resume at Wave 4](2026-11-28.md#resume-after-appearance-panes-wave-3). |
@@ -21,4 +22,3 @@
 | [2026-11-27](2026-11-27.md#resume-after-appearance-wave-2) | Execute appearance and playhead Wave 2 | All 97 required tests and the Debug build passed. Eight previous-format jobs round-tripped. Wave 3 rendering and feature integration are ready. |
 | [2026-11-27](2026-11-27.md#resume-after-appearance-wave-1) | Execute appearance and playhead Wave 1 | Four tasks complete. Both tabs and default persistence passed in Atlas. All 261 tests passed. Wave 2 settings compatibility is ready. |
 | [2026-11-27](2026-11-27.md#plan-review-of-the-appearance-and-playhead-round) | Review and correct the next-round plan | Three independent reviews; plan rewritten to 9 tasks with sixteen corrections. Reversed close-up shading added and made the default; control placement approved. No source changed. Next: `/execute` the appearance and playhead plan, Wave 1 (1.1, 1.2, 1.3, 2.2). [Resume](2026-11-27.md#resume-after-plan-review) |
-| [2026-11-27](2026-11-27.md#resume-after-evs-review-and-next-round-planning) | Test build 11 on EVS and plan appearance and zoom | Five jobs Done. EVS clock and spacing findings recorded. Next-round Wave 1 is ready for selection. Build 11 helper acceptance remains pending. |

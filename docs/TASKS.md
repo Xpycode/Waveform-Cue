@@ -4,7 +4,7 @@
 
 [Safe-zone jump](sessions/evidence/safe-zone-jump/plan.md) is complete. SZ1 passed preview and export verification.
 
-[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). All 13 implementation tasks are complete. Build 18 is ready for acceptance. The [acceptance checklist](sessions/evidence/appearance-panes-wave4/acceptance.md) records the results. PU1 was approved. PX1 needs operator and EVS acceptance, PX2 needs VoiceOver and PX3 needs macOS 27.
+[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). All 13 implementation tasks are complete. Build 19 is the current acceptance copy. The operator confirmed export and deferred the rest until after the show. The [acceptance checklist](sessions/evidence/appearance-panes-wave4/acceptance.md) records the results. PU1 was approved. PX1 needs operator and EVS acceptance, PX2 needs VoiceOver and PX3 needs macOS 27.
 
 Earlier plan, still open on external gates: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done. X1 passed, X2 partly passed; X2–X4 still open. The plan owns task status and evidence.
 
