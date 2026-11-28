@@ -1,0 +1,516 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		042366648BEC760C42CE00A3 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6FB5801C154716BA548ED36 /* MainWindow.swift */; };
+		13E785A5E98173768F0A12A6 /* QueueSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4858B105B71A20A7F42C05B /* QueueSupport.swift */; };
+		2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */; };
+		417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */; };
+		468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */; };
+		47CD199208A574368D145D2F /* CueCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5290EC1FEDA9CFC55BFAE0A9 /* CueCore */; };
+		4DD766C688092A967FDE0EE2 /* SleepAssertion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4A67929EE1D084A8217FB90 /* SleepAssertion.swift */; };
+		64A66B6CF832348F75D83E9B /* AppKitButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 432B9F05919250B0355A4D2E /* AppKitButton.swift */; };
+		6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */; };
+		69C2B6BBFA026CB2F118F512 /* WindowReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 598A11E249649DBE0B31CE2E /* WindowReader.swift */; };
+		72284B3F02D321E8846024C7 /* MonitorRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */; };
+		73811F4F69266E0AC3FDF869 /* JobInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00DBCC2D0D28250BB2A2164 /* JobInspector.swift */; };
+		73A56F168C6522B560C11AED /* ProcessKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A5E3FF4D2DFB625EA4A54C8 /* ProcessKit */; };
+		7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */; };
+		8BA42A9957F25211E3F85814 /* AppShellKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0FB5306E6FFEE9D3E2315288 /* AppShellKit */; };
+		8E22180BAC25FC88F3AA93D4 /* DestinationPopUpRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */; };
+		913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */ = {isa = PBXBuildFile; fileRef = DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */; };
+		B7774564D7D44F9F7A641C1F /* MXFJobExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C304118E2DE850C5C9C4C3 /* MXFJobExporter.swift */; };
+		BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */; };
+		C1C378F72A1B583B4763E2C3 /* InspectorControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6227EE370806CF454169A8A1 /* InspectorControls.swift */; };
+		DA2853F40580865E8F0DF404 /* AppearanceSidebarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */; };
+		DA8E69147F818603EAF9F92C /* QueueTableRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */; };
+		E7110E1C3EFC4E6138B63988 /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DF670FE79893C490F0C8939 /* MonitorView.swift */; };
+		ED01D10D9DB4D915812CE74F /* InspectorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2AE10376D843166203E40F /* InspectorPane.swift */; };
+		F5FDDFEAD0B86F8D7FB7D1A0 /* EditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationPopUpRepresentable.swift; sourceTree = "<group>"; };
+		07C304118E2DE850C5C9C4C3 /* MXFJobExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MXFJobExporter.swift; sourceTree = "<group>"; };
+		2DF670FE79893C490F0C8939 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
+		373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueTableRepresentable.swift; sourceTree = "<group>"; };
+		3F59DF60304D0AB83FCF1105 /* zPackages */ = {isa = PBXFileReference; lastKnownFileType = folder; name = zPackages; path = ../../zPackages; sourceTree = SOURCE_ROOT; };
+		432B9F05919250B0355A4D2E /* AppKitButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitButton.swift; sourceTree = "<group>"; };
+		4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformCueApp.swift; sourceTree = "<group>"; };
+		598A11E249649DBE0B31CE2E /* WindowReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReader.swift; sourceTree = "<group>"; };
+		6227EE370806CF454169A8A1 /* InspectorControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorControls.swift; sourceTree = "<group>"; };
+		7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorModel.swift; sourceTree = "<group>"; };
+		7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportRepresentable.swift; sourceTree = "<group>"; };
+		8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRepresentable.swift; sourceTree = "<group>"; };
+		966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBarRepresentable.swift; sourceTree = "<group>"; };
+		A4A67929EE1D084A8217FB90 /* SleepAssertion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepAssertion.swift; sourceTree = "<group>"; };
+		A6FB5801C154716BA548ED36 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
+		A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSidebar.swift; sourceTree = "<group>"; };
+		B00DBCC2D0D28250BB2A2164 /* JobInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobInspector.swift; sourceTree = "<group>"; };
+		B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearanceSidebar.swift; sourceTree = "<group>"; };
+		CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorPane.swift; sourceTree = "<group>"; };
+		D4858B105B71A20A7F42C05B /* QueueSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSupport.swift; sourceTree = "<group>"; };
+		DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = WaveformCue.icns; sourceTree = "<group>"; };
+		EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSidebarRepresentable.swift; sourceTree = "<group>"; };
+		F19F0C4416F740B942425864 /* WaveformCue.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WaveformCue.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FD7906994D6DC6A01A9A12CD /* CueCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CueCore; path = Packages/CueCore; sourceTree = SOURCE_ROOT; };
+		FF2AE10376D843166203E40F /* InspectorPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorPane.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CAF99E233BFECF935228A92B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47CD199208A574368D145D2F /* CueCore in Frameworks */,
+				8BA42A9957F25211E3F85814 /* AppShellKit in Frameworks */,
+				73A56F168C6522B560C11AED /* ProcessKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		084AF08A9FD82EF112551A74 /* Queue */ = {
+			isa = PBXGroup;
+			children = (
+				07C304118E2DE850C5C9C4C3 /* MXFJobExporter.swift */,
+				D4858B105B71A20A7F42C05B /* QueueSupport.swift */,
+				A4A67929EE1D084A8217FB90 /* SleepAssertion.swift */,
+			);
+			path = Queue;
+			sourceTree = "<group>";
+		};
+		0DC235EFCB81E4D710E07C67 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FF2AE10376D843166203E40F /* InspectorPane.swift */,
+				B00DBCC2D0D28250BB2A2164 /* JobInspector.swift */,
+				A6FB5801C154716BA548ED36 /* MainWindow.swift */,
+				CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */,
+				A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */,
+				C40D563B42818EABA8F5AD0B /* AppKit */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		60D5AB550A55F0DE23FACC13 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		A5CD8373324D63CC9B9988DA /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */,
+				4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */,
+				084AF08A9FD82EF112551A74 /* Queue */,
+				0DC235EFCB81E4D710E07C67 /* Views */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B2C53258EF17F58F999F26E1 = {
+			isa = PBXGroup;
+			children = (
+				D1469A68C4B650A1D235D44D /* Packages */,
+				60D5AB550A55F0DE23FACC13 /* Resources */,
+				FC52918E1B150EE1774BDA82 /* Sources */,
+				FA30E6898F74CF5B3B69E9DA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C40D563B42818EABA8F5AD0B /* AppKit */ = {
+			isa = PBXGroup;
+			children = (
+				EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */,
+				432B9F05919250B0355A4D2E /* AppKitButton.swift */,
+				B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */,
+				01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */,
+				6227EE370806CF454169A8A1 /* InspectorControls.swift */,
+				8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */,
+				2DF670FE79893C490F0C8939 /* MonitorView.swift */,
+				966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */,
+				373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */,
+				7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */,
+				598A11E249649DBE0B31CE2E /* WindowReader.swift */,
+			);
+			path = AppKit;
+			sourceTree = "<group>";
+		};
+		D1469A68C4B650A1D235D44D /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				FD7906994D6DC6A01A9A12CD /* CueCore */,
+				3F59DF60304D0AB83FCF1105 /* zPackages */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		FA30E6898F74CF5B3B69E9DA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F19F0C4416F740B942425864 /* WaveformCue.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FC52918E1B150EE1774BDA82 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A5CD8373324D63CC9B9988DA /* App */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AF449662FB9773AF00D7977A /* WaveformCue */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5B09E77FE782DC6E01224914 /* Build configuration list for PBXNativeTarget "WaveformCue" */;
+			buildPhases = (
+				0F3BA22D65780061BD66EE89 /* Sources */,
+				FAE49184556D8E6676F88E93 /* Resources */,
+				CAF99E233BFECF935228A92B /* Frameworks */,
+				F0941086719114F76094157D /* Bundle FFmpeg */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WaveformCue;
+			packageProductDependencies = (
+				5290EC1FEDA9CFC55BFAE0A9 /* CueCore */,
+				0FB5306E6FFEE9D3E2315288 /* AppShellKit */,
+				9A5E3FF4D2DFB625EA4A54C8 /* ProcessKit */,
+			);
+			productName = WaveformCue;
+			productReference = F19F0C4416F740B942425864 /* WaveformCue.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C8DF28029DEFE8794EC3A212 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					AF449662FB9773AF00D7977A = {
+						DevelopmentTeam = FDMSRXXN73;
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 5F2EEE5CB51607117EF256C2 /* Build configuration list for PBXProject "WaveformCue" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B2C53258EF17F58F999F26E1;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B4CBDD9D8EA648AF5C6E20C9 /* XCLocalSwiftPackageReference "Packages/CueCore" */,
+				F4ABD8E053DC7FEB48FCB58F /* XCLocalSwiftPackageReference "../../zPackages" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FA30E6898F74CF5B3B69E9DA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AF449662FB9773AF00D7977A /* WaveformCue */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FAE49184556D8E6676F88E93 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F0941086719114F76094157D /* Bundle FFmpeg */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle FFmpeg";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Scripts/bundle-ffmpeg.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0F3BA22D65780061BD66EE89 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				64A66B6CF832348F75D83E9B /* AppKitButton.swift in Sources */,
+				DA2853F40580865E8F0DF404 /* AppearanceSidebarRepresentable.swift in Sources */,
+				BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */,
+				8E22180BAC25FC88F3AA93D4 /* DestinationPopUpRepresentable.swift in Sources */,
+				F5FDDFEAD0B86F8D7FB7D1A0 /* EditorModel.swift in Sources */,
+				C1C378F72A1B583B4763E2C3 /* InspectorControls.swift in Sources */,
+				ED01D10D9DB4D915812CE74F /* InspectorPane.swift in Sources */,
+				73811F4F69266E0AC3FDF869 /* JobInspector.swift in Sources */,
+				B7774564D7D44F9F7A641C1F /* MXFJobExporter.swift in Sources */,
+				042366648BEC760C42CE00A3 /* MainWindow.swift in Sources */,
+				6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */,
+				72284B3F02D321E8846024C7 /* MonitorRepresentable.swift in Sources */,
+				E7110E1C3EFC4E6138B63988 /* MonitorView.swift in Sources */,
+				417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */,
+				2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */,
+				13E785A5E98173768F0A12A6 /* QueueSupport.swift in Sources */,
+				DA8E69147F818603EAF9F92C /* QueueTableRepresentable.swift in Sources */,
+				4DD766C688092A967FDE0EE2 /* SleepAssertion.swift in Sources */,
+				7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */,
+				468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */,
+				69C2B6BBFA026CB2F118F512 /* WindowReader.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		14A75E56B77216B92DFC7FA6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 17;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = FDMSRXXN73;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		18699F3CC9945DD4B8EBBC0E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 17;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = FDMSRXXN73;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		35E766170A09C2BD16B193BB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lucesumbrarum.WaveformCue;
+				PRODUCT_NAME = "Waveform Cue";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		DA784FC8357D1065C5FD196D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lucesumbrarum.WaveformCue;
+				PRODUCT_NAME = "Waveform Cue";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5B09E77FE782DC6E01224914 /* Build configuration list for PBXNativeTarget "WaveformCue" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				35E766170A09C2BD16B193BB /* Debug */,
+				DA784FC8357D1065C5FD196D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5F2EEE5CB51607117EF256C2 /* Build configuration list for PBXProject "WaveformCue" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14A75E56B77216B92DFC7FA6 /* Debug */,
+				18699F3CC9945DD4B8EBBC0E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B4CBDD9D8EA648AF5C6E20C9 /* XCLocalSwiftPackageReference "Packages/CueCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/CueCore;
+		};
+		F4ABD8E053DC7FEB48FCB58F /* XCLocalSwiftPackageReference "../../zPackages" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../zPackages;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0FB5306E6FFEE9D3E2315288 /* AppShellKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppShellKit;
+		};
+		5290EC1FEDA9CFC55BFAE0A9 /* CueCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CueCore;
+		};
+		9A5E3FF4D2DFB625EA4A54C8 /* ProcessKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ProcessKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = C8DF28029DEFE8794EC3A212 /* Project object */;
+}
