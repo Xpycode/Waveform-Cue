@@ -136,7 +136,13 @@ public struct PeaksSummary: Codable, Sendable, Equatable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(seconds: (try? c.decodeIfPresent(Double.self, forKey: .seconds)) ?? 0,
+        let seconds = (try? c.decodeIfPresent(Double.self, forKey: .seconds)) ?? 0
+        // Use the same saved-duration limit as TrackAnalysis before converting seconds to frames.
+        guard seconds <= TrimSettings.maximumSeconds else {
+            throw DecodingError.dataCorruptedError(forKey: .seconds, in: c,
+                                                   debugDescription: "Stored waveform duration exceeds the supported range.")
+        }
+        self.init(seconds: seconds,
                   overview: (try? c.decodeIfPresent([Float].self, forKey: .overview)) ?? [])
     }
 }

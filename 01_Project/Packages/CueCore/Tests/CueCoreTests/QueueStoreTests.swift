@@ -132,6 +132,34 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertNil(result.document.destinationOverride)
     }
 
+    func testOversizedLegacyPeaksDurationDropsOnlyTheSummary() throws {
+        let fixture = """
+        [
+          {"sourcePath":"/before.wav","peaks":{"seconds":86400,"overview":[0.25]}},
+          {"sourcePath":"/legacy.wav","labelText":"Keep this title","peaks":{"seconds":1e20,"overview":[]}},
+          {"sourcePath":"/analysed.wav","peaks":{"seconds":1e20,"overview":[]},
+           "analysis":{"seconds":25,"detailPeaks":"AAAAPw=="}},
+          {"sourcePath":"/after.wav","peaks":{"seconds":4,"overview":[0.75]}}
+        ]
+        """
+        let store = QueueStore(directory: directory)
+        try Data(fixture.utf8).write(to: store.fileURL)
+        let result = store.load()
+        XCTAssertNil(result.problem)
+        let jobs = result.document.jobs
+        XCTAssertEqual(jobs.map(\.sourceName), ["before", "legacy", "analysed", "after"])
+        guard jobs.count == 4 else { return }
+        XCTAssertEqual(jobs[0].peaks, PeaksSummary(seconds: TrimSettings.maximumSeconds, overview: [0.25]))
+        XCTAssertEqual(jobs[1].labelText, "Keep this title")
+        XCTAssertNil(jobs[1].peaks)
+        XCTAssertNil(jobs[2].peaks)
+        XCTAssertEqual(jobs[2].analysis?.seconds, 25)
+        XCTAssertEqual(jobs[2].analysis?.detailPeaks, [0.5])
+        XCTAssertEqual(jobs[3].peaks, PeaksSummary(seconds: 4, overview: [0.75]))
+        try store.save(result.document)
+        XCTAssertEqual(store.load().document, result.document)
+    }
+
     func testBuild17QueueSavesOnlyMigratedSettingsAndReloadsTheSamePicture() throws {
         let fixture = try XCTUnwrap(Bundle.module.url(forResource: "build17-job", withExtension: "json"))
         let legacy = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture))
