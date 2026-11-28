@@ -163,8 +163,8 @@ public enum CuePicture {
     /// `timeline.clocks(at:)`. `layout` must be `appearance.layout` (computed once and shared)
     /// and `path` must be `overviewPath(track, layout:)`.
     ///
-    /// Markers come from `timeline.musicEndMarker` and `fadeStartMarker` and are drawn on both
-    /// waveforms. Remaining, its fade to red and the waveform fades all measure to
+    /// Markers come from `timeline.musicEndLineFrame` (End, rounded up to a whole frame) and
+    /// `fadeStartMarker` (exact) and are drawn on both waveforms. Remaining, its fade to red and the waveform fades all measure to
     /// `timeline.target`; past a music-end target Remaining holds at 00:00:00 in red. With
     /// target File end (or no marker, or no tail) the clocks and fades are build 10's.
     /// Safe-zone guides are never drawn here (the monitor overlays them).
@@ -214,9 +214,11 @@ public enum CuePicture {
         func xForFrame(_ frame: Double, in range: Window, rect: CGRect) -> CGFloat {
             rect.minX + rect.width * CGFloat(frame - range.lower) / CGFloat(range.count)
         }
+        // End sits on the frame grid with the playhead and the Music end countdown; Fade stays exact.
         let markerFrames: [(MarkerKind, Double)] = [
-            (MarkerKind.fadeStart, timeline.fadeStartMarker), (MarkerKind.musicEnd, timeline.musicEndMarker)
-        ].compactMap { kind, marker in marker.map { (kind, $0.seconds * fps) } }
+            timeline.fadeStartMarker.map { (MarkerKind.fadeStart, $0.seconds * fps) },
+            timeline.musicEndLineFrame.map { (MarkerKind.musicEnd, Double($0)) },
+        ].compactMap { $0 }
         func paintMarkers(in range: Window, rect: CGRect, labelSize: CGFloat) {
             for (kind, frame) in markerFrames {
                 guard frame >= range.lower, frame <= range.upper else { continue }
@@ -247,15 +249,19 @@ public enum CuePicture {
             }
         }
         func paintEnvelope(_ path: CGPath, rect: CGRect, cursor: CGFloat, played: CueColor,
-                           upcoming: CueColor, fadeToRed: Bool, markersIn range: Window) {
+                           upcoming: CueColor, fadeToRed: Bool, dimPlayed: Bool = false, markersIn range: Window) {
             let fraction = fadeToRed ? warningFraction : 0
             fill(CGRect(x: rect.minX, y: rect.midY, width: rect.width, height: 1.5), rgb(0.30, 0.37, 0.37))
-            ctx.setFillColor(upcoming.blended(toward: CueColor.warningRed.dimmed, fraction: fraction).cgColor)
+            // `played` is the full colour and `upcoming` its dimmed form; `dimPlayed` swaps which
+            // side of the cursor gets which, red warning included.
+            let bright = played.blended(toward: .warningRed, fraction: fraction).cgColor
+            let dimmed = upcoming.blended(toward: CueColor.warningRed.dimmed, fraction: fraction).cgColor
+            ctx.setFillColor(dimPlayed ? bright : dimmed)
             ctx.addPath(path)
             ctx.fillPath()
             ctx.saveGState()
             ctx.clip(to: CGRect(x: rect.minX, y: rect.minY, width: max(0, cursor - rect.minX), height: rect.height))
-            ctx.setFillColor(played.blended(toward: .warningRed, fraction: fraction).cgColor)
+            ctx.setFillColor(dimPlayed ? dimmed : bright)
             ctx.addPath(path)
             ctx.fillPath()
             ctx.restoreGState()
@@ -330,7 +336,8 @@ public enum CuePicture {
             paintEnvelope(detailPath, rect: detail, cursor: cursor,
                           played: appearance.detailColor ?? CueAppearance.defaultDetail,
                           upcoming: appearance.detailColor?.dimmed ?? CueColor(0.32, 0.48, 0.47),
-                          fadeToRed: appearance.fadeCloseUp, markersIn: window)
+                          fadeToRed: appearance.fadeCloseUp, dimPlayed: appearance.dimPlayedCloseUp,
+                          markersIn: window)
             let triangleTop = detail.maxY + M.cursorTriangleRise
             let half = M.cursorTriangleHalfWidth
             ctx.beginPath()
@@ -522,9 +529,11 @@ extension CuePicture {
     public static func markerHit(at point: CGPoint, timeline: ClipTimeline, layout: CueLayout,
                                  closeUp: Range<Int>) -> (kind: MarkerKind, onCloseUp: Bool)? {
         let fps = Double(ClipTimeline.clockRate)
+        // Where the lines are drawn: End on the frame grid, Fade at its exact time.
         let markers: [(MarkerKind, Double)] = [
-            (MarkerKind.musicEnd, timeline.musicEndMarker), (MarkerKind.fadeStart, timeline.fadeStartMarker)
-        ].compactMap { kind, marker in marker.map { (kind, $0.seconds * fps) } }
+            timeline.musicEndLineFrame.map { (MarkerKind.musicEnd, Double($0)) },
+            timeline.fadeStartMarker.map { (MarkerKind.fadeStart, $0.seconds * fps) },
+        ].compactMap { $0 }
         guard !markers.isEmpty else { return nil }
         var panes: [(rect: CGRect, lower: Double, upper: Double, onCloseUp: Bool)] = [
             (layout.overview, 0, Double(timeline.clockFrames), false)

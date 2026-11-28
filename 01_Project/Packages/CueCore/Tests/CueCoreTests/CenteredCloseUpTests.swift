@@ -3,12 +3,13 @@ import XCTest
 @testable import CueCore
 
 extension CueAppearance {
-    /// Build 10's close-up: the window holds still against both ends of the track. The render
-    /// baselines pin this look; the centred default is covered by `CenteredCloseUpTests`.
+    /// Build 10's close-up: the window holds still against both ends of the track, and played
+    /// audio is full colour. The render baselines pin this look; the centred default is covered by `CenteredCloseUpTests`.
     static var build10: CueAppearance {
         var appearance = CueAppearance()
         appearance.centerAtStart = false
         appearance.centerAtEnd = false
+        appearance.dimPlayedCloseUp = false
         return appearance
     }
 }

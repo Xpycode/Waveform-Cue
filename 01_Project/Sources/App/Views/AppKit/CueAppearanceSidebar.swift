@@ -21,6 +21,7 @@ final class CueAppearanceSidebar: NSView {
     private let zoom = NSPopUpButton()
     private let centerAtStart = NSButton(checkboxWithTitle: "Center playhead at start", target: nil, action: nil)
     private let centerAtEnd = NSButton(checkboxWithTitle: "Center playhead at end", target: nil, action: nil)
+    private let dimPlayedCloseUp = NSButton(checkboxWithTitle: "Dim played audio in close-up", target: nil, action: nil)
     private let countdownTarget = NSPopUpButton()
     private let clockPosition = NSPopUpButton()
     private let safeZonePreset = NSPopUpButton()
@@ -79,7 +80,8 @@ final class CueAppearanceSidebar: NSView {
         fadeCloseUp.toolTip = "Apply the countdown warning to the zoomed waveform."
         centerAtStart.toolTip = "Keep the close-up playhead centered from the first frame, with empty space before the music."
         centerAtEnd.toolTip = "Keep the close-up playhead centered to the last frame, with empty space after the end."
-        for checkbox in [fadeFullTrack, fadeCloseUp, centerAtStart, centerAtEnd] {
+        dimPlayedCloseUp.toolTip = "Show the upcoming audio in full colour and dim what has already played."
+        for checkbox in [fadeFullTrack, fadeCloseUp, centerAtStart, centerAtEnd, dimPlayedCloseUp] {
             checkbox.target = self
             checkbox.action = #selector(edit(_:))
         }
@@ -157,13 +159,13 @@ final class CueAppearanceSidebar: NSView {
         title.font = .systemFont(ofSize: 17, weight: .semibold)
         let reset = NSButton(title: "Restore Defaults", target: self, action: #selector(reset))
         let stack = NSStackView(views: [title, overlayTitle, labelField, placement, clocks, clockPlacement, waveforms,
-                                        centerAtStart, centerAtEnd,
+                                        centerAtStart, centerAtEnd, dimPlayedCloseUp,
                                         section("End warning"), timing, fadeCloseUp, fadeFullTrack,
                                         section("Overlay safe zones"), zonePreset, zoneGrid, showGuides, roomMessage, reset])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
-        for view in [title, placement, clockPlacement, centerAtEnd, fadeFullTrack, showGuides] as [NSView] {
+        for view in [title, placement, clockPlacement, dimPlayedCloseUp, fadeFullTrack, showGuides] as [NSView] {
             stack.setCustomSpacing(20, after: view)
         }
 
@@ -238,6 +240,7 @@ final class CueAppearanceSidebar: NSView {
             updateWarningControls()
         case centerAtStart: settings.centerAtStart = centerAtStart.state == .on
         case centerAtEnd: settings.centerAtEnd = centerAtEnd.state == .on
+        case dimPlayedCloseUp: settings.dimPlayedCloseUp = dimPlayedCloseUp.state == .on
         case warning:
             settings.warning = CountdownWarning.allCases[warning.indexOfSelectedItem]
             updateWarningControls()
@@ -280,6 +283,7 @@ final class CueAppearanceSidebar: NSView {
         fadeFullTrack.state = settings.fadeFullTrack ? .on : .off
         centerAtStart.state = settings.centerAtStart ? .on : .off
         centerAtEnd.state = settings.centerAtEnd ? .on : .off
+        dimPlayedCloseUp.state = settings.dimPlayedCloseUp ? .on : .off
         updateWarningControls()
         countdownTarget.selectItem(withTitle: settings.countdownTarget.title)
         clockPosition.selectItem(withTitle: settings.clockPosition.title)
@@ -296,6 +300,7 @@ final class CueAppearanceSidebar: NSView {
         fadeCloseUp.isEnabled = settings.warning != .off && settings.zoom != .off
         centerAtStart.isEnabled = settings.zoom != .off
         centerAtEnd.isEnabled = settings.zoom != .off
+        dimPlayedCloseUp.isEnabled = settings.zoom != .off
         fadeFullTrack.isEnabled = settings.warning != .off
     }
 

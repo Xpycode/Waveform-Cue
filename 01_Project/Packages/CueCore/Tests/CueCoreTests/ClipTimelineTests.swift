@@ -208,6 +208,24 @@ final class ClipTimelineTests: XCTestCase {
         XCTAssertEqual(ClipTimeline(duration: 10, markers: .none, target: .musicEnd).targetClockFrames, 250)
     }
 
+    /// The End line sits on the frame where a Music end countdown reads zero (rounded up), and
+    /// on the last frame when the music ends inside it; the marker keeps its exact time.
+    func testEndLineSnapsToTheFrameGrid() {
+        func timeline(end: Double, duration: Double = 30.1, target: CountdownTarget = .musicEnd) -> ClipTimeline {
+            ClipTimeline(duration: duration, markers: MusicMarkers(detectedMusicEnd: end), target: target)
+        }
+        XCTAssertEqual(timeline(end: 8).musicEndLineFrame, 200)
+        XCTAssertEqual(timeline(end: 8.01).musicEndLineFrame, 201)
+        XCTAssertEqual(timeline(end: 8.01).targetClockFrames, 201)
+        XCTAssertEqual(timeline(end: 8.01).musicEndMarker?.seconds ?? 0, 8.01, accuracy: 1e-9)
+        // 30.1 s is 753 clock frames; a music end inside the last frame meets the file end.
+        XCTAssertEqual(timeline(end: 30.09).clockFrames, 753)
+        XCTAssertEqual(timeline(end: 30.09).musicEndLineFrame, 753)
+        XCTAssertEqual(timeline(end: 30.09, target: .fileEnd).musicEndLineFrame, 753)
+        XCTAssertNil(timeline(end: 8, target: .fileEnd).fadeStartMarker)
+        XCTAssertNil(ClipTimeline(duration: 10, markers: .silent, target: .musicEnd).musicEndLineFrame)
+    }
+
     func testEditedMarkerWins() {
         let markers = MusicMarkers(detectedMusicEnd: 8, editedMusicEnd: 9)
         XCTAssertEqual(ClipTimeline(duration: 10, markers: markers, target: .musicEnd).targetClockFrames, 225)

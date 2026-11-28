@@ -131,6 +131,7 @@ final class RenderTests: XCTestCase {
     func testUnrenderedSettingsKeepBaseline() {
         let track = BaselineTests.syntheticTrack()
         var appearance = CueAppearance()
+        appearance.dimPlayedCloseUp = false  // build 10's close-up colours; see DimPlayedCloseUpTests
         appearance.showGuides = true
         appearance.countdownTarget = .musicEnd
         appearance.safeZones = SafeZones(preset: .none, custom: .init(top: 20, bottom: 20))

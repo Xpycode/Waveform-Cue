@@ -115,10 +115,16 @@ public struct ClipTimeline: Sendable, Equatable, Hashable {
         // A music end before the in point is treated as missing, as the marker is; the countdown then runs to the file end.
         if target == .musicEnd, let end = finite(markers.musicEnd), end >= lower {
             let inRange = min(length, max(0, end - lower))
-            targetClockFrames = min(clockFrames, max(0, Int(ceil(inRange * Double(Self.clockRate) - Self.epsilon))))
+            targetClockFrames = min(clockFrames, Self.framesCovering(inRange))
         } else {
             targetClockFrames = clockFrames
         }
+    }
+
+    /// Frames on the 25 base up to the boundary after the frame holding `seconds`. The Music end
+    /// countdown reaches zero there and the End line is drawn there, so they meet the playhead.
+    static func framesCovering(_ seconds: Double) -> Int {
+        max(0, Int(ceil(seconds * Double(clockRate) - epsilon)))
     }
 
     /// Build 10's rounding: at least one frame, a fraction of a frame rounds up.
@@ -241,6 +247,11 @@ public struct ClipTimeline: Sendable, Equatable, Hashable {
 
     /// The music-end marker relative to the trimmed range, or nil when unset or cut away.
     public var musicEndMarker: Marker? { marker(markers.musicEnd) }
+    /// Where the End line is drawn: the music end rounded up to a whole frame on the 25 base,
+    /// the frame where a Music end countdown reads zero. The marker keeps its exact time.
+    public var musicEndLineFrame: Int? {
+        musicEndMarker.map { min(clockFrames, Self.framesCovering($0.seconds)) }
+    }
     /// The fade-start marker relative to the trimmed range, or nil when unset or cut away.
     public var fadeStartMarker: Marker? { marker(markers.fadeStart) }
 
