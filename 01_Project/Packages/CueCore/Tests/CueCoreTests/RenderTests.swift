@@ -137,6 +137,33 @@ final class RenderTests: XCTestCase {
         XCTAssertTrue(poor.showTitle)
     }
 
+    func testBuild17DefaultAppearanceAndDamagedPaneOrder() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "build17-job", withExtension: "json"))
+        let job = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var saved = try XCTUnwrap(job["appearance"] as? [String: Any])
+        func decode() throws -> CueAppearance {
+            try JSONDecoder().decode(CueAppearance.self, from: JSONSerialization.data(withJSONObject: saved))
+        }
+        let legacy = try decode()
+        XCTAssertEqual(legacy.paneOrder, [.title, .clocks, .fullTrack, .closeUp])
+        XCTAssertEqual(legacy.titleAlignment, .left)
+        XCTAssertEqual(legacy.leftClock, .elapsed)
+        XCTAssertEqual(legacy.offsets, PaneOffsets())
+        let modern = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as? [String: Any])
+        XCTAssertNil(modern["clockPosition"])
+        XCTAssertEqual(modern["paneOrder"] as? [String], ["title", "clocks", "fullTrack", "closeUp"])
+
+        saved["paneOrder"] = ["closeUp", "future", 17, "closeUp", "title"] as [Any]
+        saved["offsets"] = ["clocks": -8, "fullTrack": "invalid"] as [String: Any]
+        saved["leftClock"] = 2
+        let partial = try decode()
+        XCTAssertEqual(partial.paneOrder, [.closeUp, .title, .fullTrack, .clocks])
+        XCTAssertEqual(partial.offsets, PaneOffsets(clocks: -8))
+        XCTAssertEqual(partial.leftClock, .elapsed)
+        saved["paneOrder"] = "broken"
+        XCTAssertEqual(try decode().paneOrder, PicturePane.defaultOrder)
+    }
+
     // MARK: - Timeline entry point
 
     func testHiddenPictureHasNoPixelsOrHitTargets() {

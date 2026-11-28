@@ -115,8 +115,27 @@ public struct CueAppearance: Codable, Sendable, Equatable {
     public var remaining = ClockStyle(color: CueColor(0.93, 0.77, 0.52), size: .medium)
     /// Bands kept clear for a server overlay (spec F). None is build 10's layout.
     public var safeZones: SafeZones = .none
-    /// Clocks below (build 10) or above the waveforms.
-    public var clockPosition: ClockPosition = .below
+    private var storedPaneOrder = PicturePane.defaultOrder
+    public var paneOrder: [PicturePane] {
+        get { storedPaneOrder }
+        set { storedPaneOrder = PicturePane.normalised(newValue.map(\.rawValue)) }
+    }
+    public var offsets = PaneOffsets()
+    public var titleAlignment: TitleAlignment = .left
+    public var leftClock: LeftClock = .elapsed
+
+    /// Compatibility with the two-position inspector and renderer during the layout migration.
+    public var clockPosition: ClockPosition {
+        get { paneOrder.first { $0 != .title } == .clocks ? .above : .below }
+        set {
+            var order = paneOrder.filter { $0 != .clocks }
+            let waves = order.indices.filter { order[$0] == .fullTrack || order[$0] == .closeUp }
+            // Normalisation guarantees both waveform panes are present.
+            let insertion = newValue == .above ? waves[0] : waves[1] + 1
+            order.insert(.clocks, at: insertion)
+            paneOrder = order
+        }
+    }
     /// What Remaining counts down to. Rendering of Music end arrives in task 3.2.
     public var countdownTarget: CountdownTarget = .fileEnd
     /// Hatched safe-zone guides over the monitor only; never part of an export.
@@ -196,9 +215,11 @@ public struct CueAppearance: Codable, Sendable, Equatable {
     // Build 4 stored only the clocks under this key.
     private static let key = "ClockAppearance.v1"
 
-    private enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey {
         case overviewColor, detailColor, warning, solidRedAt, fadeCloseUp, fadeFullTrack, zoom
-        case elapsed, remaining, safeZones, clockPosition, countdownTarget, showGuides
+        case elapsed, remaining, safeZones, countdownTarget, showGuides
+        case storedPaneOrder = "paneOrder"
+        case offsets, titleAlignment, leftClock
         case titleFontName, clockFontName
         case storedShowTitle = "showTitle"
         case storedShowElapsed = "showElapsed"
@@ -214,7 +235,15 @@ public struct CueAppearance: Codable, Sendable, Equatable {
     }
 
     // The Wave 4 encoder always wrote shading, even when it omitted its edge-held mode.
-    private enum Wave4Keys: String, CodingKey { case playheadMode, closeUpShading }
+    private enum LegacyKeys: String, CodingKey { case clockPosition, playheadMode, closeUpShading }
+
+    /// A malformed member must not discard the valid names beside it in the saved array.
+    private struct SavedPaneName: Decodable {
+        let name: String?
+        init(from decoder: Decoder) throws {
+            name = try? decoder.singleValueContainer().decode(String.self)
+        }
+    }
 
     public init() {}
 
@@ -231,16 +260,24 @@ public struct CueAppearance: Codable, Sendable, Equatable {
         fadeCloseUp = try values.decodeIfPresent(Bool.self, forKey: .fadeCloseUp) ?? false
         fadeFullTrack = try values.decodeIfPresent(Bool.self, forKey: .fadeFullTrack) ?? false
         zoom = try values.decodeIfPresent(ZoomWindow.self, forKey: .zoom) ?? .auto
-        let wave4 = try decoder.container(keyedBy: Wave4Keys.self)
-        let oldMode = try? wave4.decode(PlayheadMode.self, forKey: .playheadMode)
-        let oldShading = try? wave4.decode(CloseUpShading.self, forKey: .closeUpShading)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        let oldMode = try? legacy.decode(PlayheadMode.self, forKey: .playheadMode)
+        let oldShading = try? legacy.decode(CloseUpShading.self, forKey: .closeUpShading)
         let centered = oldMode.map { $0 == .centered } ?? (oldShading == nil)
         centerAtStart = (try? values.decode(Bool.self, forKey: .centerAtStart)) ?? centered
         centerAtEnd = (try? values.decode(Bool.self, forKey: .centerAtEnd)) ?? centered
         dimPlayedCloseUp = (try? values.decode(Bool.self, forKey: .dimPlayedCloseUp)) ?? (oldShading != .playedBrighter)
         // Added in the batch round; build 10 appearances have none of these keys.
         safeZones = (try? values.decodeIfPresent(SafeZones.self, forKey: .safeZones)) ?? .none
-        clockPosition = (try? values.decodeIfPresent(ClockPosition.self, forKey: .clockPosition)) ?? .below
+        if values.contains(.storedPaneOrder) {
+            let names = (try? values.decodeIfPresent([SavedPaneName].self, forKey: .storedPaneOrder)) ?? []
+            storedPaneOrder = PicturePane.normalised(names.compactMap(\.name))
+        } else if (try? legacy.decode(ClockPosition.self, forKey: .clockPosition)) == .above {
+            clockPosition = .above
+        }
+        offsets = (try? values.decodeIfPresent(PaneOffsets.self, forKey: .offsets)) ?? PaneOffsets()
+        titleAlignment = (try? values.decodeIfPresent(TitleAlignment.self, forKey: .titleAlignment)) ?? .left
+        leftClock = (try? values.decodeIfPresent(LeftClock.self, forKey: .leftClock)) ?? .elapsed
         countdownTarget = (try? values.decodeIfPresent(CountdownTarget.self, forKey: .countdownTarget)) ?? .fileEnd
         showGuides = (try? values.decodeIfPresent(Bool.self, forKey: .showGuides)) ?? false
 

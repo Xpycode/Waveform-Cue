@@ -108,6 +108,46 @@ final class CueJobTests: XCTestCase {
         XCTAssertEqual(try decode(missing).appearance, legacyLook)
     }
 
+    func testBuild17JobMigratesTitleOnceAndKeepsOtherSettings() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "build17-job", withExtension: "json"))
+        let data = try Data(contentsOf: url)
+        var document = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let job = try decode(document)
+        XCTAssertEqual(job.labelText, "Saved cue")
+        XCTAssertEqual(job.appearance.titleAlignment, .right)
+        XCTAssertEqual(job.appearance.paneOrder, [.title, .clocks, .fullTrack, .closeUp])
+        XCTAssertEqual(job.appearance.zoom, .five)
+        XCTAssertTrue(job.appearance.centerAtStart)
+        XCTAssertFalse(job.appearance.centerAtEnd)
+        XCTAssertEqual(try roundTrip(job), job)
+
+        let thirds: [(Double, TitleAlignment)] = [(0, .left), (0.32, .left), (1.0 / 3, .center),
+                                                   (0.5, .center), (2.0 / 3, .right), (1, .right)]
+        for (x, expected) in thirds {
+            document["labelX"] = x
+            XCTAssertEqual(try decode(document).appearance.titleAlignment, expected)
+        }
+        var appearance = try XCTUnwrap(document["appearance"] as? [String: Any])
+        for (saved, expected) in [("center", TitleAlignment.center), ("future", .left)] {
+            appearance["titleAlignment"] = saved
+            document["appearance"] = appearance
+            XCTAssertEqual(try decode(document).appearance.titleAlignment, expected)
+        }
+    }
+
+    func testLegacyPositionEditsSurviveTheNextAppearanceEditAndReload() throws {
+        var job = sampleJob()
+        job.label.position = CGPoint(x: 1, y: 1)
+        var look = job.appearance
+        look.zoom = .off
+        job.appearance = look
+        XCTAssertEqual(try roundTrip(job).appearance.titleAlignment, .right)
+
+        job.appearance.titleAlignment = .center
+        job.label.text = "New title"
+        XCTAssertEqual(try roundTrip(job).appearance.titleAlignment, .center)
+    }
+
     func testMalformedFieldsDegradeInsteadOfThrowing() throws {
         var dict = try object(sampleJob())
         dict["trim"] = "not a trim"

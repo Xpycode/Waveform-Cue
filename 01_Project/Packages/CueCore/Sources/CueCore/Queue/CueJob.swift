@@ -236,7 +236,10 @@ public struct CueJob: Identifiable, Sendable, Equatable {
         get { CueLabel(text: labelText, position: CGPoint(x: labelX, y: labelY)) }
         set {
             labelText = newValue.text
-            labelX = Double(newValue.position.x)
+            let x = Double(newValue.position.x)
+            // The legacy position picker and monitor drag still edit this label during the migration.
+            if x != labelX { appearanceSnapshot.value.titleAlignment = TitleAlignment(legacyX: x) }
+            labelX = x
             labelY = Double(newValue.position.y)
         }
     }
@@ -311,6 +314,10 @@ extension CueJob: Codable {
         labelX = value(Double.self, .labelX).flatMap { $0.isFinite ? $0 : nil } ?? 0
         labelY = value(Double.self, .labelY).flatMap { $0.isFinite ? $0 : nil } ?? 1
         appearanceSnapshot = value(AppearanceSnapshot.self, .appearance) ?? AppearanceSnapshot(CueAppearance())
+        let savedLook = try? c.nestedContainer(keyedBy: CueAppearance.CodingKeys.self, forKey: .appearance)
+        if savedLook?.contains(.titleAlignment) != true {
+            appearanceSnapshot.value.titleAlignment = TitleAlignment(legacyX: labelX)
+        }
         presetID = value(PresetID.self, .presetID) ?? ""
         layout = value(AudioLayout.self, .layout) ?? .default
         startTimecode = value(String.self, .startTimecode) ?? Self.defaultStartTimecode

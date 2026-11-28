@@ -852,8 +852,13 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     private func storeLabel(deferringSave: Bool = false) {
         guard let id = selectedJobID else { return }
         let label = self.label
-        if !queue.update(id, deferringSave: deferringSave, { $0.label = label }) {
+        guard queue.update(id, deferringSave: deferringSave, { $0.label = label }) else {
             status = "This job is exporting. Its settings are locked."
+            return
+        }
+        // Subsequent inspector edits write this entire cached appearance back to the job.
+        if let alignment = selectedJob?.appearance.titleAlignment, appearance.titleAlignment != alignment {
+            appearance.titleAlignment = alignment
         }
     }
 

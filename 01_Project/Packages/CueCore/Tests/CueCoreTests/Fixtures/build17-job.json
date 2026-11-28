@@ -1,0 +1,61 @@
+{
+  "appearance": {
+    "centerAtEnd": false,
+    "centerAtStart": true,
+    "clockPosition": "above",
+    "countdownTarget": "fileEnd",
+    "dimPlayedCloseUp": true,
+    "elapsed": {
+      "color": {
+        "blue": 0.88,
+        "green": 0.88,
+        "red": 0.84
+      },
+      "size": "Medium"
+    },
+    "fadeCloseUp": true,
+    "fadeFullTrack": false,
+    "remaining": {
+      "color": {
+        "blue": 0.52,
+        "green": 0.77,
+        "red": 0.93
+      },
+      "size": "Medium"
+    },
+    "safeZones": {
+      "custom": {
+        "bottom": 0,
+        "left": 0,
+        "right": 0,
+        "top": 0
+      },
+      "preset": "none"
+    },
+    "showGuides": false,
+    "solidRedAt": "lastFrame",
+    "warning": 0,
+    "zoom": 5
+  },
+  "filenameTemplate": "{name} - Cue",
+  "id": "9301737F-4806-4D5A-AF3B-5753E8E82EA1",
+  "labelText": "Saved cue",
+  "labelX": 0.85,
+  "labelY": 0.2,
+  "layout": 2,
+  "markers": {
+    "noMusic": false
+  },
+  "normalise": false,
+  "presetID": "",
+  "sourcePath": "/tmp/song.wav",
+  "startTimecode": "00:00:00:00",
+  "status": {
+    "state": "pending"
+  },
+  "trim": {
+    "fadeIn": 0,
+    "fadeOut": 0,
+    "preRoll": 0
+  }
+}
