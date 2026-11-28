@@ -42,6 +42,20 @@ final class CloseUpWindowTests: XCTestCase {
         }
     }
 
+    func testEndZoomUsesFileEndWhenTrimRemovesMusicEnd() {
+        let trim = TrimSettings(inPoint: 10)
+        let fileEnd = ClipTimeline(duration: 40, trim: trim, target: .fileEnd)
+        let trimmedEnd = ClipTimeline(duration: 40, trim: trim, markers: MusicMarkers(detectedMusicEnd: 5),
+                                      target: .musicEnd)
+        var look = CueAppearance()
+        look.zoom = .ten
+        look.endZoom = .two
+        for position in [0, 500, 700, 749] {
+            XCTAssertEqual(CuePicture.closeUp(timeline: trimmedEnd, position: position, appearance: look),
+                           CuePicture.closeUp(timeline: fileEnd, position: position, appearance: look))
+        }
+    }
+
     func testCenteredFiveSecondWindowHasBlankSpaceAtTrimBoundaries() {
         let clip = 8.0...12.0
         let first = CloseUpWindow.interval(playhead: 8, clip: clip, target: 12,

@@ -450,7 +450,17 @@ public enum CuePicture {
         func drawClock(_ name: String, frame: Int, color: CueColor, size: ClockSize, labelBaseline: CGFloat, right: Bool) {
             let x = right ? layout.contentMaxX : layout.contentMinX
             drawText(name, x, labelBaseline, M.clockLabelSize, dim, right: right)
-            drawText(AudioTrack.clock(frame), x, layout.clockBaseline, size.points, color.cgColor, mono: true, right: right)
+            var points = size.points
+            // Three-digit minutes need more than the eight characters reserved by the layout.
+            // Size against the clip duration, so the digits stay steady as they tick.
+            if total >= 100 * 60 * AudioTrack.fps {
+                let longest = line(AudioTrack.clock(total), font: layout.typography.clock.font(at: points), color: color.cgColor)
+                let bounds = horizontalBounds(longest, includeInk: !layout.typography.usesLegacyClock)
+                let width = bounds.upperBound - bounds.lowerBound
+                let available = layout.typography.widths[size]! - M.antialias
+                points *= min(1, available / max(1, width))
+            }
+            drawText(AudioTrack.clock(frame), x, layout.clockBaseline, points, color.cgColor, mono: true, right: right)
         }
         if layout.showElapsed {
             drawClock("Elapsed", frame: clocks.elapsed, color: appearance.elapsed.color, size: layout.elapsedSize,
@@ -617,8 +627,8 @@ public enum CuePicture {
         }
         let width = Double(frameCount) / fps
         let target: Double
-        if timeline.target == .musicEnd, let end = timeline.markers.musicEnd, end.isFinite {
-            target = min(timeline.sourceRange.upperBound, max(start, end))
+        if timeline.target == .musicEnd, let marker = timeline.musicEndMarker {
+            target = start + marker.seconds
         } else {
             target = timeline.sourceRange.upperBound
         }

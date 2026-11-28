@@ -95,7 +95,10 @@ final class TrimPreRollTests: XCTestCase {
         for order in [PicturePane.defaultOrder, [.title, .clocks, .fullTrack, .closeUp]] {
             var appearance = CueAppearance()
             appearance.paneOrder = order
-            appearance.titleAlignment = order == PicturePane.defaultOrder ? .left : .right
+            if order != PicturePane.defaultOrder {
+                appearance.titleAlignment = .right
+                appearance.offsets = PaneOffsets(title: -4, fullTrack: 3, closeUp: -2, clocks: 5)
+            }
             let layout = appearance.layout
             let timeline = ClipTimeline(duration: track.seconds, trim: TrimSettings(preRoll: 5),
                                         standard: TimelineRate.fields50)

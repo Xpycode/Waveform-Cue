@@ -31,6 +31,31 @@ final class ClockSideTests: XCTestCase {
         }
     }
 
+    func testThreeDigitMinutesKeepBothReadingsInsideTheirColumns() throws {
+        let sample = BaselineTests.syntheticTrack()
+        let track = AudioTrack(url: sample.url, pcm: sample.pcm, seconds: 202 * 60,
+                               detailPeaks: sample.detailPeaks, peaks: sample.peaks)
+        let timeline = ClipTimeline(duration: track.seconds)
+        for side in LeftClock.allCases {
+            var look = CueAppearance()
+            look.leftClock = side
+            look.elapsed.size = .extraLarge
+            look.remaining.size = .extraLarge
+            look.safeZones = RenderTests.zones(left: 15, right: 15)
+            let layout = look.layout
+            let left = try XCTUnwrap(layout.extent(of: side == .elapsed ? .elapsedClock : .remainingClock))
+            let right = try XCTUnwrap(layout.extent(of: side == .elapsed ? .remainingClock : .elapsedClock))
+            let gap = CGRect(x: ceil(left.maxX), y: left.minY,
+                             width: floor(right.minX) - ceil(left.maxX), height: left.height)
+            let pixels = RenderTests.render(track, timeline: timeline, position: timeline.clockFrames / 2,
+                                           label: CueLabel(), appearance: look)
+            XCTAssertGreaterThanOrEqual(gap.width, CueLayout.Metrics.clockPairGap)
+            XCTAssertEqual(RenderTests.foreignPixels(pixels, in: gap), 0)
+            XCTAssertGreaterThan(RenderTests.foreignPixels(pixels, in: left), 1000)
+            XCTAssertGreaterThan(RenderTests.foreignPixels(pixels, in: right), 1000)
+        }
+    }
+
     func testRenderedLabelsAndWarningFollowTheirClock() throws {
         let track = BaselineTests.syntheticTrack()
         let timeline = ClipTimeline(duration: track.seconds)
