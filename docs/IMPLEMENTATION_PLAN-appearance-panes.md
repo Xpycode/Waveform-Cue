@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 0/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
+**Progress:** 2/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -137,8 +137,8 @@ The spike (P1.3) prototypes the header on a branch that is not merged as it stan
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** planning only (2026-11-28). PU1 approved 2026-11-28. Execution has not been requested. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
-- **Branch:** `feature/appearance-panes`, created in P0.1 and pushed so the other Mac can see it. The work changes saved-job handling and the picture, so `main` stays at build 17 until P4.4. Merge to `main` is a fast-forward at the build 18 handoff.
+- **Execution scope/limits:** Wave 0 requested on 2026-11-28. PU1 approved. Later waves need a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
+- **Branch:** `feature/appearance-panes`, created locally from the reconciled build 17 branch in P0.1. Publishing the branch to the other Mac needs separate authorization. The work changes saved-job handling and the picture, so `main` stays at build 17 until P4.4. Merge to `main` is a fast-forward at the build 18 handoff.
 - **Paths:** code paths are relative to `01_Project/`; docs are in `docs/`.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` when files are added), Git and merges, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
 - **Shared build resources:** parallel tasks run in git worktrees under `.claude/worktrees/` (the ignored `.claude/worktrees/zPackages` symlink must exist) and run `swift test` with their own `--scratch-path` and a `--filter` for their own test classes. Only the coordinator runs the full suite and `xcodebuild`, with a `-derivedDataPath` outside the project.
@@ -164,7 +164,7 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 ### Wave 0 (serial foundations — coordinator; each step changes what the next builds on)
 
-- [ ] **P0.1**: Branch, baseline and build 17 reference data
+- [x] **P0.1**: Branch, baseline and build 17 reference data
   - Depends on / external gates: none
   - Owns: branch `feature/appearance-panes`; new `Packages/CueCore/Tests/CueCoreTests/Build17LayoutTests.swift` and its fixture `Fixtures/build17-layouts.json`; one added `clocksAbove` case in `BaselineTests.swift`
   - Detail: before any layout code changes, record what build 17 draws. (1) A geometry fixture written by today's `CueLayout`: for both clock positions × zoom Off and Auto × all 16 clock-size pairs × safe zones None, EVS OSD and three custom sets, the full-track and close-up rectangles, clock baseline, clock sizes after give-way, title size, top-left title box origin and height, and `fits`. Numbers only, so it is valid on both Macs. (2) Five pixel hashes for a clocks-above appearance, recorded with `CUE_RECORD_BASELINE=1` into the table of the macOS version in use.
@@ -172,7 +172,7 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
   - Success: the suite passes at the recorded count with the new test and case included; the fixture is committed.
   - Backpressure: the full-suite command; the count and commit recorded in the Execution Log
 
-- [ ] **P0.2**: Shared value types and appearance fields (spec F, model part)
+- [x] **P0.2**: Shared value types and appearance fields (spec F, model part)
   - Depends on / external gates: P0.1
   - Owns: new `Packages/CueCore/Sources/CueCore/PictureArrangement.swift`; `CueAppearance.swift`; `Queue/CueJob.swift` (decoding only); new `PictureArrangementTests.swift`; the decoding tests in `RenderTests.swift` and `CueJobTests.swift`
   - Detail: `PicturePane` (title, fullTrack, closeUp, clocks; display names; default order), `TitleAlignment` (left, center, right), `LeftClock` (elapsed, remaining), `PaneOffsets` (one whole-pixel `Int` per pane, positive is up). `CueAppearance` gains `paneOrder`, `offsets`, `titleAlignment` and `leftClock`, decoded with `(try? decodeIfPresent) ?? default` (cookbook 122). The order is stored as strings and passed through one pure `PicturePane.normalised(_:)`: unknown and repeated names are dropped, known panes keep their saved sequence, missing ones follow in default order. Migration at decode: no `paneOrder` key and `clockPosition` above gives Title, Clocks, Full track, Close-up. In `CueJob.init(from:)`, an appearance without a `titleAlignment` key takes the alignment nearest the saved `labelX` (left third Left, middle third Center, right third Right). `clockPosition` stays as a computed shim derived from and applied to `paneOrder`, so the app and the old tests still compile; it is no longer encoded. Nothing reads the new fields for drawing yet.
@@ -295,10 +295,10 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 - [ ] **PX3**: Pixel hashes on the other Mac
   - Depends on: P1.1, P2.1
-  - Requires: the M4 Pro (macOS 15)
-  - Gates: the five `customTitle` entries and the `clocksAbove` entries of `BaselineTests.expectedOriginal`.
-  - Success / verification: there, record with `CUE_RECORD_BASELINE=1`, check that the 15 unchanged hashes still match, and commit the table.
-  - While unavailable: those entries are skipped with a message on macOS 15; the geometry fixture covers both Macs.
+  - Requires: the M1 Max (macOS 27). Wave 0 ran on the M4 Pro (macOS 15).
+  - Gates: the five `customTitle` entries and five `clocksAbove` entries of `BaselineTests.expectedMacOS27`.
+  - Success / verification: on macOS 27, record the five clocks-above references using the original build 17 renderer at `2b8f028` with its layout-aware overview path. Compare the new renderer against those references, record the intentional five custom-title changes, verify the 15 unchanged hashes, then commit the table.
+  - While unavailable: skip only the pending entries with a message on macOS 27. The geometry fixture covers both Macs.
 
 ---
 
@@ -316,6 +316,8 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 | Wave / task IDs | Assignments or serial reason | Validation / evidence | Commits or exception | Remaining gates / next action or stop reason |
 |---|---|---|---|---|
+| 0 / P0.1 | Coordinator, first prerequisite | Original build 17 produced 320 geometry cases and five clocks-above hashes on macOS 15. Reconciled branch matched all of them. Full suite passed 304/304 with FFmpeg, benchmarks and EVS samples enabled. | `a2b58e6` | P0.2 follows. PX3 still requires macOS 27. |
+| 0 / P0.2 | Coordinator after P0.1. A fresh independent reviewer checked the migration and its fix. | A job emitted by build 17 migrates and round-trips. Corrupt entries preserve their valid neighbours. Legacy title edits update the job and editor copy. All 309 tests passed with zero skips. Debug app built, signature verified and helper launch checked. [Session evidence](sessions/2026-11-28.md#appearance-panes-wave-0) | `0b9c441` | Selected Wave 0 complete. Wave 1 (P1.1–P1.3) ready. PX1–PX3 open. |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution

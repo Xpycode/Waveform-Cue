@@ -2,7 +2,7 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). Progress 0/13. First ready: P0.1, then P0.2. The control placement (PU1) was approved on 2026-11-28. The plan owns task status and evidence. It carries two inbox items of 2026-11-28: swappable positions (the whole plan) and the Color column drift (task P2.2, spec A).
+[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). Progress 2/13. Wave 1 is ready (P1.1, P1.2 and P1.3). The control placement (PU1) was approved on 2026-11-28. The plan owns task status and evidence. It carries two inbox items of 2026-11-28: swappable positions (the whole plan) and the Color column drift (task P2.2, spec A).
 
 Earlier plan, still open on external gates: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done. X1 passed, X2 partly passed; X2–X4 still open. The plan owns task status and evidence.
 
