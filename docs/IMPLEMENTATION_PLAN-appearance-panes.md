@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 9/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
+**Progress:** 13/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -23,12 +23,12 @@ The operator arranges the four picture elements (Title, Full track, Close-up, Cl
 
 The spec's Given/When/Then criteria are authoritative and are not copied here. Each task names the sections it satisfies.
 
-- [ ] A. Panes in the Appearance tab (8 criteria): P2.2, P4.2
+- [x] A. Panes in the Appearance tab (8 criteria): P2.2, P4.2
 - [ ] B. Pane order is picture order (9): P1.1, P1.3, P2.2, P4.2
 - [ ] C. Offset per pane (10): P1.2, P2.1, P3.1
-- [ ] D. Title band (6): P1.1, P2.2
-- [ ] E. Clock sides (3): P2.1, P2.2
-- [ ] F. Saved jobs, Apply to All and Restore Defaults (7): P0.1, P0.2, P1.1, P3.2
+- [x] D. Title band (6): P1.1, P2.2
+- [x] E. Clock sides (3): P2.1, P2.2
+- [x] F. Saved jobs, Apply to All and Restore Defaults (7): P0.1, P0.2, P1.1, P3.2
 - [ ] Edge cases (5) and error states (2): P2.1, P2.2, P3.1
 - [ ] Performance: a held Offset stepper redraws the viewer without visible lag and saves the job no more often than typing a title does: P3.1, P4.1
 
@@ -137,7 +137,7 @@ The spike (P1.3) prototypes the header on a branch that is not merged as it stan
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** Waves 0 through 3 requested on 2026-11-28. PU1 approved. Wave 4 requires a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
+- **Execution scope/limits:** Waves 0 through 4 requested on 2026-11-28. PU1 approved. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
 - **Branch:** `feature/appearance-panes`, created locally from the reconciled build 17 branch in P0.1. Publishing the branch to the other Mac needs separate authorization. The work changes saved-job handling and the picture, so `main` stays at build 17 until P4.4. Merge to `main` is a fast-forward at the build 18 handoff.
 - **Paths:** code paths are relative to `01_Project/`; docs are in `docs/`.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` when files are added), Git and merges, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
@@ -247,25 +247,25 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 ### Wave 4 (verification and handoff)
 
-- [ ] **P4.1**: Full integration run (serial: needs both lanes merged and the machine to itself)
+- [x] **P4.1**: Full integration run (serial: needs both lanes merged and the machine to itself)
   - Depends on / external gates: P3.1, P3.2
   - Owns: evidence in the Execution Log; a viewer-against-export case in `ExportIntegrationTests.swift`
   - Success: the whole suite passes with FFmpeg present and no skipped integration test; an exported frame of a reordered, offset, Remaining-left job decodes to the same layout the viewer draws; Left clock and the end warning checked on screen in the helper (the red fade follows Remaining to the left); the render benchmark is within 5 % of the 6.1 record.
   - Backpressure: `FFMPEG_EXECUTABLE=… CUE_BENCH=1 swift test --package-path 01_Project/Packages/CueCore` with zero failures
 
-- [ ] **P4.2**: Acceptance pass in the Atlas helper
+- [x] **P4.2**: Acceptance pass in the Atlas helper
   - Depends on / external gates: P4.1
   - Owns: a criterion checklist in `docs/sessions/`, with screenshots
   - Success: every spec criterion in A–F, the edge cases and the error states is marked verified, not verified or externally gated, each with a screenshot, a test name or a decoded-file measurement. Accessibility is checked as far as the helper allows: the pane groups, their actions and the labels are read from `atlas elements`; spoken output goes to PX2. Fixtures are copied in; no operator file is used; the helper is cleaned up.
   - Backpressure: the checklist, with no unexplained gaps
 
-- [ ] **P4.3**: Review
+- [x] **P4.3**: Review
   - Depends on / external gates: P4.1
   - Owns: review report; findings return to the owning task's files
   - Success: `/shell-check` reports no new violation; a fresh read-only review of the diff since `531e91c` (package and app, saved-job migration first) has its confirmed findings fixed and the affected tests re-run.
   - Backpressure: shell-check output and the re-run results
 
-- [ ] **P4.4**: Build 18 handoff and documentation
+- [x] **P4.4**: Build 18 handoff and documentation
   - Depends on / external gates: P4.2, P4.3
   - Owns: `04_Exports/0.1-18/`, `README.md`, `decisions.md`, `PROJECT_STATE.md`, `TASKS.md`, the merge to `main`
   - Success: Release build in `04_Exports/0.1-18` verified and handed off per `reference/log/app-handoff.md`; README describes the panes, order, Offset, title band and clock sides; the two inbox items of 2026-11-28 (swappable positions, Color column drift) are closed with links; the branch is merged by fast-forward. A push is offered, not done unasked.
@@ -326,6 +326,10 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 | 2 / P2.2 | Fresh sidebar worktree, independent review, coordinator handled queue integration and Atlas | Full suite 336/336. All 48 queue tests reran after the synchronous lock correction. Atlas verified pane order, menu and grip moves, job selection, alignment, clock sides, export locking, restored defaults and collapse after relaunch. [Inspector checks](sessions/evidence/appearance-panes-wave2/README.md#inspector) | `ec1c3d2` | Selected Wave 2 complete. Wave 3 is ready. PX1–PX3 remain open. |
 | 3 / P3.1 | Fresh app worktree, independent review, coordinator integrated the queue delay and verified the real inspector | 338/338 suite. A single held step advanced twice, updated the viewer before release and produced one queue write. Limits, safe-zone restoration, invalid edits and pane moves passed. [Offset evidence](sessions/evidence/appearance-panes-wave3/README.md#offset-controls) | `2f03818` | Wave 4 starts at P4.1. PX2 covers speech. |
 | 3 / P3.2 | Fresh package worktree, independent review, coordinator updated the monitor adapter | 121 focused tests. The build 17 queue saved without the three old keys and reloaded to the same pixels. Apply to All, match ticks, import and Restore Defaults passed. The signed app built and ran. [Saved jobs](sessions/evidence/appearance-panes-wave3/README.md#saved-jobs-and-defaults) | `4ad214a` | Selected Wave 3 complete. PX1–PX3 remain open. |
+| 4 / P4.1 | Fresh export-test agent, serial full suite and Atlas by coordinator | 339/339 passed. Decoded MXF matched the viewer. Both clocks moved down 10 px and Remaining turned red on the left. M4 Pro render 214.9 vs 223.7 frames/s for 6.1, within 5%. [Integration evidence](sessions/evidence/appearance-panes-wave4/integration.md) | `34e0b6d` | P4.2 and P4.3 ready. |
+| 4 / P4.2 | Fresh criterion-by-criterion audit alongside independent review. Coordinator operated Atlas. | All 50 spec criteria and four performance checks have named evidence or an explicit remaining observation. [Acceptance checklist](sessions/evidence/appearance-panes-wave4/acceptance.md) | Wave 4 evidence commit | PX1, PX2 and PX3 remain open. |
+| 4 / P4.3 | Independent package and app reviewer, cleanup and duration fixes in separate files, coordinator integrated renderer fixes. A second reader checked corrections. | Shell audit 10/10. Four confirmed findings fixed. Focused suites passed 19, 29 and 13 tests respectively. [Review](sessions/evidence/appearance-panes-wave4/review.md) | `c4ddecb`, `c21f077`, `67f29cf` | Ready for P4.4. |
+| 4 / P4.4 | Coordinator, serial release and local fast-forward | Signed Release 0.1 (18), 342 tests, no skips. Atlas launched and closed the exact build, verified 101-minute clocks and exported an EVS sample with clear OSD bands. README and inbox updated. [Handoff](sessions/evidence/appearance-panes-wave4/integration.md#release-handoff) | `01c158a`, fast-forwarded local main | Selected scope complete. No further implementation wave. PX1, PX2 and PX3 remain open. |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
