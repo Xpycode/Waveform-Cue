@@ -91,9 +91,11 @@ final class TrimPreRollTests: XCTestCase {
     func testSlateFramesShowStartsInAndNoClocks() {
         let track = BaselineTests.syntheticTrack()
         let label = CueLabel(text: "Baseline Track")
-        for position in [ClockPosition.below, .above] {
+        var referenceSlate: [UInt8]?
+        for order in [PicturePane.defaultOrder, [.title, .clocks, .fullTrack, .closeUp]] {
             var appearance = CueAppearance()
-            appearance.clockPosition = position
+            appearance.paneOrder = order
+            appearance.titleAlignment = order == PicturePane.defaultOrder ? .left : .right
             let layout = appearance.layout
             let timeline = ClipTimeline(duration: track.seconds, trim: TrimSettings(preRoll: 5),
                                         standard: TimelineRate.fields50)
@@ -106,11 +108,13 @@ final class TrimPreRollTests: XCTestCase {
                                    loudness: Self.loudness)
             let music = Self.render(track, timeline: timeline, position: 250, label: label, appearance: appearance,
                                     loudness: Self.loudness)
+            if let referenceSlate { XCTAssertTrue(first.elementsEqual(referenceSlate)) }
+            referenceSlate = first
             // No clocks and no waveforms on the slate.
             for element in [CueLayout.Element.elapsedClock, .remainingClock] {
                 let extent = layout.extent(of: element)!
-                XCTAssertEqual(RenderTests.foreignPixels(first, in: extent), 0, "\(position) \(element)")
-                XCTAssertGreaterThan(RenderTests.foreignPixels(music, in: extent), 100, "\(position) \(element)")
+                XCTAssertEqual(RenderTests.foreignPixels(first, in: extent), 0, "\(order) \(element)")
+                XCTAssertGreaterThan(RenderTests.foreignPixels(music, in: extent), 100, "\(order) \(element)")
             }
             // The countdown moves; the slate has content; music starts with Elapsed at zero.
             XCTAssertNotEqual(first, later)
@@ -230,11 +234,11 @@ final class TrimPreRollTests: XCTestCase {
         let ending = ClipTimeline(duration: track.seconds, markers: MusicMarkers(detectedMusicEnd: track.seconds))
         XCTAssertEqual(hit(CGPoint(x: overview.maxX + 2, y: overview.midY), ending), .marker(.musicEnd, onCloseUp: false))
         XCTAssertEqual(hit(CGPoint(x: overview.maxX + 20, y: overview.midY), ending), .trim(.outPoint))
-        // The title wins over everything.
+        // The title band behaves like the background, including when trim handles are enabled.
         let label = CueLabel(text: "Title")
         let box = CuePicture.caption(label, layout: layout).1
         XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), label: label, layout: layout,
-                                            timeline: plain, closeUp: window, trimHandles: true), .title)
+                                            timeline: plain, closeUp: window, trimHandles: true), .none)
     }
 
     func testDraggedTrimIsRelativeSnappedAndClamped() {

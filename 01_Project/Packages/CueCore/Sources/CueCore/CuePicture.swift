@@ -182,8 +182,7 @@ public enum CuePicture {
         return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
     }
 
-    /// The overlay title and its box. The box travels inside `layout.titleArea`; positions
-    /// outside 0…1 are clamped so the title never enters a reserved band.
+    /// The width-fitted overlay title and its box at the selected alignment in the title band.
     public static func caption(_ label: CueLabel, layout: CueLayout = CueLayout()) -> (CTLine, CGRect) {
         let (run, box, _) = fittedCaption(label, layout: layout)
         return (run, box)
@@ -198,7 +197,7 @@ public enum CuePicture {
 
     private static func fittedCaption(_ label: CueLabel, layout: CueLayout) -> (CTLine, CGRect, CGPoint) {
         let titleSize = layout.titleSize
-        let area = layout.titleArea
+        let area = layout.titleBand
         let color = rgb(0.83, 0.87, 0.87)
         let font = layout.typography.title
         let custom = !layout.typography.usesLegacyTitle
@@ -218,10 +217,13 @@ public enum CuePicture {
         }
         let width = min(area.width, bounds.upperBound - bounds.lowerBound)
         let height = layout.typography.titleBoxHeight(adjustedSize)
-        let x = min(1, max(0, label.position.x)), y = min(1, max(0, label.position.y))
-        let rect = CGRect(x: area.minX + (area.width - width) * x,
-                          y: area.minY + (area.height - height) * y,
-                          width: width, height: height)
+        let x: CGFloat
+        switch layout.titleAlignment {
+        case .left: x = area.minX
+        case .center: x = area.midX - width / 2
+        case .right: x = area.maxX - width
+        }
+        let rect = CGRect(x: x, y: area.maxY - height, width: width, height: height)
         let origin = CGPoint(x: rect.minX - bounds.lowerBound, y: rect.minY + layout.typography.titleBaselineInset(adjustedSize))
         return (fitted, rect, origin)
     }
@@ -466,6 +468,10 @@ public enum CuePicture {
         }
         if layout.showTitle && !label.text.isEmpty {
             let (run, _, origin) = fittedCaption(label, layout: layout)
+            // Fallback glyphs and stacked combining marks can exceed the font's measured
+            // ascent or descent. Confine their ink and shadow vertically to this pane.
+            ctx.clip(to: CGRect(x: layout.usable.minX, y: layout.titleBand.minY,
+                                width: layout.usable.width, height: layout.titleBand.height))
             ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: CGColor(gray: 0, alpha: 0.65))
             ctx.textPosition = origin
             CTLineDraw(run, ctx)
@@ -716,20 +722,18 @@ extension CuePicture {
         return nil
     }
 
-    /// `hitTarget(at:label:layout:)` with marker lines and trim handles: the title first, then a
+    /// `hitTarget(at:label:layout:)` with marker lines and trim handles: a
     /// marker within tolerance, then a trim handle (`trimHandles`), then scrubbing on either
     /// waveform. Markers win over trim handles because a music-end marker with no silent tail
     /// sits on the overview's right edge; the out handle's grab zone reaches further into the
     /// margin than the marker tolerance, so it stays reachable there.
     public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout,
                                  timeline: ClipTimeline, closeUp: CloseUpWindow, trimHandles: Bool = false) -> HitTarget {
-        let target = hitTarget(at: point, label: label, layout: layout)
-        if target == .title { return .title }
         if let hit = markerHit(at: point, timeline: timeline, layout: layout, closeUp: closeUp) {
             return .marker(hit.kind, onCloseUp: hit.onCloseUp)
         }
         if trimHandles, let edge = trimHandleHit(at: point, layout: layout) { return .trim(edge) }
-        return target
+        return hitTarget(at: point, label: label, layout: layout)
     }
 
     // MARK: Trim handles (monitor)
@@ -805,9 +809,6 @@ extension CuePicture {
     }
 
     public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout) -> HitTarget {
-        if layout.showTitle && !label.text.isEmpty && caption(label, layout: layout).1.insetBy(dx: -6, dy: -6).contains(point) {
-            return .title
-        }
         if layout.showFullTrack && layout.overview.insetBy(dx: -8, dy: -12).contains(point) { return .overview }
         if let detail = layout.detail, detail.insetBy(dx: -8, dy: -12).contains(point) { return .detail }
         return .none

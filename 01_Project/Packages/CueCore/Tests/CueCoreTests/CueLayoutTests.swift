@@ -11,20 +11,28 @@ final class CueLayoutTests: XCTestCase {
 
     private func index(_ size: ClockSize) -> Int { ClockSize.allCases.firstIndex(of: size)! }
 
-    /// The title box at its default position (top of its travel, natural or given-way size).
-    private func titleBand(_ layout: CueLayout) -> CGRect {
-        let height = CueLayout.titleBoxHeight(layout.titleSize)
-        return CGRect(x: layout.titleArea.minX, y: layout.titleArea.maxY - height,
-                      width: layout.titleArea.width, height: height)
-    }
+    static let orders: [[PicturePane]] = {
+        func permutations(_ panes: [PicturePane]) -> [[PicturePane]] {
+            if panes.isEmpty { return [[]] }
+            return panes.flatMap { first in
+                permutations(panes.filter { $0 != first }).map { [first] + $0 }
+            }
+        }
+        return permutations(PicturePane.defaultOrder)
+    }()
 
-    /// Vertical extents of the stacked groups, top to bottom in picture order.
+    /// Ordered extents, with hidden panes omitted and the two clocks measured together.
     private func stack(_ layout: CueLayout) -> [CGRect] {
-        let clocks = layout.extent(of: .elapsedClock)!.union(layout.extent(of: .remainingClock)!)
-        var waves = [layout.extent(of: .overview)!]
-        if let detail = layout.extent(of: .detail) { waves.append(detail) }
-        return layout.clockPosition == .below ? [titleBand(layout)] + waves + [clocks]
-                                              : [titleBand(layout), clocks] + waves
+        layout.paneOrder.compactMap { pane in
+            switch pane {
+            case .title: return layout.extent(of: .title)
+            case .fullTrack: return layout.extent(of: .overview)
+            case .closeUp: return layout.extent(of: .detail)
+            case .clocks:
+                let clocks = [layout.extent(of: .elapsedClock), layout.extent(of: .remainingClock)].compactMap { $0 }
+                return clocks.isEmpty ? nil : clocks.reduce(CGRect.null) { $0.union($1) }
+            }
+        }
     }
 
     private func gaps(_ layout: CueLayout) -> [CGFloat] {
@@ -57,7 +65,8 @@ final class CueLayoutTests: XCTestCase {
                         XCTAssertEqual(layout.elapsedSize, elapsed, label)
                         XCTAssertEqual(layout.remainingSize, remaining, label)
                         XCTAssertEqual(layout.titleSize, 48, label)
-                        XCTAssertEqual(layout.titleArea, CGRect(x: 96, y: 55, width: 1728, height: 970), label)
+                        XCTAssertEqual(layout.safeFrame, CGRect(x: 96, y: 55, width: 1728, height: 970), label)
+                        XCTAssertEqual(layout.titleBand, CGRect(x: 96, y: 955, width: 1728, height: 70), label)
                         XCTAssertEqual(layout.contentMinX, CuePicture.wave.minX, label)
                         XCTAssertEqual(layout.contentMaxX, CuePicture.wave.maxX, label)
                         XCTAssertEqual(layout.contentWidth, CuePicture.wave.width, label)
@@ -81,14 +90,22 @@ final class CueLayoutTests: XCTestCase {
         }
     }
 
-    func testTitleTravelMatchesCaptionFormula() {
-        let layout = CueLayout()
-        for size: CGFloat in [34, 40, 48] {
-            let height = CueLayout.titleBoxHeight(size)
-            XCTAssertEqual(height, size + 22)
-            for y: CGFloat in [0, 0.25, 1] {
-                XCTAssertEqual(layout.titleArea.minY + (layout.titleArea.height - height) * y,
-                               55 + (CuePicture.size.height - 110 - height) * y)
+    func testAllOrdersFitEveryZoomAndClockPairWithoutReserves() {
+        XCTAssertEqual(Set(Self.orders).count, 24)
+        for order in Self.orders {
+            for zoom in ZoomWindow.allCases {
+                for elapsed in ClockSize.allCases {
+                    for remaining in ClockSize.allCases {
+                        let layout = CueLayout(zoom: zoom, elapsed: elapsed, remaining: remaining, paneOrder: order)
+                        let label = "\(order) \(zoom) \(elapsed)/\(remaining)"
+                        XCTAssertTrue(layout.fits, label)
+                        XCTAssertEqual(layout.paneOrder, order, label)
+                        XCTAssertEqual(layout.detail == nil, zoom == .off, label)
+                        XCTAssertEqual(layout.titleArea, layout.titleBand, label)
+                        XCTAssertEqual(layout.extent(of: .title), layout.titleBand, label)
+                        for gap in gaps(layout) { XCTAssertGreaterThanOrEqual(gap, M.minimumGap, label) }
+                    }
+                }
             }
         }
     }
@@ -99,9 +116,11 @@ final class CueLayoutTests: XCTestCase {
         appearance.zoom = .off
         appearance.elapsed.size = .extraLarge
         appearance.remaining.size = .small
-        let layout = CueLayout(appearance: appearance, clockPosition: .above, safeZones: .init(preset: .evsOSD))
+        appearance.paneOrder = [.closeUp, .clocks, .fullTrack, .title]
+        appearance.safeZones = .init(preset: .evsOSD)
+        let layout = appearance.layout
         XCTAssertEqual(layout, CueLayout(zoom: .off, elapsed: .extraLarge, remaining: .small,
-                                         clockPosition: .above, safeZones: .init(preset: .evsOSD)))
+                                         paneOrder: appearance.paneOrder, safeZones: .init(preset: .evsOSD)))
         XCTAssertEqual(layout.requestedElapsedSize, .extraLarge)
         XCTAssertEqual(layout.insets, SafeZones.evsOSDInsets)
     }
@@ -126,6 +145,37 @@ final class CueLayoutTests: XCTestCase {
         XCTAssertNotEqual(pair.remainingSize, single.remainingSize)
         look.showRemaining = false
         XCTAssertGreaterThan(try XCTUnwrap(look.layout.detail).height, try XCTUnwrap(single.detail).height)
+    }
+
+    func testRoundedPanesStayAboveTheLowerFrameEdge() throws {
+        var look = CueAppearance()
+        look.paneOrder = [.title, .closeUp, .fullTrack, .clocks]
+        look.elapsed.size = .small
+        look.remaining.size = .small
+        look.safeZones = zones(top: 19, bottom: 30)
+        let stacked = look.layout
+        XCTAssertTrue(stacked.fits)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(stacked.extent(of: .elapsedClock)).minY, stacked.safeFrame.minY)
+
+        look.paneOrder = [.fullTrack, .clocks, .title, .closeUp]
+        look.showFullTrack = false
+        look.safeZones = zones(bottom: 5)
+        let expanded = look.layout
+        XCTAssertTrue(expanded.fits)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(expanded.extent(of: .detail)).minY, expanded.safeFrame.minY)
+    }
+
+    func testHiddenTitleRetainsBuild17TopWaveformRounding() throws {
+        var look = CueAppearance()
+        look.showTitle = false
+        look.zoom = .five
+        let layout = look.layout
+        XCTAssertTrue(layout.fits)
+        XCTAssertEqual(layout.overview, CGRect(x: 96, y: 887, width: 1728, height: 100))
+        XCTAssertEqual(layout.safeFrame.maxY, 1025)
+        let extent = try XCTUnwrap(layout.extent(of: .overview))
+        XCTAssertEqual(extent.maxY, 1025.5)
+        XCTAssertTrue(layout.usable.contains(extent))
     }
 
     func testTallTitleFindsAFittingPointSizeBetweenItsLimits() {
@@ -176,7 +226,7 @@ final class CueLayoutTests: XCTestCase {
         XCTAssertEqual(bottom.overview, CuePicture.wave)
         XCTAssertEqual(bottom.detail, CuePicture.detail)
         XCTAssertEqual(bottom.clockBaseline, 100)
-        XCTAssertEqual(bottom.titleArea.minY, 66)
+        XCTAssertEqual(bottom.safeFrame.minY, 66)
 
         // Top 5 %: the stack moves down into the bottom slack without shrinking.
         let top = CueLayout(safeZones: zones(top: 5))
@@ -190,20 +240,20 @@ final class CueLayoutTests: XCTestCase {
     func testClocksAboveMovePairAboveWaveforms() {
         for zoom in [ZoomWindow.off, .auto] {
             for safe in [SafeZones.none, SafeZones(preset: .evsOSD)] {
-                let layout = CueLayout(zoom: zoom, elapsed: .large, remaining: .medium, clockPosition: .above, safeZones: safe)
+                let layout = CueLayout(zoom: zoom, elapsed: .large, remaining: .medium, paneOrder: [.title, .clocks, .fullTrack, .closeUp], safeZones: safe)
                 XCTAssertTrue(layout.fits)
                 let elapsed = layout.extent(of: .elapsedClock)!, remaining = layout.extent(of: .remainingClock)!
                 let overview = layout.extent(of: .overview)!
                 XCTAssertGreaterThan(elapsed.minY, overview.maxY)
                 XCTAssertGreaterThan(remaining.minY, overview.maxY)
-                XCTAssertLessThan(elapsed.maxY, titleBand(layout).minY)
+                XCTAssertLessThan(elapsed.maxY, layout.titleBand.minY)
                 if let detail = layout.extent(of: .detail) { XCTAssertLessThan(detail.maxY, overview.minY) }
                 // Both clocks share one baseline: they move as a pair.
                 XCTAssertEqual(layout.elapsedLabelBaseline, CueLayout.labelBaseline(layout.clockBaseline, .large))
             }
         }
         // Without reserves, the above layout keeps build 10's sizes.
-        let above = CueLayout(clockPosition: .above)
+        let above = CueLayout(paneOrder: [.title, .clocks, .fullTrack, .closeUp])
         XCTAssertEqual(above.overview.height, 100)
         XCTAssertEqual(above.detail?.height, 265)
         XCTAssertEqual(above.titleSize, 48)
@@ -217,20 +267,25 @@ final class CueLayoutTests: XCTestCase {
         let sizes: [(ClockSize, ClockSize)] = [(.small, .small), (.medium, .medium), (.extraLarge, .large), (.extraLarge, .extraLarge)]
         var fitting = 0, failing = 0
         for zoom in [ZoomWindow.off, .auto] {
-            for position in ClockPosition.allCases {
+            for order in Self.orders {
                 for (elapsed, remaining) in sizes {
                     for top in percents {
                         for bottom in percents {
                             for side in sides {
                                 let safe = zones(top: top, bottom: bottom, left: side, right: side / 3)
                                 let layout = CueLayout(zoom: zoom, elapsed: elapsed, remaining: remaining,
-                                                       clockPosition: position, safeZones: safe)
-                                let label = "\(zoom) \(position) \(elapsed)/\(remaining) t\(top) b\(bottom) s\(side)"
+                                                       paneOrder: order, safeZones: safe)
+                                let label = "\(zoom) \(order) \(elapsed)/\(remaining) t\(top) b\(bottom) s\(side)"
                                 XCTAssertLessThanOrEqual(index(layout.elapsedSize), index(elapsed), label)
                                 XCTAssertLessThanOrEqual(index(layout.remainingSize), index(remaining), label)
                                 XCTAssertGreaterThanOrEqual(layout.titleSize, 34, label)
                                 XCTAssertLessThanOrEqual(layout.titleSize, 48, label)
+                                for gap in gaps(layout) { XCTAssertGreaterThanOrEqual(gap, M.minimumGap, label) }
                                 guard layout.fits else { failing += 1; continue }
+                                for extent in stack(layout) {
+                                    XCTAssertGreaterThanOrEqual(extent.minY, layout.safeFrame.minY, label)
+                                    XCTAssertLessThanOrEqual(extent.maxY, layout.safeFrame.maxY, label)
+                                }
                                 fitting += 1
                                 XCTAssertGreaterThanOrEqual(layout.overview.height, minimumOverview(layout), label)
                                 XCTAssertGreaterThanOrEqual(layout.detail?.height ?? 150, 150, label)
@@ -242,8 +297,6 @@ final class CueLayoutTests: XCTestCase {
                                                       "\(label) \(element) in \(band)")
                                     }
                                 }
-                                // Groups stay in order without overlapping.
-                                for gap in gaps(layout) { XCTAssertGreaterThanOrEqual(gap, M.minimumGap - 1, label) }
                                 // Clocks side by side without touching.
                                 let e = layout.extent(of: .elapsedClock)!, r = layout.extent(of: .remainingClock)!
                                 XCTAssertGreaterThanOrEqual(r.minX - e.maxX, M.clockPairGap - 1, label)
@@ -262,16 +315,16 @@ final class CueLayoutTests: XCTestCase {
     func testGiveWayOrderAcrossShrinkingArea() {
         var seen = Set<String>()
         for zoom in [ZoomWindow.off, .auto] {
-            for position in ClockPosition.allCases {
-                let reference = CueLayout(zoom: zoom, elapsed: .extraLarge, remaining: .extraLarge, clockPosition: position)
+            for order in Self.orders {
+                let reference = CueLayout(zoom: zoom, elapsed: .extraLarge, remaining: .extraLarge, paneOrder: order)
                 let naturalGaps = gaps(reference)
                 var previous: CueLayout?
                 // Grow the reserves step by step: bottom first, then top on top of a full bottom.
                 let steps = (0...30).map { (0, $0) } + (1...30).map { ($0, 30) }
                 for (top, bottom) in steps {
                     let layout = CueLayout(zoom: zoom, elapsed: .extraLarge, remaining: .extraLarge,
-                                           clockPosition: position, safeZones: zones(top: top, bottom: bottom))
-                    let label = "\(zoom) \(position) t\(top) b\(bottom)"
+                                           paneOrder: order, safeZones: zones(top: top, bottom: bottom))
+                    let label = "\(zoom) \(order) t\(top) b\(bottom)"
                     let shrunkWaves = layout.overview.height < reference.overview.height
                         || (layout.detail?.height ?? 0) < (reference.detail?.height ?? 0)
                     let shrunkGaps = zip(gaps(layout), naturalGaps).contains { $0 < $1 - 1.5 }
@@ -330,7 +383,7 @@ final class CueLayoutTests: XCTestCase {
         XCTAssertLessThan(layout.detail!.height, 265)
         XCTAssertLessThan(layout.overview.height, 100)
         XCTAssertGreaterThanOrEqual(layout.extent(of: .elapsedClock)!.minY, 184)
-        XCTAssertLessThanOrEqual(titleBand(layout).maxY, 993)
+        XCTAssertLessThanOrEqual(layout.titleBand.maxY, 993)
     }
 
     func testDoesNotFit() {

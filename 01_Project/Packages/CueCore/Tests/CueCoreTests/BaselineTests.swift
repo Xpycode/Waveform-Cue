@@ -58,12 +58,14 @@ final class BaselineTests: XCTestCase {
         return [
             Case(name: "default", label: CueLabel(text: "Baseline Track"), appearance: .build10),
             Case(name: "zoomOff", label: CueLabel(text: "Baseline Track"), appearance: zoomOff),
-            Case(name: "customTitle", label: CueLabel(text: "A Much Longer Cue Title For Position",
-                                                      position: CGPoint(x: 0.3, y: 0.6)),
-                 appearance: .build10),
             Case(name: "warning", label: CueLabel(text: "Baseline Track"), appearance: warning),
         ]
     }
+
+    static let customTitle = Case(name: "customTitle",
+                                  label: CueLabel(text: "A Much Longer Cue Title For Position",
+                                                  position: CGPoint(x: 0.3, y: 0.6)),
+                                  appearance: .build10)
 
     /// First, middle, 5 s left, 1 s left, last.
     static func frames(for track: AudioTrack) -> [Int] {
@@ -89,11 +91,7 @@ final class BaselineTests: XCTestCase {
         "zoomOff@625": "60ea14c27c1d758ea973019fb3f8cde3070728b1e3462905a9ff45b42c83a74a",
         "zoomOff@725": "02a5605c36b4937a4b985e3da44b56fb02993486e27833eb1269ac2213c02e80",
         "zoomOff@750": "7a383a22ea8a434b56c965dc002829888e179898ed64fc6a10200b46961eadb7",
-        "customTitle@0": "02f34483f04e06bb98e1fb40a6d80567a1fbce2b0488ad0c94c0b7ee612c4ec4",
-        "customTitle@375": "3ffe6900ed44bc4446c6f84d2d681121448750f13f5748dfa8657113136f98ad",
-        "customTitle@625": "85c3c7d91f2945c969a5a7d49cce00d3b04fa6be881ec0151807e18edc5e6dd6",
-        "customTitle@725": "302315b0c6c5a8c0d8da78bcbd2ba3a57e2f94035800f7a6cf3c28de6daeb95e",
-        "customTitle@750": "3495457494fe1d29dce9efa3794404902b989f67eee467e7366dd23b5b6fcf74",
+        // The five title-band hashes await PX3 on macOS 27.
         "warning@0": "55f4d3ac7fedaec956e2d065f0d6e4589dd041b3e6c52a5a6575f0f2f9ba925c",
         "warning@375": "5078ff3869fe7ea7d42490a41f36de3dbbcd323e21b763991a0f6a8de5477cd2",
         "warning@625": "1de6d9a7ff550aa37f48e1a976dfcfb2c6c75b4b3acf64c0edda638a158cc06d",
@@ -118,11 +116,11 @@ final class BaselineTests: XCTestCase {
         "zoomOff@625": "03a6ef5001f5c75e801d7703addeb01fa004fd13f52fb123e71b5672346fa5f7",
         "zoomOff@725": "993a7a67021584ad04906e7e2446665b3b799df3bbedef6ee48228d0198a3179",
         "zoomOff@750": "de63cbe1c9551532c96e0a4a5ea41abd7626ef2922e068cc4eb05c996c5da663",
-        "customTitle@0": "f42068101676d78cbd554a4cd288d05bc393e431887bb27e2d3de66037bcb5c8",
-        "customTitle@375": "9cc68b3fb9c84bd1f04f971b38bc304b004892ede64fbaf06bf0c2e1c1853ff8",
-        "customTitle@625": "faa2d3e30ab24b706784d8cb3656294f306181de34fb0ee66f397b03a41ac5ee",
-        "customTitle@725": "5028f721a9af0789f97110de5a56e4d5bcce5cea728d58a90449e9d16369ed36",
-        "customTitle@750": "0865f1b05e339c8e2f8018e17c8733034309e7d6ab2957e1ae0ca6d3f9ae2b6a",
+        "customTitle@0": "07cf225bf9d44262a485ab08c617224546e8e69e0f1822a34d0f504925ee2640",
+        "customTitle@375": "4bb911b23af480670b70a040d56a6aa431f196ca9ea123805fc6f9be18d22823",
+        "customTitle@625": "0962fa770eecbb471f5b4b2ec786c47f00032c099f63d3a3b4afca67c8db78e7",
+        "customTitle@725": "aaa3b50c8347cfc12646993161e07e7d53d559aa079f57d1a7e44c4d35945654",
+        "customTitle@750": "1f268400e8091ae49fc8f3432c11982b3f92ada5cf3ae9206febf4adc67f41c6",
         "warning@0": "f44853a073dcd58a41e174fffc2e950f645408fded14b19cfd16489e7a030a3d",
         "warning@375": "c77fe66913eaefc4b9b61897e97e2041d599726d5c7e0224bbe9b0e8f6055b6d",
         "warning@625": "d80efe2e3df48644d6b19a2bfdcbce68ba475caeb6f55780eb10e3d9eb709ae0",
@@ -137,11 +135,11 @@ final class BaselineTests: XCTestCase {
         "default@625": "2f28cd92c66a07f54e880912c53e71fd0d7ad0d199d974339018072da6309876",
         "default@725": "734c2d71a1a5e8c4c8b31a1c459f96009d46e39332b89564d04b203f66a69bf4",
         "default@750": "84c994bde4ba89af9f8b2dd0467d9bd4862007a00d3b6056f50288d9b06601e1",
-        "customTitle@0": "5b15be94e61ffd728dc95666f3a423e0e296dcf9b379f38d27d867401b90dc68",
-        "customTitle@375": "cff41e646467e95e6172c57c4b7c01810708aa1ce50c79059511db1edc5f9601",
-        "customTitle@625": "e19ac17aef7a6edd05026fdda4622f3e5469176d49fbcad7f2f382cef2a81726",
-        "customTitle@725": "4ecdc0e192af23e52108d23bc71d56664c1913671b9ddd9e61ba30151d80fbb2",
-        "customTitle@750": "1cb87bdd675731d8660cf016bcea27ebfab2918c6a77d6db31a58ee4a1bb2d06",
+        "customTitle@0": "d82a9ecd7c58a14186cf5dbdc72dd2625168c8ce26022b3bd4eb3615b0e87fdf",
+        "customTitle@375": "d2c153058b516f8377d7f5f213dded82439842d69b799ebefff1b263060d76d8",
+        "customTitle@625": "099558bb0db1bc0ab86c50d74f5223741d4c216899de06219d92d9dc72ffed63",
+        "customTitle@725": "4cc46d23b1434c9a67f315c0082f0eada2f418e5d654e89ac8c35f19bd307b64",
+        "customTitle@750": "c6a11cc82df91217148c7ebb3120f48528086e23c5ffbc13e12497ed90053601",
         "warning@0": "ab32113ab45906a905ea856d6f84994dd38afc37ce2c2d4402a63ebb7b742276",
         "warning@375": "bb00928b117c98206e63ea9211b1dd979e63cd5e5a622a87acf34b5e46b542b2",
         "warning@625": "d5915417a796e07e43f8fe154aedabec10c133be41a515efd97014f02ac16a56",
@@ -162,10 +160,23 @@ final class BaselineTests: XCTestCase {
     ]
 
     func testRenderHashesMatchBuild10() throws {
+        try checkRenderHashes(Self.cases)
+    }
+
+    func testCustomTitleBandHashes() throws {
+        if ProcessInfo.processInfo.environment["CUE_RECORD_BASELINE"] != "1",
+           ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
+           Self.expected["customTitle@0"] == nil {
+            throw XCTSkip("The five title-band hashes await recording on macOS 27 (PX3).")
+        }
+        try checkRenderHashes([Self.customTitle])
+    }
+
+    private func checkRenderHashes(_ cases: [Case]) throws {
         let track = Self.syntheticTrack()
         let record = ProcessInfo.processInfo.environment["CUE_RECORD_BASELINE"] == "1"
         var recorded: [String] = []
-        for item in Self.cases {
+        for item in cases {
             for frame in Self.frames(for: track) {
                 let key = "\(item.name)@\(frame)"
                 let value = Self.hash(Self.render(track, frame: frame, label: item.label, appearance: item.appearance))
@@ -188,7 +199,7 @@ final class BaselineTests: XCTestCase {
         }
         let track = Self.syntheticTrack()
         var appearance = CueAppearance.build10
-        appearance.clockPosition = .above
+        appearance.paneOrder = [.title, .clocks, .fullTrack, .closeUp]
         for frame in Self.frames(for: track) {
             let key = "clocksAbove@\(frame)"
             let pixels = Self.render(track, frame: frame, label: CueLabel(text: "Baseline Track"), appearance: appearance)
@@ -208,7 +219,7 @@ final class BaselineTests: XCTestCase {
             if record { print("        \"\(key)\": \"\(hash)\",") }
             else { XCTAssertEqual(hash, try XCTUnwrap(Self.appearanceHashes[key] ?? Self.expected[key], key), key) }
         }
-        for item in Self.cases {
+        for item in Self.cases + [Self.customTitle] {
             var appearance = item.appearance
             appearance.dimPlayedCloseUp = true
             for frame in Self.frames(for: track) { try check(item.name, frame, appearance, item.label) }

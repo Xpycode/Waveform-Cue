@@ -286,7 +286,7 @@ final class RenderTests: XCTestCase {
         }
     }
 
-    func testSwashTitleFitsAtTheLeftAnchorAndRemainsGrabbable() {
+    func testSwashTitleFitsAtTheLeftEdgeOfItsBand() {
         let track = BaselineTests.syntheticTrack()
         let timeline = ClipTimeline(duration: track.seconds)
         var look = CueAppearance()
@@ -299,7 +299,7 @@ final class RenderTests: XCTestCase {
         XCTAssertLessThan(ink.minX, -20)
         XCTAssertGreaterThanOrEqual(box.width, ink.width)
         XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.minX + 2, y: box.midY), label: label,
-                                            layout: layout), .title)
+                                            layout: layout), .none)
         let custom = Self.render(track, timeline: timeline, position: 0, label: label, appearance: look)
         for band in layout.reserved { XCTAssertEqual(Self.foreignPixels(custom, in: band), 0) }
         XCTAssertGreaterThan(Self.foreignPixels(custom, in: box), 50)
@@ -347,6 +347,17 @@ final class RenderTests: XCTestCase {
         }
     }
 
+    func testTimelineEntryMatchesFrameEntryForTitleBand() {
+        let track = BaselineTests.syntheticTrack()
+        let timeline = ClipTimeline(duration: track.seconds)
+        let item = BaselineTests.customTitle
+        for frame in BaselineTests.frames(for: track) {
+            let viaTimeline = Self.render(track, timeline: timeline, position: frame, label: item.label, appearance: item.appearance)
+            let viaFrame = BaselineTests.render(track, frame: frame, label: item.label, appearance: item.appearance)
+            XCTAssertTrue(viaTimeline.elementsEqual(viaFrame), "frame \(frame)")
+        }
+    }
+
     /// Settings this task adds but does not render yet leave build 10's picture unchanged.
     func testUnrenderedSettingsKeepBaseline() {
         let track = BaselineTests.syntheticTrack()
@@ -388,19 +399,17 @@ final class RenderTests: XCTestCase {
 
     func testReservedBandsHoldOnlyBackground() {
         let track = BaselineTests.syntheticTrack()
-        struct Setting { let name: String; let zones: SafeZones; let zoom: ZoomWindow; let position: ClockPosition
+        struct Setting { let name: String; let zones: SafeZones; let zoom: ZoomWindow
                          let elapsed: ClockSize; let remaining: ClockSize }
         let settings = [
-            Setting(name: "EVS OSD", zones: SafeZones(preset: .evsOSD), zoom: .auto, position: .below,
-                    elapsed: .medium, remaining: .medium),
-            Setting(name: "EVS OSD, clocks above", zones: SafeZones(preset: .evsOSD), zoom: .auto, position: .above,
-                    elapsed: .large, remaining: .extraLarge),
+            Setting(name: "EVS OSD", zones: SafeZones(preset: .evsOSD), zoom: .auto, elapsed: .medium, remaining: .medium),
+            Setting(name: "EVS OSD, larger clocks", zones: SafeZones(preset: .evsOSD), zoom: .auto, elapsed: .large, remaining: .extraLarge),
             Setting(name: "asymmetric custom", zones: Self.zones(top: 4, bottom: 25, left: 9, right: 2), zoom: .five,
-                    position: .below, elapsed: .extraLarge, remaining: .small),
-            Setting(name: "zoom Off, clocks above", zones: Self.zones(top: 18, bottom: 7, left: 12, right: 12),
-                    zoom: .off, position: .above, elapsed: .medium, remaining: .large),
+                    elapsed: .extraLarge, remaining: .small),
+            Setting(name: "zoom Off, side reserves", zones: Self.zones(top: 18, bottom: 7, left: 12, right: 12),
+                    zoom: .off, elapsed: .medium, remaining: .large),
             Setting(name: "zoom Off, bottom heavy", zones: Self.zones(bottom: 30, right: 15), zoom: .off,
-                    position: .below, elapsed: .extraLarge, remaining: .extraLarge),
+                    elapsed: .extraLarge, remaining: .extraLarge),
         ]
         let labels = [CueLabel(text: "A Very Long Overlay Title That Has To Be Fitted And Truncated To The Width",
                                position: CGPoint(x: 0, y: 0)),
@@ -410,17 +419,19 @@ final class RenderTests: XCTestCase {
             var appearance = CueAppearance()
             appearance.safeZones = setting.zones
             appearance.zoom = setting.zoom
-            appearance.clockPosition = setting.position
             appearance.elapsed.size = setting.elapsed
             appearance.remaining.size = setting.remaining
             appearance.warning = .ten
             appearance.fadeFullTrack = true
-            let layout = appearance.layout
-            XCTAssertTrue(layout.fits, setting.name)
-            XCTAssertFalse(layout.reserved.isEmpty, setting.name)
             let timeline = ClipTimeline(duration: track.seconds, standard: TimelineRate.fields50)
-            for (index, position) in [0, 1, timeline.positionCount / 2 + 1, timeline.positionCount - 20,
-                                      timeline.positionCount].enumerated() {
+            let frames = [0, 1, timeline.positionCount / 2 + 1, timeline.positionCount - 20, timeline.positionCount]
+            for (index, order) in CueLayoutTests.orders.enumerated() {
+                appearance.paneOrder = order
+                appearance.titleAlignment = TitleAlignment.allCases[index % TitleAlignment.allCases.count]
+                let layout = appearance.layout
+                XCTAssertTrue(layout.fits, "\(setting.name) \(order)")
+                XCTAssertFalse(layout.reserved.isEmpty, setting.name)
+                let position = frames[index % frames.count]
                 let label = labels[index % labels.count]
                 let image = Self.render(track, timeline: timeline, position: position, label: label,
                                         appearance: appearance)
@@ -444,17 +455,49 @@ final class RenderTests: XCTestCase {
         for band in bands { XCTAssertGreaterThan(Self.foreignPixels(image, in: band), 100, "\(band)") }
     }
 
-    func testTitleTravelClampedToUsableArea() {
-        let layout = CueLayout(zoom: .auto, clockPosition: .above, safeZones: Self.zones(top: 12, bottom: 20, left: 6, right: 6))
-        for position in [CGPoint(x: -1, y: -1), CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 1), CGPoint(x: 5, y: 0.5)] {
-            let box = CuePicture.caption(CueLabel(text: "Clamp me", position: position), layout: layout).1
-            XCTAssertTrue(layout.titleArea.contains(box), "\(position)")
-            XCTAssertTrue(layout.usable.contains(box), "\(position)")
+    func testCaptionAlignsInsideItsBandAcrossAllOrders() {
+        var look = CueAppearance()
+        look.safeZones = Self.zones(top: 12, bottom: 20, left: 6, right: 6)
+        for order in CueLayoutTests.orders {
+            look.paneOrder = order
+            for alignment in TitleAlignment.allCases {
+                look.titleAlignment = alignment
+                let layout = look.layout
+                let band = layout.titleBand
+                let label = CueLabel(text: "Cue")
+                let box = CuePicture.caption(label, layout: layout).1
+                XCTAssertTrue(band.contains(box))
+                XCTAssertEqual(box.maxY, band.maxY)
+                switch alignment {
+                case .left: XCTAssertEqual(box.minX, layout.contentMinX)
+                case .center: XCTAssertEqual(box.midX, band.midX)
+                case .right: XCTAssertEqual(box.maxX, layout.contentMaxX)
+                }
+                XCTAssertEqual(box, CuePicture.caption(CueLabel(text: label.text, position: .zero), layout: layout).1)
+                XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), label: label, layout: layout), .none)
+            }
         }
-        let label = CueLabel(text: "Clamp me", position: CGPoint(x: 0.5, y: 0.5))
-        let far = CuePicture.draggedTitlePosition(origin: label.position, down: CGPoint(x: 900, y: 500),
-                                                  to: CGPoint(x: 5000, y: -5000), label: label, layout: layout)
-        XCTAssertEqual(far, CGPoint(x: 1, y: 0))
+    }
+
+    func testOverwideTitleShrinksThenEndsWithAnEllipsis() throws {
+        var look = CueAppearance()
+        look.safeZones = Self.zones(left: 30, right: 30)
+        look.titleAlignment = .right
+        let layout = look.layout
+        let text = String(repeating: "Wide title ", count: 25)
+        let (line, box) = CuePicture.caption(CueLabel(text: text), layout: layout)
+        XCTAssertTrue(layout.titleBand.contains(box))
+        XCTAssertEqual(box.maxX, layout.contentMaxX)
+        let runs = try XCTUnwrap(CTLineGetGlyphRuns(line) as? [CTRun])
+        let token = try XCTUnwrap(runs.last)
+        let attributes = CTRunGetAttributes(token) as NSDictionary
+        let font = try XCTUnwrap(attributes[kCTFontAttributeName]) as! CTFont
+        XCTAssertEqual(CTFontGetSize(font), CueLayout.Metrics.titleMinimumSize)
+        var character: UniChar = 0x2026
+        var ellipsis = CGGlyph(), lastGlyph = CGGlyph()
+        XCTAssertTrue(CTFontGetGlyphsForCharacters(font, &character, &ellipsis, 1))
+        CTRunGetGlyphs(token, CFRange(location: CTRunGetGlyphCount(token) - 1, length: 1), &lastGlyph)
+        XCTAssertEqual(lastGlyph, ellipsis)
     }
 
     // MARK: - Hit-testing
@@ -490,9 +533,9 @@ final class RenderTests: XCTestCase {
         XCTAssertEqual(CuePicture.scrubFrame(at: q, in: held, layout: layout),
                        Self.build10Seek(detailClick, picture: picture, range: held))
 
-        // The title, at its default top-left position, takes the click first.
+        // A click on the title behaves like a click on the background.
         let title = CuePicture.caption(label, layout: layout).1
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: title.midX, y: title.midY), label: label, layout: layout), .title)
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: title.midX, y: title.midY), label: label, layout: layout), .none)
         XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: 960, y: 20), label: label, layout: layout), .none)
 
         // Zoom Off: the full-track waveform covers the close-up's place.
@@ -504,15 +547,22 @@ final class RenderTests: XCTestCase {
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: 1920, y: 792), in: 0..<750, layout: layout), 750)
     }
 
-    func testTitleDragMatchesBuild10() {
-        let layout = CueLayout()
-        let label = CueLabel(text: "Drag", position: CGPoint(x: 0.2, y: 0.7))
-        let box = CuePicture.caption(label, layout: layout).1
-        let down = CGPoint(x: 600, y: 700), to = CGPoint(x: 811, y: 433)
-        let build10 = CGPoint(x: min(1, max(0, 0.2 + (to.x - down.x) / max(1, 1728 - box.width))),
-                              y: min(1, max(0, 0.7 + (to.y - down.y) / (1080 - 110 - box.height))))
-        XCTAssertEqual(CuePicture.draggedTitlePosition(origin: label.position, down: down, to: to,
-                                                       label: label, layout: layout), build10)
+    func testTypingATitleOnlyChangesTheTitleBand() {
+        let track = BaselineTests.syntheticTrack()
+        var look = CueAppearance()
+        look.paneOrder = [.closeUp, .title, .clocks, .fullTrack]
+        let timeline = ClipTimeline(duration: track.seconds)
+        let empty = Self.render(track, timeline: timeline, position: 375, label: CueLabel(), appearance: look)
+        // Combining marks can stack beyond the family's measured ascent. Include a fallback glyph too.
+        let text = "Q" + String(repeating: "\u{0302}", count: 12) + " 🎵"
+        let titled = Self.render(track, timeline: timeline, position: 375, label: CueLabel(text: text), appearance: look)
+        let band = look.layout.titleBand
+        XCTAssertEqual(Self.foreignPixels(empty, in: band), 0)
+        XCTAssertGreaterThan(Self.foreignPixels(titled, in: band), 0)
+        let firstRow = (1080 - Int(ceil(band.maxY))) * 7680
+        let pastLastRow = (1080 - Int(floor(band.minY))) * 7680
+        XCTAssertTrue(empty[..<firstRow].elementsEqual(titled[..<firstRow]))
+        XCTAssertTrue(empty[pastLastRow...].elementsEqual(titled[pastLastRow...]))
     }
 
     func testScrubFollowsSafeZoneLayout() {
@@ -535,10 +585,10 @@ final class RenderTests: XCTestCase {
         var track = BaselineTests.syntheticTrack()
         track.markers = MusicMarkers(detectedMusicEnd: 26, detectedFadeStart: 24)
         for zones in [SafeZones(preset: .evsOSD), Self.zones(top: 12, bottom: 25, left: 8, right: 8)] {
-            for position in [ClockPosition.below, .above] {
+            for order in [PicturePane.defaultOrder, [.title, .clocks, .fullTrack, .closeUp]] {
                 var off = CueAppearance()
                 off.safeZones = zones
-                off.clockPosition = position
+                off.paneOrder = order
                 off.countdownTarget = .musicEnd
                 off.warning = .five
                 var on = off
@@ -552,7 +602,7 @@ final class RenderTests: XCTestCase {
                     XCTAssertEqual(withGuides, Self.render(track, timeline: timeline, position: frame, label: label,
                                                            appearance: off))
                     for band in layout.reserved {
-                        XCTAssertEqual(Self.foreignPixels(withGuides, in: band), 0, "\(zones) \(position) \(frame) \(band)")
+                        XCTAssertEqual(Self.foreignPixels(withGuides, in: band), 0, "\(zones) \(order) \(frame) \(band)")
                     }
                 }
             }
@@ -566,7 +616,7 @@ final class RenderTests: XCTestCase {
             var below = CueAppearance()
             below.safeZones = zones
             var above = below
-            above.clockPosition = .above
+            above.paneOrder = [.title, .clocks, .fullTrack, .closeUp]
             let b = below.layout, a = above.layout
             let bElapsed = b.extent(of: .elapsedClock)!, bRemaining = b.extent(of: .remainingClock)!
             let aElapsed = a.extent(of: .elapsedClock)!, aRemaining = a.extent(of: .remainingClock)!
