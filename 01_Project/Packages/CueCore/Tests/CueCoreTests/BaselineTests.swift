@@ -103,6 +103,11 @@ final class BaselineTests: XCTestCase {
 
     /// Recorded at task 0.2 on the M4 Pro, where it matched build 10.
     static let expectedOriginal: [String: String] = [
+        "clocksAbove@0": "6e68326b5e59384a8bfd98cc7bd4c41ca5990b60db2fcbb5c71a82934b8a989f",
+        "clocksAbove@375": "ce5463590b4cbdcef1d028ce32f79feaeac33ae811f50fc794869d8f369fe960",
+        "clocksAbove@625": "b1d48b076c592be9e2970f8f2d791cd641c26c07cf142c65ac2a2461642e3aeb",
+        "clocksAbove@725": "5baa03574cb5425524b54e732499247fcd56f4983ffb404ee040a8f3916a97a6",
+        "clocksAbove@750": "0290964b2704dd15f0ce074dcea7853f9ae6e0735742a9952120272b84f2ad7c",
         "default@0": "f44853a073dcd58a41e174fffc2e950f645408fded14b19cfd16489e7a030a3d",
         "default@375": "c77fe66913eaefc4b9b61897e97e2041d599726d5c7e0224bbe9b0e8f6055b6d",
         "default@625": "5f9376abc008fcd5a1d621f467c74c1d3ed0417118db4fc9a0301fb227b157b8",
@@ -172,6 +177,25 @@ final class BaselineTests: XCTestCase {
             }
         }
         if record { print("BASELINE\n" + recorded.joined(separator: "\n")) }
+    }
+
+    /// Recorded with build 17's layout-aware overview path and the same edge-held track as the
+    /// legacy cases. Keep this separate so a pending OS table only skips these five frames.
+    func testClocksAboveMatchesBuild17() throws {
+        let record = ProcessInfo.processInfo.environment["CUE_RECORD_BASELINE"] == "1"
+        if !record && ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 && Self.expected["clocksAbove@0"] == nil {
+            throw XCTSkip("Build 17 clocks-above references still need recording on macOS 27 (PX3).")
+        }
+        let track = Self.syntheticTrack()
+        var appearance = CueAppearance.build10
+        appearance.clockPosition = .above
+        for frame in Self.frames(for: track) {
+            let key = "clocksAbove@\(frame)"
+            let pixels = Self.render(track, frame: frame, label: CueLabel(text: "Baseline Track"), appearance: appearance)
+            let hash = Self.hash(pixels)
+            if record { print("\(key) \(hash)") }
+            else { XCTAssertEqual(hash, try XCTUnwrap(Self.expected[key], key), key) }
+        }
     }
 
     func testWave4AppearanceHashes() throws {

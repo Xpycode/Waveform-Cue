@@ -16,6 +16,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "CueCore", dependencies: [.product(name: "ProcessKit", package: "zPackages")], swiftSettings: v5),
-        .testTarget(name: "CueCoreTests", dependencies: ["CueCore"], swiftSettings: v5)
+        .testTarget(name: "CueCoreTests", dependencies: ["CueCore"], resources: [.copy("Fixtures/build17-layouts.json")], swiftSettings: v5)
     ]
 )
