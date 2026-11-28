@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		042366648BEC760C42CE00A3 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6FB5801C154716BA548ED36 /* MainWindow.swift */; };
 		13E785A5E98173768F0A12A6 /* QueueSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4858B105B71A20A7F42C05B /* QueueSupport.swift */; };
+		14FB64AED59ED6ED3DA4F4D6 /* PaneDragController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4A0C3928714D869336EA99 /* PaneDragController.swift */; };
 		2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */; };
 		417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */; };
 		468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */; };
@@ -24,6 +25,7 @@
 		8BA42A9957F25211E3F85814 /* AppShellKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0FB5306E6FFEE9D3E2315288 /* AppShellKit */; };
 		8E22180BAC25FC88F3AA93D4 /* DestinationPopUpRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01AF978D6641E6BB3068247D /* DestinationPopUpRepresentable.swift */; };
 		913D9F774970FDA4AD789E8D /* WaveformCue.icns in Resources */ = {isa = PBXBuildFile; fileRef = DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */; };
+		A22AE43C1EDC0BCF172C33BC /* SidebarPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D369A3298AD62CBFB825FBEE /* SidebarPaneView.swift */; };
 		B7774564D7D44F9F7A641C1F /* MXFJobExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C304118E2DE850C5C9C4C3 /* MXFJobExporter.swift */; };
 		BB350CE34BF52C15B5CBEA08 /* CueAppearanceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */; };
 		C1C378F72A1B583B4763E2C3 /* InspectorControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6227EE370806CF454169A8A1 /* InspectorControls.swift */; };
@@ -44,6 +46,7 @@
 		4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformCueApp.swift; sourceTree = "<group>"; };
 		598A11E249649DBE0B31CE2E /* WindowReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReader.swift; sourceTree = "<group>"; };
 		6227EE370806CF454169A8A1 /* InspectorControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorControls.swift; sourceTree = "<group>"; };
+		7A4A0C3928714D869336EA99 /* PaneDragController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneDragController.swift; sourceTree = "<group>"; };
 		7ABAF284F1094D17C6BEFA53 /* EditorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorModel.swift; sourceTree = "<group>"; };
 		7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportRepresentable.swift; sourceTree = "<group>"; };
 		8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRepresentable.swift; sourceTree = "<group>"; };
@@ -54,6 +57,7 @@
 		B00DBCC2D0D28250BB2A2164 /* JobInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobInspector.swift; sourceTree = "<group>"; };
 		B0476FFDD9EDD2F2C5CAAD8B /* CueAppearanceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueAppearanceSidebar.swift; sourceTree = "<group>"; };
 		CBB467BC06F59C7EAF3D49DC /* MonitorPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorPane.swift; sourceTree = "<group>"; };
+		D369A3298AD62CBFB825FBEE /* SidebarPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPaneView.swift; sourceTree = "<group>"; };
 		D4858B105B71A20A7F42C05B /* QueueSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSupport.swift; sourceTree = "<group>"; };
 		DFEF31AD56E64DE6687F1361 /* WaveformCue.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = WaveformCue.icns; sourceTree = "<group>"; };
 		EFA504D215ED5A56E57690BC /* AppearanceSidebarRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSidebarRepresentable.swift; sourceTree = "<group>"; };
@@ -138,8 +142,10 @@
 				6227EE370806CF454169A8A1 /* InspectorControls.swift */,
 				8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */,
 				2DF670FE79893C490F0C8939 /* MonitorView.swift */,
+				7A4A0C3928714D869336EA99 /* PaneDragController.swift */,
 				966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */,
 				373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */,
+				D369A3298AD62CBFB825FBEE /* SidebarPaneView.swift */,
 				7C16BBB7BB625824DFADD41D /* TransportRepresentable.swift */,
 				598A11E249649DBE0B31CE2E /* WindowReader.swift */,
 			);
@@ -286,10 +292,12 @@
 				6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */,
 				72284B3F02D321E8846024C7 /* MonitorRepresentable.swift in Sources */,
 				E7110E1C3EFC4E6138B63988 /* MonitorView.swift in Sources */,
+				14FB64AED59ED6ED3DA4F4D6 /* PaneDragController.swift in Sources */,
 				417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */,
 				2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */,
 				13E785A5E98173768F0A12A6 /* QueueSupport.swift in Sources */,
 				DA8E69147F818603EAF9F92C /* QueueTableRepresentable.swift in Sources */,
+				A22AE43C1EDC0BCF172C33BC /* SidebarPaneView.swift in Sources */,
 				4DD766C688092A967FDE0EE2 /* SleepAssertion.swift in Sources */,
 				7CF9E24DECD46C942E994E65 /* TransportRepresentable.swift in Sources */,
 				468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */,
