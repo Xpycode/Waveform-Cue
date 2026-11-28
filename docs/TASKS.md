@@ -2,7 +2,9 @@
 
 ## Active plan
 
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done. X1 passed, X2 partly passed; X2–X4 still open. The plan owns task status and evidence.
+[IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) for [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). Progress 0/13. First ready: P0.1, then P0.2. The control placement (PU1) was approved on 2026-11-28. The plan owns task status and evidence. It carries two inbox items of 2026-11-28: swappable positions (the whole plan) and the Color column drift (task P2.2, spec A).
+
+Earlier plan, still open on external gates: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for [specs/batch-presets-cue-tools.md](specs/batch-presets-cue-tools.md). Progress 26/26; all tasks done. X1 passed, X2 partly passed; X2–X4 still open. The plan owns task status and evidence.
 
 ## Backlog
 
@@ -18,6 +20,6 @@
 - 2026-11-27: Loudness, and so the Normalise gain, is measured on the whole untrimmed source. Trim and fades change the clip's real level: a −26 LUFS track whose quiet first minute is trimmed gets +3 dB and lands near −21 LUFS while the slate reads −23.0 (review 6.3, `MXFExport.Snapshot.clipLoudness`, `Loudness.swift`). Decide whether to measure the trimmed clip (one more FFmpeg pass per export) or label the value as source loudness. Goes with the slate loudness item above.
 - 2026-11-28: The quit prompt ("The queue is exporting. Stop the queue and quit?") stays up after the queue finishes on its own (task 6.2, shot 07). It should close or change to a plain quit.
 - 2026-11-28: A queue row's Cancel reported an Accessibility press without cancelling; a pointer click worked (task 6.2). Possibly a reused table cell. Check with VoiceOver before treating it as a bug.
-- 2026-11-28: The Appearance tab's Clock rows put their Color column a little left of the Waveform rows' on some jobs (build 15 screenshot, job 4 selected). Not investigated; check in the Atlas helper.
-- 2026-11-28: **Swappable positions: spec approved**, [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). One pane per picture element in the Appearance tab, pane order is picture order (grip drag, or Move Up and Move Down), a per-pane Offset stepper, the title in its own band (Left, Center or Right), Elapsed and Remaining swappable. The operator confirmed every choice, the four defaults included. Next: `/make-plan`. The plan should start with the grip-drag feasibility check.
+- 2026-11-28: The Appearance tab's Clock rows put their Color column a little left of the Waveform rows' on some jobs (build 15 screenshot, job 4 selected). Not investigated; check in the Atlas helper. Planned as part of task P2.2 in [IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md) (one shared colour column).
+- 2026-11-28: **Swappable positions: spec approved**, [specs/appearance-panes-picture-layout.md](specs/appearance-panes-picture-layout.md). One pane per picture element in the Appearance tab, pane order is picture order (grip drag, or Move Up and Move Down), a per-pane Offset stepper, the title in its own band (Left, Center or Right), Elapsed and Remaining swappable. The operator confirmed every choice, the four defaults included. **Planned 2026-11-28:** [IMPLEMENTATION_PLAN-appearance-panes.md](IMPLEMENTATION_PLAN-appearance-panes.md); the grip-drag feasibility check is task P1.3.
 - 2026-11-28: Ideas offered, not chosen: Undo for Apply to All; Apply to Selected (multi-select); named saved looks.
