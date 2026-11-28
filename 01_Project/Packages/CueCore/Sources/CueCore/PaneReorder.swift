@@ -1,6 +1,23 @@
 import Foundation
 
 public enum PaneReorder {
+    /// Identifies the job (or the editable defaults) and every pane that defined the drop gaps.
+    public struct Context: Equatable {
+        public let jobID: UUID?
+        public let order: [PicturePane]
+        public let isEditable: Bool
+
+        public init(jobID: UUID?, order: [PicturePane], isEditable: Bool) {
+            self.jobID = jobID
+            self.order = order
+            self.isEditable = isEditable
+        }
+
+        public func permitsMove(in current: Self?) -> Bool {
+            isEditable && self == current
+        }
+    }
+
     /// Midpoints are ordered from top to bottom in the flipped document's coordinates.
     public static func dropGap(pointerY: CGFloat, paneMidYs: [CGFloat]) -> Int {
         paneMidYs.prefix { $0 <= pointerY }.count

@@ -16,22 +16,26 @@ final class PaneDragController {
     private let document: NSView
     private let line = PaneInsertionLine()
     private let panes: () -> [SidebarPaneView]
+    private let context: () -> PaneReorder.Context?
     private let completed: (Int, Int) -> Void
     var didEndTracking: (() -> Void)?
     private(set) var isTracking = false
 
     init(scroll: NSScrollView, document: NSView, panes: @escaping () -> [SidebarPaneView],
-         completed: @escaping (Int, Int) -> Void) {
+         context: @escaping () -> PaneReorder.Context?, completed: @escaping (Int, Int) -> Void) {
         self.scroll = scroll
         self.document = document
         self.panes = panes
+        self.context = context
         self.completed = completed
         line.isHidden = true
         document.addSubview(line)
     }
 
     func track(from pane: SidebarPaneView, event down: NSEvent) {
-        guard !isTracking, let window = pane.window, let from = panes().firstIndex(of: pane) else { return }
+        let initialPanes = panes()
+        guard !isTracking, let window = pane.window, let from = initialPanes.firstIndex(of: pane),
+              let initialContext = context(), initialContext.isEditable else { return }
         let start = down.locationInWindow
         var last = start
         var lastMotion = ProcessInfo.processInfo.systemUptime
@@ -81,8 +85,10 @@ final class PaneDragController {
                 }
             }
         }
+        // didEndTracking may have applied a deferred job switch, lock or rearrangement.
+        guard pane.window === window, initialPanes == panes(), initialContext.permitsMove(in: context()) else { return }
         if click { pane.showMoveMenu() }
-        if let chosenGap, panes().firstIndex(of: pane) == from { completed(from, chosenGap) }
+        if let chosenGap { completed(from, chosenGap) }
     }
 
     private func scrollNearEdge(at location: NSPoint) {

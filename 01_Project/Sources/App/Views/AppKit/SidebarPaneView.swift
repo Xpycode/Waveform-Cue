@@ -8,6 +8,7 @@ final class SidebarPaneView: NSStackView, NSMenuDelegate {
     private let grip: PaneGrip?
     private let moveMenu = NSMenu()
     var onGripDown: ((NSEvent) -> Void)?
+    var willOpenMoveMenu: (() -> Void)?
     var onMove: ((Int) -> Void)?
     var canMove: (Int) -> Bool = { _ in false }
     var willCollapse: (() -> Void)?
@@ -80,6 +81,8 @@ final class SidebarPaneView: NSStackView, NSMenuDelegate {
         guard let grip else { return }
         moveMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: grip.bounds.minY), in: grip)
     }
+
+    func menuWillOpen(_ menu: NSMenu) { willOpenMoveMenu?() }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         for item in menu.items { item.isEnabled = canMove(item.tag) }

@@ -10,6 +10,22 @@ final class PaneReorderTests: XCTestCase {
         XCTAssertEqual(PaneReorder.dropGap(pointerY: 0, paneMidYs: []), 0)
     }
 
+    func testDropRequiresTheOriginalEditableJobAndCompleteOrder() {
+        let job = UUID()
+        let order = PicturePane.defaultOrder
+        let drag = PaneReorder.Context(jobID: job, order: order, isEditable: true)
+        XCTAssertTrue(drag.permitsMove(in: drag))
+        XCTAssertFalse(drag.permitsMove(in: nil))
+        XCTAssertFalse(drag.permitsMove(in: .init(jobID: UUID(), order: order, isEditable: true)))
+        XCTAssertFalse(drag.permitsMove(in: .init(jobID: nil, order: order, isEditable: true)))
+        XCTAssertFalse(drag.permitsMove(in: .init(jobID: job, order: order, isEditable: false)))
+        // The dragged title is still at index zero, but its destination now means something different.
+        XCTAssertFalse(drag.permitsMove(in: .init(jobID: job, order: [.title, .clocks, .fullTrack, .closeUp], isEditable: true)))
+        let defaults = PaneReorder.Context(jobID: nil, order: order, isEditable: true)
+        XCTAssertTrue(defaults.permitsMove(in: defaults))
+        XCTAssertFalse(defaults.permitsMove(in: drag))
+    }
+
     func testEveryInsertionGapAndEndMenuState() {
         let panes = PicturePane.defaultOrder
         for (from, pane) in panes.enumerated() {
