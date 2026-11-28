@@ -102,6 +102,7 @@ public struct CueLayout: Sendable, Equatable {
     private let requestedRaw: [String]
     private let sizeRaw: [String]
     public let paneOrder: [PicturePane]
+    public let leftClock: LeftClock
     public let titleAlignment: TitleAlignment
     public let insets: SafeZones.Insets
     /// The clock sizes the appearance asked for, before any give-way.
@@ -118,22 +119,32 @@ public struct CueLayout: Sendable, Equatable {
     /// picture edges than the build 10 margins (96 px sides, 55 px top and bottom).
     public let safeFrame: CGRect
     /// Full-track waveform rectangle (zoom Off: the combined full-track area).
-    public let overview: CGRect
+    public private(set) var overview: CGRect
     /// Close-up waveform rectangle; `nil` with zoom Off.
-    public let detail: CGRect?
+    public private(set) var detail: CGRect?
     /// Baseline shared by the Elapsed and Remaining digits.
-    public let clockBaseline: CGFloat
+    public private(set) var clockBaseline: CGFloat
     /// Clock sizes after give-way.
     public var elapsedSize: ClockSize { ClockSize(rawValue: sizeRaw[0])! }
     public var remainingSize: ClockSize { ClockSize(rawValue: sizeRaw[1])! }
     /// Title point size before width fitting (48 unless the title gave way, never below 34).
     public let titleSize: CGFloat
     /// Space reserved for the title, including its vertical shadow allowance.
-    public let titleBand: CGRect
+    public private(set) var titleBand: CGRect
     public var titleArea: CGRect { titleBand }
     /// False when even the smallest give-way leaves an element inside a reserved band
     /// ("Safe zones leave too little room").
     public private(set) var fits = false
+
+    /// Displacements from automatic placement after all extents have been measured.
+    public private(set) var offsetsInUse = PaneOffsets()
+    private var limitsByPane: [PicturePane: ClosedRange<Int>] = [:]
+
+    /// Inclusive whole-pixel offsets with the other panes fixed at their positions in use.
+    /// A hidden pane, or a layout that cannot fit, has no travel.
+    public func offsetLimits(for pane: PicturePane) -> ClosedRange<Int> {
+        limitsByPane[pane] ?? 0...0
+    }
 
     // MARK: Derived positions
 
@@ -187,13 +198,14 @@ public struct CueLayout: Sendable, Equatable {
                        height: $0.height + typography.detailBelow + typography.detailAbove)
             }
         case .elapsedClock, .remainingClock:
-            let right = element == .remainingClock
-            guard right ? showRemaining : showElapsed else { return nil }
-            let size = right ? remainingSize : elapsedSize
-            let width = typography.clockWidth(size, right: right)
+            let isRemaining = element == .remainingClock
+            guard isRemaining ? showRemaining : showElapsed else { return nil }
+            let size = isRemaining ? remainingSize : elapsedSize
+            let clock: LeftClock = isRemaining ? .remaining : .elapsed
+            let width = typography.clockWidth(size, clock: clock)
             let bottom = clockBaseline - size.points * typography.clockUnit.descent - m.antialias
             let top = clockBaseline + typography.clockLabelRise(size.points) + m.clockLabelSize * typography.titleUnit.ascent + m.antialias
-            let x = element == .elapsedClock ? contentMinX : contentMaxX - width
+            let x = clock == leftClock ? contentMinX : contentMaxX - width
             return CGRect(x: x, y: bottom, width: width, height: top - bottom)
         }
     }
@@ -222,6 +234,7 @@ public struct CueLayout: Sendable, Equatable {
         typealias M = Metrics
         zoom = appearance.zoom
         paneOrder = appearance.paneOrder
+        leftClock = appearance.leftClock
         titleAlignment = appearance.titleAlignment
         insets = (appearance.safeZonesEnabled ? appearance.safeZones : .none).insets
         showTitle = appearance.showTitle
@@ -258,8 +271,8 @@ public struct CueLayout: Sendable, Equatable {
         var eSize = elapsed, rSize = remaining
         var horizontalFit = true
         func clocksWidth(_ elapsed: ClockSize, _ remaining: ClockSize) -> CGFloat {
-            (appearance.showElapsed ? fonts.clockWidth(elapsed, right: false) : 0)
-                + (appearance.showRemaining ? fonts.clockWidth(remaining, right: true) : 0)
+            (appearance.showElapsed ? fonts.clockWidth(elapsed, clock: .elapsed) : 0)
+                + (appearance.showRemaining ? fonts.clockWidth(remaining, clock: .remaining) : 0)
                 + (appearance.showElapsed && appearance.showRemaining ? M.clockPairGap : 0)
         }
         while clocksWidth(eSize, rSize) > safeFrame.width {
@@ -319,6 +332,41 @@ public struct CueLayout: Sendable, Equatable {
             if let extent = extent(of: element), !usable.contains(extent) { inside = false }
         }
         fits = horizontalFit && verticalFit && inside
+        if fits { applyOffsets(appearance.offsets) }
+    }
+
+    private mutating func applyOffsets(_ stored: PaneOffsets) {
+        var panes: [PicturePane] = []
+        var spans: [ClosedRange<CGFloat>] = []
+        for pane in paneOrder {
+            let extent: CGRect?
+            switch pane {
+            case .title: extent = self.extent(of: .title)
+            case .fullTrack: extent = self.extent(of: .overview)
+            case .closeUp: extent = self.extent(of: .detail)
+            case .clocks:
+                // The larger visible clock determines both the rise and the descent.
+                let elapsed = self.extent(of: .elapsedClock) ?? .null
+                let remaining = self.extent(of: .remainingClock) ?? .null
+                extent = elapsed.union(remaining)
+            }
+            if let extent, !extent.isNull {
+                panes.append(pane)
+                spans.append(extent.minY...extent.maxY)
+            }
+        }
+        let frame = safeFrame.minY...safeFrame.maxY
+        let inUse = OffsetResolver.resolve(stored: panes.map { stored[$0] }, spans: spans,
+                                           frame: frame, gap: Metrics.minimumGap)
+        for (index, pane) in panes.enumerated() {
+            offsetsInUse[pane] = inUse[index]
+            limitsByPane[pane] = OffsetResolver.limits(index: index, inUse: inUse, spans: spans,
+                                                       frame: frame, gap: Metrics.minimumGap)
+        }
+        titleBand = titleBand.offsetBy(dx: 0, dy: CGFloat(offsetsInUse.title))
+        overview = overview.offsetBy(dx: 0, dy: CGFloat(offsetsInUse.fullTrack))
+        detail = detail?.offsetBy(dx: 0, dy: CGFloat(offsetsInUse.closeUp))
+        clockBaseline += CGFloat(offsetsInUse.clocks)
     }
 
     /// Steps the larger clock (both when equal) down one size. False when both are Small.
@@ -339,6 +387,24 @@ public struct CueLayout: Sendable, Equatable {
         let up = (low - (naturalTop - span)).rounded(.up)   // smallest shift clearing the bottom
         let down = high - naturalTop                         // largest shift clearing the top
         return naturalTop + min(max(0, up), down)
+    }
+}
+
+extension PaneOffsets {
+    public subscript(_ pane: PicturePane) -> Int {
+        get { self[keyPath: pane.offsetKey] }
+        set { self[keyPath: pane.offsetKey] = newValue }
+    }
+}
+
+private extension PicturePane {
+    var offsetKey: WritableKeyPath<PaneOffsets, Int> {
+        switch self {
+        case .title: return \.title
+        case .fullTrack: return \.fullTrack
+        case .closeUp: return \.closeUp
+        case .clocks: return \.clocks
+        }
     }
 }
 

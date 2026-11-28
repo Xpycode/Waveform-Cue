@@ -80,8 +80,8 @@ struct PictureTypography: @unchecked Sendable, Equatable {
             + max(M.clockLabelGap, M.clockLabelSize * titleUnit.descent + M.minimumGap)
     }
 
-    func clockWidth(_ size: ClockSize, right: Bool) -> CGFloat {
-        max(widths[size]!, labelWidths[right ? 1 : 0])
+    func clockWidth(_ size: ClockSize, clock: LeftClock) -> CGFloat {
+        max(widths[size]!, labelWidths[clock == .elapsed ? 0 : 1])
     }
 
     var detailBelow: CGFloat {
@@ -457,14 +457,14 @@ public enum CuePicture {
         }
         if layout.showElapsed {
             drawClock("Elapsed", frame: clocks.elapsed, color: appearance.elapsed.color, size: layout.elapsedSize,
-                  labelBaseline: layout.elapsedLabelBaseline, right: false)
+                      labelBaseline: layout.elapsedLabelBaseline, right: layout.leftClock != .elapsed)
         }
         // Past a music-end target Remaining holds at 00:00:00 in solid red until the clip ends.
         let remainingColor = clocks.isPastTarget ? CueColor.warningRed
             : appearance.remaining.color.blended(toward: .warningRed, fraction: warningFraction)
         if layout.showRemaining {
             drawClock("Remaining", frame: framesLeft, color: remainingColor, size: layout.remainingSize,
-                  labelBaseline: layout.remainingLabelBaseline, right: true)
+                      labelBaseline: layout.remainingLabelBaseline, right: layout.leftClock != .remaining)
         }
         if layout.showTitle && !label.text.isEmpty {
             let (run, _, origin) = fittedCaption(label, layout: layout)
@@ -809,8 +809,20 @@ extension CuePicture {
     }
 
     public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout) -> HitTarget {
-        if layout.showFullTrack && layout.overview.insetBy(dx: -8, dy: -12).contains(point) { return .overview }
-        if let detail = layout.detail, detail.insetBy(dx: -8, dy: -12).contains(point) { return .detail }
+        let padding: CGFloat = 12
+        guard point.x >= layout.contentMinX - 8, point.x < layout.contentMaxX + 8 else { return .none }
+        // Where the two hit margins meet, divide the gap between the facing drawn edges.
+        // Labels and cursor marks can reach those edges even when the waveform panels do not.
+        if let overview = layout.extent(of: .overview), let detail = layout.extent(of: .detail) {
+            let overviewAbove = overview.midY > detail.midY
+            let (low, high) = overviewAbove ? (detail.maxY, overview.minY) : (overview.maxY, detail.minY)
+            if high - low <= 2 * padding, point.y >= low, point.y <= high {
+                let nearerUpper = high - point.y <= point.y - low
+                return nearerUpper == overviewAbove ? .overview : .detail
+            }
+        }
+        if layout.showFullTrack && layout.overview.insetBy(dx: -8, dy: -padding).contains(point) { return .overview }
+        if let rect = layout.detail, rect.insetBy(dx: -8, dy: -padding).contains(point) { return .detail }
         return .none
     }
 

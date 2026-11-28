@@ -205,6 +205,144 @@ final class CueLayoutTests: XCTestCase {
         XCTAssertEqual(look.safeZones.insets.top, 30)
     }
 
+    func testSteppingEachPaneMovesOnlyItsDrawnExtent() throws {
+        let elements: [PicturePane: [CueLayout.Element]] = [
+            .title: [.title], .fullTrack: [.overview], .closeUp: [.detail], .clocks: [.elapsedClock, .remainingClock]
+        ]
+        for pane in PicturePane.allCases {
+            var look = CueAppearance()
+            if pane == .title { look.paneOrder = [.fullTrack, .title, .closeUp, .clocks] }
+            let automatic = look.layout
+            XCTAssertTrue(automatic.offsetLimits(for: pane).contains(1))
+            look.offsets[pane] = 1
+            let stepped = look.layout
+            XCTAssertEqual(stepped.offsetsInUse, look.offsets)
+            XCTAssertEqual(stepped, CueLayout(appearance: look))
+            for element in CueLayout.Element.allCases {
+                let initial = try XCTUnwrap(automatic.extent(of: element))
+                let shift: CGFloat = elements[pane]!.contains(element) ? 1 : 0
+                XCTAssertEqual(stepped.extent(of: element), initial.offsetBy(dx: 0, dy: shift))
+            }
+        }
+    }
+
+    func testTemporaryConstraintsKeepStoredOffsetsAndHiddenPanesHaveNoTravel() {
+        var look = CueAppearance()
+        look.offsets = PaneOffsets(title: -40, fullTrack: 35, closeUp: 40, clocks: -25)
+        let open = look.layout
+        look.safeZones = .init(preset: .evsOSD)
+        XCTAssertTrue(look.layout.fits)
+        XCTAssertNotEqual(look.layout.offsetsInUse, open.offsetsInUse)
+        look.safeZones = .none
+        XCTAssertEqual(look.layout, open)
+
+        look.paneOrder = [.closeUp, .title, .clocks, .fullTrack]
+        XCTAssertEqual(look.layout.offsetsInUse.closeUp, 0) // The close-up now touches the top margin.
+        look.paneOrder = PicturePane.defaultOrder
+        XCTAssertEqual(look.layout, open)
+
+        look.zoom = .off
+        XCTAssertEqual(look.layout.offsetsInUse.closeUp, 0)
+        XCTAssertEqual(look.layout.offsetLimits(for: .closeUp), 0...0)
+        look.showTitle = false
+        look.showFullTrack = false
+        look.showElapsed = false
+        look.showRemaining = false
+        let hidden = look.layout
+        XCTAssertEqual(hidden.offsetsInUse, PaneOffsets())
+        for pane in PicturePane.allCases { XCTAssertEqual(hidden.offsetLimits(for: pane), 0...0) }
+    }
+
+    func testOffsetLimitsHoldNeighboursFixedAfterAStoredOffsetWasClamped() {
+        var look = CueAppearance()
+        look.offsets = PaneOffsets(title: -120, fullTrack: 130, closeUp: 20, clocks: -5)
+        let layout = look.layout
+        XCTAssertNotEqual(layout.offsetsInUse, look.offsets)
+        for pane in PicturePane.allCases {
+            let limits = layout.offsetLimits(for: pane)
+            for limit in [limits.lowerBound, limits.upperBound] {
+                var edit = layout.offsetsInUse
+                edit[pane] = limit
+                look.offsets = edit
+                XCTAssertEqual(look.layout.offsetsInUse, edit)
+            }
+        }
+    }
+
+    func testOffsetLimitsWithMeasuredFontsAndHiddenPanes() {
+        var look = CueAppearance()
+        look.titleFontName = "Zapfino"
+        look.clockFontName = "Courier"
+        look.offsets = PaneOffsets(title: -31, fullTrack: 19, closeUp: -55, clocks: 36)
+        for order in Self.orders {
+            look.paneOrder = order
+            for top in [4, 16, 25] {
+                look.safeZones = zones(top: top, bottom: 17)
+                for showTitle in [false, true] {
+                    look.showTitle = showTitle
+                    let layout = look.layout
+                    guard layout.fits else { continue }
+                    for gap in gaps(layout) {
+                        XCTAssertGreaterThanOrEqual(gap, M.minimumGap - M.picture.height.ulp)
+                    }
+                    for pane in order {
+                        XCTAssertTrue(layout.offsetLimits(for: pane).contains(layout.offsetsInUse[pane]))
+                    }
+                }
+            }
+        }
+    }
+
+    func testStoredOffsetsAcrossAllOrdersAndSafeZones() {
+        // A fixed seed gives each layout different, reproducible requests in both directions.
+        var seed: UInt64 = 0xC0FFEE
+        func nextOffset() -> Int {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1
+            return Int((seed >> 32) % 401) - 200
+        }
+        for order in Self.orders {
+            var look = CueAppearance()
+            look.paneOrder = order
+            for zoom in [ZoomWindow.off, .auto] {
+                look.zoom = zoom
+                for size in ClockSize.allCases {
+                    look.elapsed.size = size
+                    look.remaining.size = .large
+                    for top in stride(from: 0, through: 30, by: 5) {
+                        for bottom in stride(from: 0, through: 30, by: 5) {
+                            look.safeZones = zones(top: top, bottom: bottom, left: top, right: bottom)
+                            look.offsets = PaneOffsets()
+                            let automatic = look.layout
+                            look.offsets = PaneOffsets(title: nextOffset(), fullTrack: nextOffset(),
+                                                       closeUp: nextOffset(), clocks: nextOffset())
+                            let shifted = look.layout
+                            let context = "\(order) \(zoom) \(size) reserves \(top),\(bottom) offsets \(look.offsets)"
+                            XCTAssertEqual(shifted.fits, automatic.fits, context)
+                            guard shifted.fits else {
+                                XCTAssertEqual(shifted, automatic, context)
+                                for pane in order { XCTAssertEqual(shifted.offsetLimits(for: pane), 0...0, context) }
+                                continue
+                            }
+                            // Font metrics have fractional edges. Reconstructing a translated CGRect
+                            // can round a 12 px difference down by one ULP of the picture coordinates.
+                            for gap in gaps(shifted) {
+                                XCTAssertGreaterThanOrEqual(gap, M.minimumGap - M.picture.height.ulp, context)
+                            }
+                            for extent in shifted.extents.values {
+                                XCTAssertGreaterThanOrEqual(extent.minY, shifted.safeFrame.minY, context)
+                                XCTAssertLessThanOrEqual(extent.maxY, shifted.safeFrame.maxY, context)
+                                XCTAssertTrue(shifted.usable.contains(extent), context)
+                            }
+                            for pane in order {
+                                XCTAssertTrue(shifted.offsetLimits(for: pane).contains(shifted.offsetsInUse[pane]), context)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Bands
 
     func testReservedBandsInPixels() {

@@ -565,6 +565,47 @@ final class RenderTests: XCTestCase {
         XCTAssertTrue(empty[pastLastRow...].elementsEqual(titled[pastLastRow...]))
     }
 
+    func testOffsetPictureMatchesAtBothRenderingEntryPoints() {
+        let track = BaselineTests.syntheticTrack()
+        let label = CueLabel(text: "Offset picture")
+        var look = CueAppearance()
+        look.paneOrder = [.closeUp, .title, .clocks, .fullTrack]
+        look.offsets = PaneOffsets(title: -9, fullTrack: 5, closeUp: -15, clocks: 12)
+        look.leftClock = .remaining
+        XCTAssertEqual(look.layout.offsetsInUse, look.offsets)
+        let timeline = CuePicture.timeline(for: track, appearance: look)
+        let viewer = Self.render(track, timeline: timeline, position: 375, label: label, appearance: look)
+        let frame = BaselineTests.render(track, frame: 375, label: label, appearance: look)
+        XCTAssertTrue(frame.elementsEqual(viewer))
+    }
+
+    func testNearestWaveformWinsWhereTheHitMarginsOverlap() throws {
+        let original = CueAppearance().layout
+        let nearLabel = CGPoint(x: original.overview.midX, y: original.overviewLabelBaseline)
+        XCTAssertEqual(CuePicture.hitTarget(at: nearLabel, label: CueLabel(), layout: original), .none)
+        for fullTrackFirst in [true, false] {
+            var look = CueAppearance()
+            look.paneOrder = fullTrackFirst ? [.title, .fullTrack, .closeUp, .clocks]
+                                            : [.title, .closeUp, .fullTrack, .clocks]
+            let lowerPane: PicturePane = fullTrackFirst ? .closeUp : .fullTrack
+            look.offsets[lowerPane] = Int.max
+            let layout = look.layout
+            let upper = try XCTUnwrap(layout.extent(of: fullTrackFirst ? .overview : .detail))
+            let lower = try XCTUnwrap(layout.extent(of: fullTrackFirst ? .detail : .overview))
+            let gap = upper.minY - lower.maxY
+            XCTAssertGreaterThanOrEqual(gap, 12)
+            XCTAssertLessThan(gap, 13) // Offset steps are whole pixels.
+            let upperTarget: CuePicture.HitTarget = fullTrackFirst ? .overview : .detail
+            let lowerTarget: CuePicture.HitTarget = fullTrackFirst ? .detail : .overview
+            let middle = (upper.minY + lower.maxY) / 2
+            for (y, target) in [(upper.minY - 0.25, upperTarget), (middle + 0.25, upperTarget),
+                                (middle - 0.25, lowerTarget), (lower.maxY + 0.25, lowerTarget)] {
+                let point = CGPoint(x: layout.contentMinX + 40, y: y)
+                XCTAssertEqual(CuePicture.hitTarget(at: point, label: CueLabel(), layout: layout), target)
+            }
+        }
+    }
+
     func testScrubFollowsSafeZoneLayout() {
         var appearance = CueAppearance()
         appearance.safeZones = Self.zones(left: 10, right: 5)
