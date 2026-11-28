@@ -329,3 +329,52 @@ extension CueJob: Codable {
         try c.encode(status, forKey: .status)
     }
 }
+
+// MARK: - Shared settings (Apply to All)
+
+extension CueJob {
+    /// Takes the settings Apply to All copies: everything that is not about this track's own
+    /// audio. Look, title position, preset, audio tracks, Normalise, start timecode, filename
+    /// pattern, fades and pre-roll are copied; title text, trim in and out, and the music
+    /// markers stay per track. A new preset or filename pattern drops the reserved output name.
+    public mutating func adoptSharedSettings(from source: CueJob) {
+        if presetID != source.presetID || filenameTemplate != source.filenameTemplate { outputPath = nil }
+        appearanceSnapshot = source.appearanceSnapshot
+        labelX = source.labelX
+        labelY = source.labelY
+        presetID = source.presetID
+        layout = source.layout
+        normalise = source.normalise
+        startTimecode = source.startTimecode
+        filenameTemplate = source.filenameTemplate
+        trim.fadeIn = source.trim.fadeIn
+        trim.fadeOut = source.trim.fadeOut
+        trim.preRoll = source.trim.preRoll
+    }
+
+    /// True when this job already has every setting Apply to All would copy from `other`.
+    /// An empty preset ID and the default preset's ID count as the same preset.
+    public func sharesSettings(with other: CueJob) -> Bool {
+        resolvedPreset == other.resolvedPreset
+            && layout == other.layout
+            && normalise == other.normalise
+            && startTimecode == other.startTimecode
+            && filenameTemplate == other.filenameTemplate
+            && trim.fadeIn == other.trim.fadeIn
+            && trim.fadeOut == other.trim.fadeOut
+            && trim.preRoll == other.trim.preRoll
+            && labelX == other.labelX
+            && labelY == other.labelY
+            && appearanceSnapshot == other.appearanceSnapshot
+    }
+
+    /// The job's preset, or the default for an empty or unknown ID.
+    public var resolvedPreset: ExportPreset { ExportPreset.preset(for: presetID) ?? .default }
+
+    /// One short line of export settings for the queue, e.g. "AVC-I 100 1080p25 · 2 mono · −23 LUFS".
+    public var settingsSummary: String {
+        var parts = ["\(resolvedPreset.shortCodecName) \(resolvedPreset.video.shortName)", layout.title]
+        if normalise { parts.append("−23 LUFS") }
+        return parts.joined(separator: " · ")
+    }
+}

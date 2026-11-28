@@ -585,14 +585,21 @@ final class QueueManagerTests: XCTestCase {
 
     // MARK: Editing
 
-    func testApplyToAllCopiesAppearanceAndPresetToPendingJobsOnly() {
+    func testApplyToAllCopiesSharedSettingsToEveryJobExceptDone() {
         let manager = makeManager(ControlledExporter())
         let source = job("Source")
         let pending = job("Pending")
         let done = job("Done", status: .done(output: URL(fileURLWithPath: "/Volumes/Media/Done - Cue.mxf")))
         let failed = job("Failed", status: .failed(reason: "x", log: ""))
-        let cancelled = job("Cancelled", status: .cancelled)
+        var cancelled = job("Cancelled", status: .cancelled)
+        cancelled.outputPath = "/Volumes/Media/Cancelled - Cue.mxf"
         manager.add([source, pending, done, failed, cancelled])
+        manager.update(pending.id) {
+            $0.trim.inPoint = 3
+            $0.trim.outPoint = 20
+            $0.markers.editedMusicEnd = 18
+        }
+        let pendingMarkers = manager.job(pending.id)!.markers
 
         var look = CueAppearance()
         look.warning = .ten
@@ -600,19 +607,67 @@ final class QueueManagerTests: XCTestCase {
         manager.update(source.id) {
             $0.appearance = look
             $0.presetID = "avci100-1080i50"
+            $0.layout = .eight
+            $0.normalise = true
+            $0.startTimecode = "10:00:00:00"
+            $0.filenameTemplate = "{name} {preset}"
             $0.labelText = "Only on the source"
-            $0.trim.preRoll = 5
+            $0.labelX = 0.25
+            $0.labelY = 0.75
+            $0.trim = TrimSettings(inPoint: 1, outPoint: 9, fadeIn: 0.5, fadeOut: 2, preRoll: 5)
+            $0.markers.editedMusicEnd = 7
         }
 
-        XCTAssertEqual(manager.applyToAll(from: source.id), 1)
+        XCTAssertEqual(manager.applyToAll(from: source.id), 3, "Pending, Failed and Cancelled change")
         let updated = manager.job(pending.id)!
         XCTAssertEqual(updated.appearanceSnapshot, AppearanceSnapshot(look))
         XCTAssertEqual(updated.presetID, "avci100-1080i50")
-        XCTAssertEqual(updated.labelText, "Pending", "the label is not copied")
-        XCTAssertEqual(updated.trim, .none, "trim is not copied")
-        for untouched in [done, failed, cancelled] {
-            XCTAssertEqual(manager.job(untouched.id), untouched)
+        XCTAssertEqual(updated.layout, .eight)
+        XCTAssertTrue(updated.normalise)
+        XCTAssertEqual(updated.startTimecode, "10:00:00:00")
+        XCTAssertEqual(updated.filenameTemplate, "{name} {preset}")
+        XCTAssertEqual(updated.labelX, 0.25)
+        XCTAssertEqual(updated.labelY, 0.75)
+        XCTAssertEqual(updated.trim, TrimSettings(inPoint: 3, outPoint: 20, fadeIn: 0.5, fadeOut: 2, preRoll: 5),
+                       "fades and pre-roll are copied, in and out stay per track")
+        XCTAssertEqual(updated.labelText, "Pending", "the title text is not copied")
+        XCTAssertEqual(updated.markers, pendingMarkers, "markers are not copied")
+        XCTAssertTrue(updated.sharesSettings(with: manager.job(source.id)!))
+        for retried in [failed, cancelled] {
+            let after = manager.job(retried.id)!
+            XCTAssertTrue(after.sharesSettings(with: manager.job(source.id)!))
+            XCTAssertEqual(after.status, retried.status, "Apply to All keeps the status")
+            XCTAssertNil(after.outputPath, "a changed name is chosen again on Retry")
         }
+        XCTAssertEqual(manager.job(done.id), done, "a Done job is never changed")
+        XCTAssertFalse(manager.job(done.id)!.sharesSettings(with: manager.job(source.id)!))
+        XCTAssertEqual(manager.applyToAll(from: source.id), 0, "a second Apply to All changes nothing")
+    }
+
+    func testSharedSettingsIgnorePerTrackFieldsAndTreatEmptyPresetAsDefault() {
+        let a = job("A")
+        var b = job("B")
+        b.presetID = ExportPreset.default.id
+        b.labelText = "Another title"
+        b.trim.inPoint = 4
+        b.markers.editedMusicEnd = 12
+        XCTAssertTrue(a.sharesSettings(with: b))
+        b.normalise = true
+        XCTAssertFalse(a.sharesSettings(with: b))
+        b.normalise = false
+        b.labelY = 0.1
+        XCTAssertFalse(a.sharesSettings(with: b), "title position is shared")
+    }
+
+    func testSettingsSummary() {
+        var a = job("A")
+        a.presetID = ExportPreset.avcIntra1080p25.id
+        XCTAssertEqual(a.settingsSummary, "AVC-I 100 1080p25 · 2 mono")
+        a.layout = .four
+        a.normalise = true
+        XCTAssertEqual(a.settingsSummary, "AVC-I 100 1080p25 · 4 mono · −23 LUFS")
+        a.presetID = ""
+        XCTAssertEqual(a.settingsSummary, "AVC-I 100 1080i50 · 4 mono · −23 LUFS")
     }
 
     func testRunningJobIsLockedOthersStayEditable() async {

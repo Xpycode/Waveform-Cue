@@ -843,10 +843,10 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         return FilenameTemplate.expand(job.filenameTemplate, name: job.sourceName, preset: preset.name) + ".mxf"
     }
 
-    /// Other Pending jobs that Apply to All would change.
+    /// Other jobs that Apply to All would change: all but Done and running ones.
     var applyToAllCount: Int {
         guard let id = selectedJobID else { return 0 }
-        return queue.jobs.filter { $0.id != id && $0.status == .pending }.count
+        return queue.jobs.filter { $0.id != id && QueueManager.takesApplyToAll($0.status) }.count
     }
 
     func selectPreset(_ preset: ExportPreset) {
@@ -1030,16 +1030,17 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         if hasAudio { seek(frame: target) } else { frame = min(new.positionCount, max(0, target)) }
     }
 
-    /// Apply to All: the selected job's appearance and preset go to every Pending job.
+    /// Apply to All: the selected job's shared settings (`CueJob.adoptSharedSettings`) go to
+    /// every other job that is not Done or running.
     func applyToAll() {
         guard let id = selectedJobID else { NSSound.beep(); return }
-        let pending = applyToAllCount
+        let targets = applyToAllCount
         let changed = queue.applyToAll(from: id)
-        if pending == 0 {
-            status = "No other Pending jobs. Apply to All never changes Done, Failed, Cancelled or running jobs."
+        if targets == 0 {
+            status = "No other jobs to change. Apply to All never changes Done or exporting jobs."
         } else {
-            status = "Applied this job’s appearance and preset to \(pending) Pending job\(pending == 1 ? "" : "s")"
-                + (changed < pending ? " (\(pending - changed) already matched)." : ".")
+            status = "Applied this job’s settings to \(targets) other job\(targets == 1 ? "" : "s")"
+                + (changed < targets ? " (\(targets - changed) already matched)." : ".")
         }
         statusHelp = nil
     }

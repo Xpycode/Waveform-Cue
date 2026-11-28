@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The inspector's Job tab (gate U1): Export (preset, audio tracks, start timecode, filename),
 /// Markers (music end, fade start, Reset), Loudness (I / TP / LRA, Normalise), Trim (in, out,
-/// fades, pre-roll) and Apply to All.
+/// fades, pre-roll). Apply to All lives in the inspector footer (`InspectorPane`).
 /// Every control is an AppKit wrapper; edits go to the selected job through `EditorModel`.
 /// The running job's tab is dimmed and disabled (its settings are locked).
 struct JobInspector: View {
@@ -45,7 +45,6 @@ struct JobInspector: View {
             markersSection(job)
             loudnessSection(job)
             trimSection(job)
-            applyToAllSection
         }
         .disabled(!model.canEdit)
         .opacity(model.canEdit ? 1 : 0.5)
@@ -286,22 +285,6 @@ struct JobInspector: View {
     /// "0.5 s", "2 s".
     static func seconds(_ value: Double) -> String {
         (value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)) + " s"
-    }
-
-    // MARK: Apply to All
-
-    @ViewBuilder
-    private var applyToAllSection: some View {
-        let count = model.applyToAllCount
-        AppKitPushButton(title: "Apply to All",
-                         toolTip: "Copy this job’s appearance and preset to every Pending job.") {
-            model.applyToAll()
-        }
-        .disabled(count == 0)
-        .padding(.top, 20)
-        note(count == 0
-             ? "No other Pending jobs. Done, Failed and Cancelled jobs are never changed."
-             : "Copies this job’s appearance and preset to \(count) Pending job\(count == 1 ? "" : "s"). Done, Failed and Cancelled jobs are never changed.")
     }
 
     // MARK: Building blocks

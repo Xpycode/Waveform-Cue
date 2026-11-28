@@ -2,8 +2,9 @@ import AppKit
 import CueCore
 import SwiftUI
 
-/// The queue list: an `NSTableView` with one row per job (name, status and percentage, Cancel,
-/// Retry, Show in Finder, and a log disclosure for failures). Files and folders dropped anywhere
+/// The queue list: an `NSTableView` with one row per job (name, export settings or status, a
+/// Cancel, Retry or Show in Finder icon, a tick for jobs sharing the selected job's settings, and
+/// a log disclosure for failures). Files and folders dropped anywhere
 /// on the list are added to the queue. Selection is two-way with `EditorModel.selectJob`.
 struct QueueTableRepresentable: NSViewRepresentable {
     let model: EditorModel
@@ -69,6 +70,8 @@ struct QueueTableRepresentable: NSViewRepresentable {
         weak var table: QueueTableView?
         weak var container: QueueDropView?
         private var jobs: [CueJob] = []
+        /// The selected job as last configured: rows compare their shared settings with it.
+        private var selectedJob: CueJob?
         private var expanded: Set<UUID> = []
         private var applyingSelection = false
 
@@ -78,6 +81,10 @@ struct QueueTableRepresentable: NSViewRepresentable {
             guard let table else { return }
             let old = jobs
             jobs = newJobs
+            let newSelected = selectedID.flatMap { id in newJobs.first { $0.id == id } }
+            // A new selection, or an edit to the selected job, can change every row's tick.
+            let selectionChanged = newSelected != selectedJob
+            selectedJob = newSelected
             expanded.formIntersection(newJobs.filter(\.status.isFailure).map(\.id))
             if old.map(\.id) != newJobs.map(\.id) {
                 // Reloading can move or drop the table's selection; that is not the operator's choice.
@@ -86,13 +93,15 @@ struct QueueTableRepresentable: NSViewRepresentable {
                 applyingSelection = false
             } else {
                 // Same rows: reconfigure changed rows in place so progress ticks don't rebuild the list.
-                // A row shows only the source name and status, so only those are compared.
                 var heights = IndexSet()
-                for (row, job) in newJobs.enumerated() where job.status != old[row].status || job.sourcePath != old[row].sourcePath {
+                for (row, job) in newJobs.enumerated() where selectionChanged || job != old[row] {
                     if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? QueueJobCell {
                         configure(cell, with: job)
                     }
-                    if job.status.isFailure != old[row].status.isFailure { heights.insert(row) }
+                    if QueueJobCell.hasActionRow(job.status) != QueueJobCell.hasActionRow(old[row].status)
+                        || job.status.isFailure != old[row].status.isFailure {
+                        heights.insert(row)
+                    }
                 }
                 if !heights.isEmpty { table.noteHeightOfRows(withIndexesChanged: heights) }
             }
@@ -123,7 +132,7 @@ struct QueueTableRepresentable: NSViewRepresentable {
 
         func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
             guard jobs.indices.contains(row) else { return QueueJobCell.baseHeight }
-            return QueueJobCell.height(expanded: expanded.contains(jobs[row].id))
+            return QueueJobCell.height(for: jobs[row].status, expanded: expanded.contains(jobs[row].id))
         }
 
         func tableViewSelectionDidChange(_ notification: Notification) {
@@ -151,7 +160,9 @@ struct QueueTableRepresentable: NSViewRepresentable {
 
         private func configure(_ cell: QueueJobCell, with job: CueJob) {
             let id = job.id
-            cell.configure(with: job, expanded: expanded.contains(id))
+            let matches = selectedJob.map { $0.id != id && job.sharesSettings(with: $0) } ?? false
+            cell.configure(with: job, expanded: expanded.contains(id), selected: selectedJob?.id == id,
+                           matchesSelection: matches)
             cell.onCancel = { [weak self] in self?.model.cancelJob(id) }
             cell.onRetry = { [weak self] in self?.model.retryJob(id) }
             cell.onReveal = { [weak self] in self?.model.reveal(id) }
@@ -280,15 +291,28 @@ final class QueueDropView: NSView {
 
 // MARK: - Row
 
-/// One job: name; status with a progress bar while exporting; Cancel, Retry, Show in Finder or
-/// (Paused) Choose Folder…; and, for a failed job, a Log disclosure that shows the reason and the
-/// encoder's log tail.
+/// One job. Line 1: name, and one small icon button (Cancel, Retry or Show in Finder) shown while
+/// the pointer is over the row or the row is selected. Line 2: a Pending job's export settings, or
+/// the status (with a progress bar while exporting), and a tick when the job has the selected
+/// job's shared settings (what Apply to All copies). A Paused job adds Choose Folder…; a failed
+/// one adds a Log disclosure with the reason and the encoder's log tail.
 final class QueueJobCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("QueueJobCell")
-    static let baseHeight: CGFloat = 72
+    static let baseHeight: CGFloat = 46
+    static let actionRowHeight: CGFloat = 24
     static let logHeight: CGFloat = 132
 
-    static func height(expanded: Bool) -> CGFloat { baseHeight + (expanded ? logHeight : 0) }
+    /// Paused and failed jobs get a third line (Choose Folder… or the Log disclosure).
+    static func hasActionRow(_ status: JobStatus) -> Bool {
+        if case .failed = status { return true }
+        return status == .paused
+    }
+
+    static func height(for status: JobStatus, expanded: Bool) -> CGFloat {
+        guard hasActionRow(status) else { return baseHeight }
+        let failed: Bool = { if case .failed = status { return true }; return false }()
+        return baseHeight + actionRowHeight + (expanded && failed ? logHeight : 0)
+    }
 
     var onCancel: (() -> Void)?
     var onRetry: (() -> Void)?
@@ -299,16 +323,37 @@ final class QueueJobCell: NSTableCellView {
     private let name = NSTextField(labelWithString: "")
     private let status = NSTextField(labelWithString: "")
     private let progress = NSProgressIndicator()
-    private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
-    private let retry = NSButton(title: "Retry", target: nil, action: nil)
-    private let reveal = NSButton(title: "Show in Finder", target: nil, action: nil)
+    private let matches = NSImageView()
+    private let cancel = QueueJobCell.iconButton("xmark.circle", label: "Cancel")
+    private let retry = QueueJobCell.iconButton("arrow.counterclockwise.circle", label: "Return to Pending")
+    private let reveal = QueueJobCell.iconButton("magnifyingglass.circle", label: "Show in Finder")
     private let chooseFolder = NSButton(title: "Choose Folder…", target: nil, action: nil)
     private let disclosure = NSButton()
     private let logTitle = NSTextField(labelWithString: "Log")
+    private let actionRow: NSStackView
     private let logScroll = NSScrollView()
     private let logText = NSTextView()
 
+    private var hovered = false { didSet { if hovered != oldValue { updateIconVisibility() } } }
+    private var isRowSelected = false
+    /// The icon button this job's state offers, if any.
+    private var stateButton: NSButton?
+
+    private static func iconButton(_ symbol: String, label: String) -> NSButton {
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?.withSymbolConfiguration(config)
+        let button = NSButton(image: image ?? NSImage(), target: nil, action: nil)
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.contentTintColor = .secondaryLabelColor
+        button.setAccessibilityLabel(label)
+        return button
+    }
+
     init() {
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        actionRow = NSStackView(views: [chooseFolder, disclosure, logTitle, spacer])
         super.init(frame: .zero)
         name.font = .systemFont(ofSize: 12, weight: .semibold)
         name.lineBreakMode = .byTruncatingMiddle
@@ -323,19 +368,26 @@ final class QueueJobCell: NSTableCellView {
         progress.maxValue = 1
         progress.controlSize = .small
         progress.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let tick = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Same settings as the selected job")
+        matches.image = tick?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
+        matches.contentTintColor = .controlAccentColor
+        matches.toolTip = "Same look, title position and export settings as the selected job."
+        matches.setContentHuggingPriority(.required, for: .horizontal)
+        matches.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         for (button, selector, tip) in [(cancel, #selector(cancelPressed), "Cancel this job. A running export stops and leaves no file."),
                                         (retry, #selector(retryPressed), "Return this job to Pending with a fresh file name."),
-                                        (reveal, #selector(revealPressed), "Show the exported MXF in Finder."),
-                                        (chooseFolder, #selector(chooseFolderPressed), "Choose a writable folder for the jobs paused with this one, and resume them.")] {
-            button.bezelStyle = .rounded
-            button.controlSize = .small
-            button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+                                        (reveal, #selector(revealPressed), "Show the exported MXF in Finder.")] {
             button.target = self
             button.action = selector
             button.toolTip = tip
-            button.setContentHuggingPriority(.required, for: .horizontal)
         }
+        chooseFolder.bezelStyle = .rounded
+        chooseFolder.controlSize = .small
+        chooseFolder.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        chooseFolder.target = self
+        chooseFolder.action = #selector(chooseFolderPressed)
+        chooseFolder.toolTip = "Choose a writable folder for the jobs paused with this one, and resume them."
         disclosure.bezelStyle = .disclosure
         disclosure.setButtonType(.pushOnPushOff)
         disclosure.title = ""
@@ -362,48 +414,57 @@ final class QueueJobCell: NSTableCellView {
         logScroll.borderType = .bezelBorder
         logScroll.drawsBackground = false
 
+        let icons = NSStackView(views: [cancel, retry, reveal])
+        icons.orientation = .horizontal
+        icons.spacing = 0
         let statusRow = NSStackView(views: [status, progress])
         statusRow.orientation = .horizontal
         statusRow.spacing = 6
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let buttons = NSStackView(views: [cancel, retry, reveal, chooseFolder, spacer, disclosure, logTitle])
-        buttons.orientation = .horizontal
-        buttons.spacing = 6
-        buttons.alignment = .centerY
+        actionRow.orientation = .horizontal
+        actionRow.spacing = 6
+        actionRow.alignment = .centerY
 
-        for view in [name, statusRow, buttons, logScroll] as [NSView] {
+        for view in [name, icons, statusRow, matches, actionRow, logScroll] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
         let progressWidth = progress.widthAnchor.constraint(equalToConstant: 70)
         NSLayoutConstraint.activate([
-            name.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            name.topAnchor.constraint(equalTo: topAnchor, constant: 7),
             name.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            name.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            // The icon slot is always reserved, so the name never re-truncates on hover.
+            name.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -34),
+            icons.centerYAnchor.constraint(equalTo: name.centerYAnchor),
+            icons.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             statusRow.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 2),
             statusRow.leadingAnchor.constraint(equalTo: name.leadingAnchor),
-            statusRow.trailingAnchor.constraint(equalTo: name.trailingAnchor),
+            statusRow.trailingAnchor.constraint(lessThanOrEqualTo: matches.leadingAnchor, constant: -6),
+            matches.centerYAnchor.constraint(equalTo: status.centerYAnchor),
+            matches.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             progressWidth,
-            buttons.topAnchor.constraint(equalTo: statusRow.bottomAnchor, constant: 5),
-            buttons.leadingAnchor.constraint(equalTo: name.leadingAnchor),
-            buttons.trailingAnchor.constraint(equalTo: name.trailingAnchor),
-            buttons.heightAnchor.constraint(equalToConstant: 20),
-            logScroll.topAnchor.constraint(equalTo: topAnchor, constant: Self.baseHeight - 4),
+            actionRow.topAnchor.constraint(equalTo: statusRow.bottomAnchor, constant: 4),
+            actionRow.leadingAnchor.constraint(equalTo: name.leadingAnchor),
+            actionRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            actionRow.heightAnchor.constraint(equalToConstant: 20),
+            logScroll.topAnchor.constraint(equalTo: topAnchor, constant: Self.baseHeight + Self.actionRowHeight - 2),
             logScroll.leadingAnchor.constraint(equalTo: name.leadingAnchor),
-            logScroll.trailingAnchor.constraint(equalTo: name.trailingAnchor),
+            logScroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             logScroll.heightAnchor.constraint(equalToConstant: Self.logHeight - 8)
         ])
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(with job: CueJob, expanded: Bool) {
+    /// - Parameters:
+    ///   - selected: the row is the queue's selection (its icon button stays visible).
+    ///   - matchesSelection: the job has the selected job's shared settings.
+    func configure(with job: CueJob, expanded: Bool, selected: Bool, matchesSelection: Bool) {
         name.stringValue = job.sourceURL.lastPathComponent
         name.toolTip = job.sourcePath
         let line: String
         var failure: (reason: String, log: String)?
         switch job.status {
+        case .pending: line = job.settingsSummary
         case .done(let output): line = "Done   ·   " + output.lastPathComponent
         case .failed(let reason, let log):
             line = "Failed: " + reason
@@ -421,10 +482,22 @@ final class QueueJobCell: NSTableCellView {
         } else {
             progress.isHidden = true
         }
-        let active = job.status.isActive
-        cancel.isHidden = !(active || job.status == .pending || job.status == .paused)
-        retry.isHidden = !job.status.canRetry
-        if case .done = job.status { reveal.isHidden = false } else { reveal.isHidden = true }
+        matches.isHidden = !matchesSelection
+
+        if job.status.isActive || job.status == .pending || job.status == .paused {
+            stateButton = cancel
+        } else if job.status.canRetry {
+            stateButton = retry
+        } else if case .done = job.status {
+            stateButton = reveal
+        } else {
+            stateButton = nil
+        }
+        isRowSelected = selected
+        updateIconVisibility()
+
+        let hasActions = Self.hasActionRow(job.status)
+        actionRow.isHidden = !hasActions
         chooseFolder.isHidden = job.status != .paused
         disclosure.isHidden = failure == nil
         logTitle.isHidden = failure == nil
@@ -434,7 +507,42 @@ final class QueueJobCell: NSTableCellView {
             let text = failure.log.isEmpty ? failure.reason : failure.reason + "\n\n" + failure.log
             if logText.string != text { logText.string = text }
         }
-        setAccessibilityLabel(job.sourceURL.lastPathComponent + ", " + line)
+        var label = job.sourceURL.lastPathComponent + ", " + (job.status == .pending ? "Pending, " + line : line)
+        if matchesSelection { label += ", same settings as the selected job" }
+        setAccessibilityLabel(label)
+        // The icon button is hidden until hover or selection; VoiceOver reaches it from here.
+        setAccessibilityCustomActions(stateButton.map { button in
+            [NSAccessibilityCustomAction(name: button.accessibilityLabel() ?? "") { [weak button] in
+                button?.performClick(nil)
+                return true
+            }]
+        } ?? [])
+    }
+
+    private func updateIconVisibility() {
+        for button in [cancel, retry, reveal] {
+            button.isHidden = !(button === stateButton && (hovered || isRowSelected))
+        }
+    }
+
+    // MARK: Hover
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+        if let window {
+            hovered = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        hovered = false
     }
 
     @objc private func cancelPressed() { onCancel?() }

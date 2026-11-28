@@ -293,19 +293,18 @@ public final class QueueManager {
         return true
     }
 
-    /// Apply to All: copies the appearance and preset of `sourceID` to every Pending job
-    /// (never Done, Failed, Cancelled, Paused or running jobs). Returns how many changed.
+    /// Apply to All: copies the shared settings of `sourceID` (`CueJob.adoptSharedSettings`) to
+    /// every other job that `takesApplyToAll` (Pending, Paused, Failed and Cancelled; never Done
+    /// or running jobs). Each keeps its status; like an edit, a changed name is chosen again.
+    /// Returns how many changed.
     @discardableResult
     public func applyToAll(from sourceID: UUID) -> Int {
         guard let source = job(sourceID) else { return 0 }
         var changed = 0
-        for index in jobs.indices where jobs[index].id != sourceID && jobs[index].status == .pending {
+        for index in jobs.indices where jobs[index].id != sourceID && Self.takesApplyToAll(jobs[index].status) {
             var job = jobs[index]
-            job.appearanceSnapshot = source.appearanceSnapshot
-            if job.presetID != source.presetID {
-                job.presetID = source.presetID
-                job.outputPath = nil
-            }
+            job.adoptSharedSettings(from: source)
+            if Self.namingChanged(jobs[index], job) { job.outputPath = nil }
             if job != jobs[index] {
                 jobs[index] = job
                 changed += 1
@@ -626,7 +625,12 @@ public final class QueueManager {
         return !jobs.contains { $0.id != job.id && $0.outputURL?.standardizedFileURL.path == key }
     }
 
-    private static func isDone(_ status: JobStatus) -> Bool {
+    /// Apply to All changes every job except a Done one (its file is written) and the running one.
+    public nonisolated static func takesApplyToAll(_ status: JobStatus) -> Bool {
+        !isDone(status) && !status.isActive
+    }
+
+    private nonisolated static func isDone(_ status: JobStatus) -> Bool {
         if case .done = status { return true }
         return false
     }

@@ -47,6 +47,8 @@ public struct ExportPreset: Sendable, Equatable, Hashable, Identifiable {
     // MARK: Readout and estimates
 
     public var codecName: String { codec == .avcIntra100 ? "AVC-Intra 100" : "MPEG-2 50 Mb/s" }
+    /// Compact codec name for the queue rows.
+    public var shortCodecName: String { codec == .avcIntra100 ? "AVC-I 100" : "MPEG-2 50" }
 
     /// Short toolbar text such as "1080i50 · MXF".
     public var formatReadout: String { "\(video.shortName) · MXF" }

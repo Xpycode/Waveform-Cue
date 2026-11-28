@@ -76,3 +76,15 @@
 **Alternatives:** leave the line exact (sample-accurate, as radio playout and Pro Tools keep markers); round to the nearest frame; round down to the last audible frame.
 **Decision:** draw the End line, and hit-test it, at `ClipTimeline.musicEndLineFrame`: the music end rounded up to a whole frame on the 25 base (`framesCovering`, shared with `targetClockFrames`), clamped to the clip. The marker keeps its exact seconds; dragging still sets an exact time. Fade stays exact. Research: EVS and CasparCG out points name the last frame played, picture editors put markers on whole frames, and lines that nearly align read as mistakes.
 **Consequences:** the line, the playhead and 00:00:00 meet on the same frame, at the file end and at a Music end countdown. A flat stretch of under one frame can show between the waveform's last loud audio and the line. Render baselines are unchanged.
+
+## 2026-11-28 · Apply to All copies every shared setting; queue rows show settings
+
+**Context:** Apply to All sat at the bottom of the Job tab but also copied the Appearance tab, and it copied only the look and the preset: Normalise, audio tracks and the rest stayed behind. The queue gave no sign of what had been applied, and every row carried a "Pending" word and a Cancel or Retry text button.
+**Decision:** Apply to All (`CueJob.adoptSharedSettings`) copies look, title position, preset, audio tracks, Normalise, start timecode, filename pattern, fade in, fade out and pre-roll; title text, trim in and out and the music markers stay per track (operator's choice, title position included). The button and its note sit in a footer under both inspector tabs. A Pending row's second line shows its settings ("AVC-I 100 1080i50 · 2 mono · −23 LUFS"); other states keep their word. A blue tick marks rows with the selected job's shared settings (`sharesSettings`). Cancel, Retry and Show in Finder are one small icon per row, shown on hover or selection; rows are 46 pt, plus a line for Paused and Failed.
+**Consequences:** a fresh queue with default settings shows ticks on every row, which is accurate. The ticks follow the selection. The hidden icon is reachable by VoiceOver through the row's custom action.
+
+## 2026-11-28 · Apply to All reaches Cancelled, Failed and Paused jobs
+
+**Context:** build 15 screenshots: with jobs 1 and 3 Cancelled, Apply to All from either skipped the other, so they never matched. The spec limited it to Pending jobs, though its aim was only to protect Done jobs.
+**Decision:** Apply to All changes every other job except Done ones (their file is written) and the running one (`QueueManager.takesApplyToAll`). Each keeps its status; as with an edit, a job whose name-relevant settings change chooses its file name again (`outputPath` cleared). Supersedes the "pending only" line of spec acceptance criterion for Apply to All.
+**Consequences:** a Cancelled or Failed job picked up by Retry exports with the shared settings. Footer and status text now say "other jobs".

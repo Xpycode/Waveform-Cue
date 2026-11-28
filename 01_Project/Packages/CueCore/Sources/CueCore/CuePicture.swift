@@ -220,6 +220,7 @@ public enum CuePicture {
             timeline.musicEndLineFrame.map { (MarkerKind.musicEnd, Double($0)) },
         ].compactMap { $0 }
         func paintMarkers(in range: Window, rect: CGRect, labelSize: CGFloat) {
+            var tags: [(kind: MarkerKind, x: CGFloat, run: CTLine, width: CGFloat)] = []
             for (kind, frame) in markerFrames {
                 guard frame >= range.lower, frame <= range.upper else { continue }
                 let x = min(rect.maxX - 1.5, max(rect.minX + 1.5, xForFrame(frame, in: range, rect: rect)))
@@ -232,20 +233,19 @@ public enum CuePicture {
                 ctx.addLine(to: CGPoint(x: x, y: rect.maxY))
                 ctx.strokePath()
                 ctx.restoreGState()
-                // Tag inside the panel's top edge: End right of its line, Fade left of its line
-                // (flipped at the panel edge), so the two read apart when they sit close.
-                let text = kind == .musicEnd ? "End" : "Fade"
-                let run = line(text, font: "HelveticaNeue-Bold", size: labelSize, color: color)
-                let width = CGFloat(CTLineGetTypographicBounds(run, nil, nil, nil))
-                let gap: CGFloat = 6
-                var left = kind == .musicEnd ? x + gap : x - gap - width
-                if left + width > rect.maxX - 4 { left = x - gap - width }
-                if left < rect.minX + 4 { left = x + gap }
-                let baseline = rect.maxY - labelSize - 2
-                let tag = CGRect(x: left - 3, y: baseline - labelSize * 0.25, width: width + 6, height: labelSize * 1.2)
-                fill(tag.intersection(rect), background.copy(alpha: 0.8) ?? background)
+                let run = line(kind == .musicEnd ? "End" : "Fade", font: "HelveticaNeue-Bold", size: labelSize, color: color)
+                tags.append((kind, x, run, CGFloat(CTLineGetTypographicBounds(run, nil, nil, nil))))
+            }
+            // Tags after every line, so no line crosses a tag; placed by `markerTagLefts`.
+            let lefts = Self.markerTagLefts(tags.map { ($0.kind, $0.x, $0.width) }, minX: rect.minX, maxX: rect.maxX)
+            let baseline = rect.maxY - labelSize - 2
+            for tag in tags {
+                guard let left = lefts[tag.kind] else { continue }
+                let box = CGRect(x: left - Self.markerTagPadding, y: baseline - labelSize * 0.25,
+                                 width: tag.width + 2 * Self.markerTagPadding, height: labelSize * 1.2)
+                fill(box.intersection(rect), background.copy(alpha: 0.8) ?? background)
                 ctx.textPosition = CGPoint(x: left, y: baseline)
-                CTLineDraw(run, ctx)
+                CTLineDraw(tag.run, ctx)
             }
         }
         func paintEnvelope(_ path: CGPath, rect: CGRect, cursor: CGFloat, played: CueColor,
@@ -522,6 +522,36 @@ extension CuePicture {
         let sx = picture.width / size.width, sy = picture.height / size.height
         return CGRect(x: picture.minX + rect.minX * sx, y: picture.minY + rect.minY * sy,
                       width: rect.width * sx, height: rect.height * sy)
+    }
+
+    /// Space between a tag's text and the edge of its backing box.
+    static let markerTagPadding: CGFloat = 3
+
+    /// Left edges of the marker tags inside a panel spanning `minX`…`maxX`. End sits right of its
+    /// line and Fade left of its line, each flipped at the panel edge. When the two would
+    /// overlap (End flipped left at the panel's right edge with Fade just before it), Fade moves
+    /// to the left of End's tag, or to its right when there is no room on the left.
+    static func markerTagLefts(_ tags: [(kind: MarkerKind, x: CGFloat, width: CGFloat)],
+                               minX: CGFloat, maxX: CGFloat) -> [MarkerKind: CGFloat] {
+        let gap: CGFloat = 6, inset: CGFloat = 4, pad = markerTagPadding
+        var lefts: [MarkerKind: CGFloat] = [:]
+        for tag in tags {
+            var left = tag.kind == .musicEnd ? tag.x + gap : tag.x - gap - tag.width
+            if left + tag.width > maxX - inset { left = tag.x - gap - tag.width }
+            if left < minX + inset { left = tag.x + gap }
+            lefts[tag.kind] = left
+        }
+        if let end = tags.first(where: { $0.kind == .musicEnd }), let endLeft = lefts[.musicEnd],
+           let fade = tags.first(where: { $0.kind == .fadeStart }), let fadeLeft = lefts[.fadeStart] {
+            let spacing = 2 * pad + 2
+            let endBox = (endLeft - pad)...(endLeft + end.width + pad)
+            let fadeBox = (fadeLeft - pad)...(fadeLeft + fade.width + pad)
+            if fadeBox.overlaps(endBox.lowerBound - 2...endBox.upperBound + 2) {
+                let before = endLeft - spacing - fade.width
+                lefts[.fadeStart] = before >= minX + inset ? before : endLeft + end.width + spacing
+            }
+        }
+        return lefts
     }
 
     /// The marker line under `point`, nearest first, on the full track (whole clip) or the
