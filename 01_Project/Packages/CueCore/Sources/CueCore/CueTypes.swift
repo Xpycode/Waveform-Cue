@@ -242,12 +242,10 @@ public struct SafeZones: Codable, Sendable, Equatable, Hashable {
 
 // MARK: - Clock position and countdown target
 
-public enum ClockPosition: String, Codable, Sendable, CaseIterable, Hashable {
+enum ClockPosition: String, Decodable {
     case below, above
 
-    public var title: String { self == .below ? "Below waveforms" : "Above waveforms" }
-
-    public init(from decoder: Decoder) throws {
+    init(from decoder: Decoder) throws {
         let raw = try? decoder.singleValueContainer().decode(String.self)
         self = raw.flatMap(ClockPosition.init(rawValue:)) ?? .below
     }

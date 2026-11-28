@@ -2,13 +2,10 @@ import AppKit
 import CoreText
 
 public struct CueLabel: Sendable, Equatable {
-    public var text = ""
-    // Fraction of available travel inside the title-safe margin, bottom-left origin.
-    public var position = CGPoint(x: 0, y: 1)
+    public var text: String
 
-    public init(text: String = "", position: CGPoint = CGPoint(x: 0, y: 1)) {
+    public init(text: String = "") {
         self.text = text
-        self.position = position
     }
 }
 
@@ -646,10 +643,9 @@ public enum CuePicture {
 // MARK: - Hit-testing (monitor)
 
 extension CuePicture {
-    /// What a click in the picture lands on, in build 10's priority order; a marker line sits
-    /// between the title and the waveforms.
+    /// The marker, trim handle or waveform under the pointer.
     public enum HitTarget: Equatable, Sendable {
-        case title, overview, detail, none
+        case overview, detail, none
         case marker(MarkerKind, onCloseUp: Bool)
         /// A trim handle at the left (in) or right (out) edge of the full-track overview.
         case trim(TrimEdge)
@@ -722,18 +718,18 @@ extension CuePicture {
         return nil
     }
 
-    /// `hitTarget(at:label:layout:)` with marker lines and trim handles: a
+    /// `hitTarget(at:layout:)` with marker lines and trim handles: a
     /// marker within tolerance, then a trim handle (`trimHandles`), then scrubbing on either
     /// waveform. Markers win over trim handles because a music-end marker with no silent tail
     /// sits on the overview's right edge; the out handle's grab zone reaches further into the
     /// margin than the marker tolerance, so it stays reachable there.
-    public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout,
+    public static func hitTarget(at point: CGPoint, layout: CueLayout,
                                  timeline: ClipTimeline, closeUp: CloseUpWindow, trimHandles: Bool = false) -> HitTarget {
         if let hit = markerHit(at: point, timeline: timeline, layout: layout, closeUp: closeUp) {
             return .marker(hit.kind, onCloseUp: hit.onCloseUp)
         }
         if trimHandles, let edge = trimHandleHit(at: point, layout: layout) { return .trim(edge) }
-        return hitTarget(at: point, label: label, layout: layout)
+        return hitTarget(at: point, layout: layout)
     }
 
     // MARK: Trim handles (monitor)
@@ -808,7 +804,7 @@ extension CuePicture {
                 y: (point.y - picture.minY) / picture.height * size.height)
     }
 
-    public static func hitTarget(at point: CGPoint, label: CueLabel, layout: CueLayout) -> HitTarget {
+    public static func hitTarget(at point: CGPoint, layout: CueLayout) -> HitTarget {
         let padding: CGFloat = 12
         guard point.x >= layout.contentMinX - 8, point.x < layout.contentMaxX + 8 else { return .none }
         // Where the two hit margins meet, divide the gap between the facing drawn edges.
@@ -832,16 +828,5 @@ extension CuePicture {
     public static func scrubFrame(at point: CGPoint, in range: Range<Int>, layout: CueLayout) -> Int {
         let fraction = min(1, max(0, (point.x - layout.contentMinX) / layout.contentWidth))
         return range.lowerBound + Int((fraction * CGFloat(range.count)).rounded())
-    }
-
-    /// The title position after a drag from `down` to `point` that started at `origin`.
-    /// Clamped to 0…1, which keeps the box inside `layout.titleArea` and so the usable area.
-    public static func draggedTitlePosition(origin: CGPoint, down: CGPoint, to point: CGPoint,
-                                            label: CueLabel, layout: CueLayout) -> CGPoint {
-        let box = caption(label, layout: layout).1
-        let area = layout.titleArea
-        let dx = (point.x - down.x) / max(1, area.width - box.width)
-        let dy = (point.y - down.y) / max(1, area.height - box.height)
-        return CGPoint(x: min(1, max(0, origin.x + dx)), y: min(1, max(0, origin.y + dy)))
     }
 }

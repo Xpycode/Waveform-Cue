@@ -84,7 +84,7 @@ final class RenderTests: XCTestCase {
         XCTAssertTrue(decoded.fadeFullTrack)
         XCTAssertEqual(decoded.zoom, .five)
         XCTAssertEqual(decoded.safeZones, .none)
-        XCTAssertEqual(decoded.clockPosition, .below)
+        XCTAssertEqual(decoded.paneOrder, PicturePane.defaultOrder)
         XCTAssertEqual(decoded.countdownTarget, .fileEnd)
         XCTAssertFalse(decoded.showGuides)
         XCTAssertEqual(decoded.layout, CueLayout(zoom: .five, elapsed: .large, remaining: .extraLarge))
@@ -108,7 +108,7 @@ final class RenderTests: XCTestCase {
     func testNewSettingsRoundTripAndToleratePoorValues() throws {
         var appearance = CueAppearance()
         appearance.safeZones = Self.zones(top: 4, bottom: 22, left: 3, right: 9)
-        appearance.clockPosition = .above
+        appearance.paneOrder = [.title, .clocks, .fullTrack, .closeUp]
         appearance.countdownTarget = .musicEnd
         appearance.showGuides = true
         let data = try JSONEncoder().encode(appearance)
@@ -126,7 +126,7 @@ final class RenderTests: XCTestCase {
         object["showTitle"] = NSNull()
         let poor = try JSONDecoder().decode(CueAppearance.self, from: JSONSerialization.data(withJSONObject: object))
         XCTAssertEqual(poor.safeZones, .none)
-        XCTAssertEqual(poor.clockPosition, .below)
+        XCTAssertEqual(poor.paneOrder, PicturePane.defaultOrder)
         XCTAssertEqual(poor.countdownTarget, .fileEnd)
         XCTAssertFalse(poor.showGuides)
         XCTAssertEqual(poor.zoom, .five)
@@ -181,7 +181,7 @@ final class RenderTests: XCTestCase {
         XCTAssertEqual(Self.foreignPixels(pixels, in: layout.usable), 0)
         XCTAssertTrue(layout.extents.isEmpty)
         for x in [CuePicture.wave.midX, CuePicture.wave.minX - 5] {
-            let target = CuePicture.hitTarget(at: CGPoint(x: x, y: CuePicture.wave.midY), label: label,
+            let target = CuePicture.hitTarget(at: CGPoint(x: x, y: CuePicture.wave.midY),
                                                layout: layout, timeline: timeline, closeUp: CuePicture.closeUp(timeline: timeline, position: 375, appearance: look), trimHandles: true)
             XCTAssertEqual(target, .none)
         }
@@ -227,7 +227,7 @@ final class RenderTests: XCTestCase {
             let width = window.visible.upperBound - window.visible.lowerBound
             XCTAssertEqual(width, 1.2, accuracy: 1e-8)
             let marker = CGPoint(x: detail.minX + detail.width * (9.6 - window.visible.lowerBound) / width, y: detail.midY)
-            XCTAssertEqual(CuePicture.hitTarget(at: marker, label: label, layout: layout, timeline: timeline,
+            XCTAssertEqual(CuePicture.hitTarget(at: marker, layout: layout, timeline: timeline,
                                                 closeUp: window), .marker(.fadeStart, onCloseUp: true))
             XCTAssertEqual(CuePicture.draggedMarkerSeconds(at: marker, in: window.visible, timeline: timeline,
                                                            layout: layout), 9.6, accuracy: 1e-8)
@@ -298,7 +298,7 @@ final class RenderTests: XCTestCase {
         let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
         XCTAssertLessThan(ink.minX, -20)
         XCTAssertGreaterThanOrEqual(box.width, ink.width)
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.minX + 2, y: box.midY), label: label,
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.minX + 2, y: box.midY),
                                             layout: layout), .none)
         let custom = Self.render(track, timeline: timeline, position: 0, label: label, appearance: look)
         for band in layout.reserved { XCTAssertEqual(Self.foreignPixels(custom, in: band), 0) }
@@ -411,10 +411,9 @@ final class RenderTests: XCTestCase {
             Setting(name: "zoom Off, bottom heavy", zones: Self.zones(bottom: 30, right: 15), zoom: .off,
                     elapsed: .extraLarge, remaining: .extraLarge),
         ]
-        let labels = [CueLabel(text: "A Very Long Overlay Title That Has To Be Fitted And Truncated To The Width",
-                               position: CGPoint(x: 0, y: 0)),
-                      CueLabel(text: "Jüngste Ägypten Qy", position: CGPoint(x: 1, y: 1)),
-                      CueLabel(text: "Out of range", position: CGPoint(x: -3, y: 4))]
+        let labels = [CueLabel(text: "A Very Long Overlay Title That Has To Be Fitted And Truncated To The Width"),
+                      CueLabel(text: "Jüngste Ägypten Qy"),
+                      CueLabel(text: "Short")]
         for setting in settings {
             var appearance = CueAppearance()
             appearance.safeZones = setting.zones
@@ -473,8 +472,7 @@ final class RenderTests: XCTestCase {
                 case .center: XCTAssertEqual(box.midX, band.midX)
                 case .right: XCTAssertEqual(box.maxX, layout.contentMaxX)
                 }
-                XCTAssertEqual(box, CuePicture.caption(CueLabel(text: label.text, position: .zero), layout: layout).1)
-                XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), label: label, layout: layout), .none)
+                XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), layout: layout), .none)
             }
         }
     }
@@ -520,7 +518,7 @@ final class RenderTests: XCTestCase {
         let p = CuePicture.picturePoint(click, in: picture)
         XCTAssertEqual(p.x, 984, accuracy: 1e-9)
         XCTAssertEqual(p.y, 792, accuracy: 1e-9)
-        XCTAssertEqual(CuePicture.hitTarget(at: p, label: label, layout: layout), .overview)
+        XCTAssertEqual(CuePicture.hitTarget(at: p, layout: layout), .overview)
         let frame = CuePicture.scrubFrame(at: p, in: 0..<750, layout: layout)
         XCTAssertEqual(frame, 385)
         XCTAssertEqual(frame, Self.build10Seek(click, picture: picture, range: 0..<750))
@@ -528,20 +526,20 @@ final class RenderTests: XCTestCase {
         // The close-up scrubs inside the held window.
         let detailClick = CGPoint(x: 300, y: 260)
         let q = CuePicture.picturePoint(detailClick, in: picture)
-        XCTAssertEqual(CuePicture.hitTarget(at: q, label: label, layout: layout), .detail)
+        XCTAssertEqual(CuePicture.hitTarget(at: q, layout: layout), .detail)
         let held = CuePicture.closeUp(frame: 375, total: 750, zoom: .auto)
         XCTAssertEqual(CuePicture.scrubFrame(at: q, in: held, layout: layout),
                        Self.build10Seek(detailClick, picture: picture, range: held))
 
         // A click on the title behaves like a click on the background.
         let title = CuePicture.caption(label, layout: layout).1
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: title.midX, y: title.midY), label: label, layout: layout), .none)
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: 960, y: 20), label: label, layout: layout), .none)
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: title.midX, y: title.midY), layout: layout), .none)
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: 960, y: 20), layout: layout), .none)
 
         // Zoom Off: the full-track waveform covers the close-up's place.
         var off = CueAppearance()
         off.zoom = .off
-        XCTAssertEqual(CuePicture.hitTarget(at: q, label: label, layout: off.layout), .overview)
+        XCTAssertEqual(CuePicture.hitTarget(at: q, layout: off.layout), .overview)
         // Ends clamp.
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: 0, y: 792), in: 0..<750, layout: layout), 0)
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: 1920, y: 792), in: 0..<750, layout: layout), 750)
@@ -582,7 +580,7 @@ final class RenderTests: XCTestCase {
     func testNearestWaveformWinsWhereTheHitMarginsOverlap() throws {
         let original = CueAppearance().layout
         let nearLabel = CGPoint(x: original.overview.midX, y: original.overviewLabelBaseline)
-        XCTAssertEqual(CuePicture.hitTarget(at: nearLabel, label: CueLabel(), layout: original), .none)
+        XCTAssertEqual(CuePicture.hitTarget(at: nearLabel, layout: original), .none)
         for fullTrackFirst in [true, false] {
             var look = CueAppearance()
             look.paneOrder = fullTrackFirst ? [.title, .fullTrack, .closeUp, .clocks]
@@ -601,7 +599,7 @@ final class RenderTests: XCTestCase {
             for (y, target) in [(upper.minY - 0.25, upperTarget), (middle + 0.25, upperTarget),
                                 (middle - 0.25, lowerTarget), (lower.maxY + 0.25, lowerTarget)] {
                 let point = CGPoint(x: layout.contentMinX + 40, y: y)
-                XCTAssertEqual(CuePicture.hitTarget(at: point, label: CueLabel(), layout: layout), target)
+                XCTAssertEqual(CuePicture.hitTarget(at: point, layout: layout), target)
             }
         }
     }
@@ -612,7 +610,7 @@ final class RenderTests: XCTestCase {
         let layout = appearance.layout
         XCTAssertGreaterThan(layout.contentMinX, 96)
         let y = layout.overview.midY
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: layout.overview.midX, y: y), label: CueLabel(), layout: layout), .overview)
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: layout.overview.midX, y: y), layout: layout), .overview)
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: layout.contentMinX, y: y), in: 0..<750, layout: layout), 0)
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: layout.overview.midX, y: y), in: 0..<750, layout: layout), 375)
         XCTAssertEqual(CuePicture.scrubFrame(at: CGPoint(x: layout.contentMaxX, y: y), in: 0..<750, layout: layout), 750)
@@ -638,7 +636,7 @@ final class RenderTests: XCTestCase {
                 XCTAssertTrue(layout.fits)
                 let timeline = CuePicture.timeline(for: track, appearance: on)
                 for frame in [0, 600, 640, 700, 750] {
-                    let label = CueLabel(text: "Guides", position: CGPoint(x: 1, y: 0))
+                    let label = CueLabel(text: "Guides")
                     let withGuides = Self.render(track, timeline: timeline, position: frame, label: label, appearance: on)
                     XCTAssertEqual(withGuides, Self.render(track, timeline: timeline, position: frame, label: label,
                                                            appearance: off))

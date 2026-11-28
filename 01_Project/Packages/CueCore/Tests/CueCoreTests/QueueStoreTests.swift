@@ -132,6 +132,35 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertNil(result.document.destinationOverride)
     }
 
+    func testBuild17QueueSavesOnlyMigratedSettingsAndReloadsTheSamePicture() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "build17-job", withExtension: "json"))
+        let legacy = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture))
+        let store = QueueStore(directory: directory)
+        try JSONSerialization.data(withJSONObject: ["version": 1, "jobs": [legacy]]).write(to: store.fileURL)
+
+        let loaded = store.load()
+        XCTAssertNil(loaded.problem)
+        let job = try XCTUnwrap(loaded.document.jobs.first)
+        XCTAssertEqual(job.appearance.titleAlignment, .right)
+        XCTAssertEqual(job.appearance.paneOrder, [.title, .clocks, .fullTrack, .closeUp])
+        let track = BaselineTests.syntheticTrack()
+        let picture = BaselineTests.render(track, frame: 375, label: job.label, appearance: job.effectiveAppearance)
+
+        try store.save(loaded.document)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: store.fileURL)) as? [String: Any])
+        let savedJob = try XCTUnwrap((json["jobs"] as? [[String: Any]])?.first)
+        let appearance = try XCTUnwrap(savedJob["appearance"] as? [String: Any])
+        XCTAssertNil(savedJob["labelX"])
+        XCTAssertNil(savedJob["labelY"])
+        XCTAssertNil(appearance["clockPosition"])
+        let reloaded = QueueStore(directory: directory).load()
+        XCTAssertNil(reloaded.problem)
+        XCTAssertEqual(reloaded.document, loaded.document)
+        let restored = try XCTUnwrap(reloaded.document.jobs.first)
+        XCTAssertTrue(picture == BaselineTests.render(track, frame: 375, label: restored.label,
+                                                     appearance: restored.effectiveAppearance))
+    }
+
     func testBuild11QueueKeepsItsAppearanceAndSongValuesAcrossSaveAndReload() throws {
         let fixture = """
         {"version":1,"destinationOverride":"/out","jobs":[{
@@ -163,7 +192,7 @@ final class QueueStoreTests: XCTestCase {
         expected.solidRedAt = .oneSecond
         expected.overviewColor = CueColor(0.8, 0.3, 0.1)
         expected.safeZones = SafeZones(preset: .custom, custom: .init(top: 11, bottom: 16))
-        expected.clockPosition = .above
+        expected.paneOrder = [.title, .clocks, .fullTrack, .closeUp]
         expected.countdownTarget = .musicEnd
         expected.showGuides = true
         XCTAssertEqual(job.effectiveAppearance, expected)
@@ -177,8 +206,7 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(job.effectiveMarkers.musicEnd, 18)
         XCTAssertEqual(job.effectiveGainDB, -2)
         XCTAssertEqual(job.labelText, "Old title")
-        XCTAssertEqual(job.labelX, 0.2)
-        XCTAssertEqual(job.labelY, 0.8)
+        XCTAssertEqual(job.appearance.titleAlignment, .left)
         XCTAssertEqual(job.layout, .four)
         XCTAssertEqual(job.presetID, "avci100-1080i50")
         try store.save(first.document)

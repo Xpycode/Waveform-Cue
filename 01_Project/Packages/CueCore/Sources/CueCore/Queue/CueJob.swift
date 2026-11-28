@@ -1,4 +1,3 @@
-import CoreGraphics
 import Foundation
 
 // One export job in the batch queue (spec B). Every field decodes tolerantly (cookbook 122) so a
@@ -172,9 +171,6 @@ public struct CueJob: Identifiable, Sendable, Equatable {
     public var sourcePath: String
     /// Overlay title text; defaults to the source filename without extension.
     public var labelText: String
-    /// Title position as fractions of the available travel (see `CueLabel.position`).
-    public var labelX: Double
-    public var labelY: Double
     public var appearanceSnapshot: AppearanceSnapshot
     /// An empty ID means "the app's default preset" (a legacy job saved before presets).
     public var presetID: PresetID
@@ -205,12 +201,9 @@ public struct CueJob: Identifiable, Sendable, Equatable {
                 markers: MusicMarkers = .none, loudness: LoudnessMeasurement? = nil,
                 normalise: Bool = false, peaks: PeaksSummary? = nil, analysis: TrackAnalysis? = nil,
                 destinationFolder: URL? = nil, status: JobStatus = .pending) {
-        let label = label ?? CueLabel(text: source.deletingPathExtension().lastPathComponent)
         self.id = id
         self.sourcePath = source.path
-        self.labelText = label.text
-        self.labelX = Double(label.position.x)
-        self.labelY = Double(label.position.y)
+        self.labelText = label?.text ?? source.deletingPathExtension().lastPathComponent
         self.appearanceSnapshot = AppearanceSnapshot(appearance)
         self.presetID = presetID
         self.layout = layout
@@ -233,15 +226,8 @@ public struct CueJob: Identifiable, Sendable, Equatable {
     public var sourceName: String { sourceURL.deletingPathExtension().lastPathComponent }
 
     public var label: CueLabel {
-        get { CueLabel(text: labelText, position: CGPoint(x: labelX, y: labelY)) }
-        set {
-            labelText = newValue.text
-            let x = Double(newValue.position.x)
-            // The legacy position picker and monitor drag still edit this label during the migration.
-            if x != labelX { appearanceSnapshot.value.titleAlignment = TitleAlignment(legacyX: x) }
-            labelX = x
-            labelY = Double(newValue.position.y)
-        }
+        get { CueLabel(text: labelText) }
+        set { labelText = newValue.text }
     }
 
     public var appearance: CueAppearance {
@@ -287,11 +273,13 @@ public struct CueJob: Identifiable, Sendable, Equatable {
 
 extension CueJob: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, sourcePath, labelText, labelX, labelY, appearance, presetID, layout
+        case id, sourcePath, labelText, appearance, presetID, layout
         case startTimecode, filenameTemplate, trim, markers, loudness, normalise, peaks, analysis
         case destinationFolder, outputPath, status
         // Decode-only legacy keys (build 10 era single-job shape).
         case source, label, title
+        // Build 17 anchored the title by x and y. Only x affects its new top-band alignment.
+        case labelX
     }
 
     /// Only the source path is required: without it a job cannot be run or even named.
@@ -311,12 +299,10 @@ extension CueJob: Codable {
         sourcePath = path
         labelText = value(String.self, .labelText) ?? value(String.self, .label) ?? value(String.self, .title)
             ?? source.deletingPathExtension().lastPathComponent
-        labelX = value(Double.self, .labelX).flatMap { $0.isFinite ? $0 : nil } ?? 0
-        labelY = value(Double.self, .labelY).flatMap { $0.isFinite ? $0 : nil } ?? 1
         appearanceSnapshot = value(AppearanceSnapshot.self, .appearance) ?? AppearanceSnapshot(CueAppearance())
         let savedLook = try? c.nestedContainer(keyedBy: CueAppearance.CodingKeys.self, forKey: .appearance)
-        if savedLook?.contains(.titleAlignment) != true {
-            appearanceSnapshot.value.titleAlignment = TitleAlignment(legacyX: labelX)
+        if savedLook?.contains(.titleAlignment) != true, let x = value(Double.self, .labelX), x.isFinite {
+            appearanceSnapshot.value.titleAlignment = TitleAlignment(legacyX: x)
         }
         presetID = value(PresetID.self, .presetID) ?? ""
         layout = value(AudioLayout.self, .layout) ?? .default
@@ -339,8 +325,6 @@ extension CueJob: Codable {
         try c.encode(id, forKey: .id)
         try c.encode(sourcePath, forKey: .sourcePath)
         try c.encode(labelText, forKey: .labelText)
-        try c.encode(labelX, forKey: .labelX)
-        try c.encode(labelY, forKey: .labelY)
         try c.encode(appearanceSnapshot, forKey: .appearance)
         try c.encode(presetID, forKey: .presetID)
         try c.encode(layout, forKey: .layout)
@@ -362,14 +346,12 @@ extension CueJob: Codable {
 
 extension CueJob {
     /// Takes the settings Apply to All copies: everything that is not about this track's own
-    /// audio. Look, title position, preset, audio tracks, Normalise, start timecode, filename
+    /// audio. Look, preset, audio tracks, Normalise, start timecode, filename
     /// pattern, fades and pre-roll are copied; title text, trim in and out, and the music
     /// markers stay per track. A new preset or filename pattern drops the reserved output name.
     public mutating func adoptSharedSettings(from source: CueJob) {
         if presetID != source.presetID || filenameTemplate != source.filenameTemplate { outputPath = nil }
         appearanceSnapshot = source.appearanceSnapshot
-        labelX = source.labelX
-        labelY = source.labelY
         presetID = source.presetID
         layout = source.layout
         normalise = source.normalise
@@ -391,8 +373,6 @@ extension CueJob {
             && trim.fadeIn == other.trim.fadeIn
             && trim.fadeOut == other.trim.fadeOut
             && trim.preRoll == other.trim.preRoll
-            && labelX == other.labelX
-            && labelY == other.labelY
             && (appearanceSnapshot == other.appearanceSnapshot || appearance.matchesSettings(of: other.appearance))
     }
 

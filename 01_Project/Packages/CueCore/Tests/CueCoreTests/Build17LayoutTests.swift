@@ -14,7 +14,7 @@ final class Build17LayoutTests: XCTestCase {
         let fits: Bool
 
         init(_ layout: CueLayout) {
-            let (_, box) = CuePicture.caption(CueLabel(text: "Cue", position: CGPoint(x: 0, y: 1)), layout: layout)
+            let (_, box) = CuePicture.caption(CueLabel(text: "Cue"), layout: layout)
             fullTrack = layout.overview
             closeUp = layout.detail
             clockBaseline = layout.clockBaseline

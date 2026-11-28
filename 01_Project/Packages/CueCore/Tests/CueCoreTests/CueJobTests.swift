@@ -7,7 +7,7 @@ final class CueJobTests: XCTestCase {
         appearance.warning = .ten
         appearance.zoom = .twenty
         return CueJob(source: URL(fileURLWithPath: "/Volumes/Media/Cues/312A Rehearsal.wav"),
-                      label: CueLabel(text: "312A Rehearsal", position: CGPoint(x: 0.25, y: 0.75)),
+                      label: CueLabel(text: "312A Rehearsal"),
                       appearance: appearance, presetID: "avci100-1080i50", layout: .four,
                       startTimecode: "10:00:00:00", filenameTemplate: "{name} {preset}",
                       trim: TrimSettings(inPoint: 1, outPoint: 30, fadeIn: 0.5, fadeOut: 2, preRoll: 5),
@@ -32,12 +32,34 @@ final class CueJobTests: XCTestCase {
     func testDefaultsFromSource() {
         let job = CueJob(source: URL(fileURLWithPath: "/tmp/My Cue.final.wav"))
         XCTAssertEqual(job.labelText, "My Cue.final")
-        XCTAssertEqual(job.label.position, CGPoint(x: 0, y: 1))
+        XCTAssertEqual(job.appearance.titleAlignment, .left)
         XCTAssertEqual(job.startTimecode, "00:00:00:00")
         XCTAssertEqual(job.filenameTemplate, "{name} - Cue")
         XCTAssertEqual(job.layout, .two)
         XCTAssertEqual(job.status, .pending)
         XCTAssertNil(job.destinationFolder)
+    }
+
+    func testNewJobUsesSavedArrangementAndFactoryResetKeepsItsTitle() throws {
+        let suite = "CueJobTests-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        var saved = CueAppearance()
+        saved.paneOrder = [.clocks, .title, .closeUp, .fullTrack]
+        saved.offsets = PaneOffsets(title: -4, fullTrack: 6, closeUp: 8, clocks: -2)
+        saved.titleAlignment = .right
+        saved.leftClock = .remaining
+        saved.save(to: defaults)
+        var job = CueJob(source: URL(fileURLWithPath: "/tmp/Overture.wav"),
+                         appearance: CueAppearance.load(from: defaults))
+        XCTAssertEqual(job.appearance, saved)
+        job.appearance = CueAppearance()
+        XCTAssertEqual(job.label.text, "Overture")
+        XCTAssertEqual(job.appearance.paneOrder, [.title, .fullTrack, .closeUp, .clocks])
+        XCTAssertEqual(job.appearance.offsets, PaneOffsets())
+        XCTAssertEqual(job.appearance.titleAlignment, .left)
+        XCTAssertEqual(job.appearance.leftClock, .elapsed)
     }
 
     func testRoundTripKeepsEveryField() throws {
@@ -49,7 +71,6 @@ final class CueJobTests: XCTestCase {
         XCTAssertEqual(decoded.appearance.warning, .ten)
         XCTAssertEqual(decoded.appearance.zoom, .twenty)
         XCTAssertEqual(decoded.label.text, "312A Rehearsal")
-        XCTAssertEqual(decoded.label.position, CGPoint(x: 0.25, y: 0.75))
     }
 
     func testRunStateIsNotSaved() throws {
@@ -135,14 +156,8 @@ final class CueJobTests: XCTestCase {
         }
     }
 
-    func testLegacyPositionEditsSurviveTheNextAppearanceEditAndReload() throws {
+    func testTitleTextEditsPreserveAlignmentOnReload() throws {
         var job = sampleJob()
-        job.label.position = CGPoint(x: 1, y: 1)
-        var look = job.appearance
-        look.zoom = .off
-        job.appearance = look
-        XCTAssertEqual(try roundTrip(job).appearance.titleAlignment, .right)
-
         job.appearance.titleAlignment = .center
         job.label.text = "New title"
         XCTAssertEqual(try roundTrip(job).appearance.titleAlignment, .center)
@@ -154,13 +169,16 @@ final class CueJobTests: XCTestCase {
         dict["loudness"] = ["integratedLUFS": "loud"]
         dict["peaks"] = 12
         dict["status"] = ["state": "done"] // Done without its output path
+        var legacy = try XCTUnwrap(dict["appearance"] as? [String: Any])
+        legacy.removeValue(forKey: "titleAlignment")
+        dict["appearance"] = legacy
         dict["labelX"] = "left"
         let job = try decode(dict)
         XCTAssertEqual(job.trim, .none)
         XCTAssertEqual(job.loudness, LoudnessMeasurement(integratedLUFS: nil, truePeakDBTP: nil, rangeLU: 0))
         XCTAssertNil(job.peaks)
         XCTAssertEqual(job.status, .pending)
-        XCTAssertEqual(job.labelX, 0)
+        XCTAssertEqual(job.appearance.titleAlignment, .left)
         XCTAssertEqual(job.sourcePath, sampleJob().sourcePath)
     }
 

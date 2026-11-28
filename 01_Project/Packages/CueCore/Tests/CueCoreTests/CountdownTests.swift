@@ -245,7 +245,7 @@ final class CountdownTests: XCTestCase {
         let closeUp = CuePicture.closeUp(timeline: timeline, position: 640, appearance: appearance)
         XCTAssertEqual(closeUp.visible, 20...30)
         func hit(_ x: CGFloat, _ y: CGFloat) -> CuePicture.HitTarget {
-            CuePicture.hitTarget(at: CGPoint(x: x, y: y), label: label, layout: layout, timeline: timeline, closeUp: closeUp)
+            CuePicture.hitTarget(at: CGPoint(x: x, y: y), layout: layout, timeline: timeline, closeUp: closeUp)
         }
         XCTAssertEqual(hit(endX, y), .marker(.musicEnd, onCloseUp: false))
         XCTAssertEqual(hit(endX + 9, y), .marker(.musicEnd, onCloseUp: false))
@@ -266,7 +266,7 @@ final class CountdownTests: XCTestCase {
         XCTAssertEqual(hit(960, 20), CuePicture.HitTarget.none)
         // Without a marker, the same point on the waveform scrubs.
         let bare = CuePicture.timeline(for: BaselineTests.syntheticTrack(), appearance: appearance)
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: endX, y: y), label: label, layout: layout,
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: endX, y: y), layout: layout,
                                             timeline: bare, closeUp: closeUp), .overview)
 
         // Dragging maps x to source seconds over the pane's range, clamped to the clip.

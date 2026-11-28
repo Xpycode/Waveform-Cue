@@ -124,18 +124,6 @@ public struct CueAppearance: Codable, Sendable, Equatable {
     public var titleAlignment: TitleAlignment = .left
     public var leftClock: LeftClock = .elapsed
 
-    /// Compatibility with the two-position inspector and renderer during the layout migration.
-    public var clockPosition: ClockPosition {
-        get { paneOrder.first { $0 != .title } == .clocks ? .above : .below }
-        set {
-            var order = paneOrder.filter { $0 != .clocks }
-            let waves = order.indices.filter { order[$0] == .fullTrack || order[$0] == .closeUp }
-            // Normalisation guarantees both waveform panes are present.
-            let insertion = newValue == .above ? waves[0] : waves[1] + 1
-            order.insert(.clocks, at: insertion)
-            paneOrder = order
-        }
-    }
     /// What Remaining counts down to. Rendering of Music end arrives in task 3.2.
     public var countdownTarget: CountdownTarget = .fileEnd
     /// Hatched safe-zone guides over the monitor only; never part of an export.
@@ -273,7 +261,7 @@ public struct CueAppearance: Codable, Sendable, Equatable {
             let names = (try? values.decodeIfPresent([SavedPaneName].self, forKey: .storedPaneOrder)) ?? []
             storedPaneOrder = PicturePane.normalised(names.compactMap(\.name))
         } else if (try? legacy.decode(ClockPosition.self, forKey: .clockPosition)) == .above {
-            clockPosition = .above
+            storedPaneOrder = [.title, .clocks, .fullTrack, .closeUp]
         }
         offsets = (try? values.decodeIfPresent(PaneOffsets.self, forKey: .offsets)) ?? PaneOffsets()
         titleAlignment = (try? values.decodeIfPresent(TitleAlignment.self, forKey: .titleAlignment)) ?? .left
@@ -317,7 +305,7 @@ extension CueAppearance {
         case overviewColor, detailColor, warning, solidRedAt, fadeCloseUp, fadeFullTrack, zoom
         case elapsedColor, elapsedSize, remainingColor, remainingSize
         case safeZonePreset, safeZoneTop, safeZoneBottom, safeZoneLeft, safeZoneRight
-        case clockPosition, countdownTarget, showGuides
+        case countdownTarget, showGuides
         case titleFontName, clockFontName, showTitle, showElapsed, showRemaining, showFullTrack
         case centerAtStart, centerAtEnd, endZoom, closeUpShading
         case markersEnabled, loudnessAnalysisEnabled, trimAndFadesEnabled, preRollEnabled, safeZonesEnabled
@@ -346,7 +334,6 @@ extension CueAppearance {
             case .safeZoneBottom: return copy(\.safeZones.custom.bottom)
             case .safeZoneLeft: return copy(\.safeZones.custom.left)
             case .safeZoneRight: return copy(\.safeZones.custom.right)
-            case .clockPosition: return copy(\.clockPosition)
             case .countdownTarget: return copy(\.countdownTarget)
             case .showGuides: return copy(\.showGuides)
             case .titleFontName: return copy(\.titleFontName)

@@ -63,8 +63,7 @@ final class BaselineTests: XCTestCase {
     }
 
     static let customTitle = Case(name: "customTitle",
-                                  label: CueLabel(text: "A Much Longer Cue Title For Position",
-                                                  position: CGPoint(x: 0.3, y: 0.6)),
+                                  label: CueLabel(text: "A Much Longer Cue Title For Position"),
                                   appearance: .build10)
 
     /// First, middle, 5 s left, 1 s left, last.

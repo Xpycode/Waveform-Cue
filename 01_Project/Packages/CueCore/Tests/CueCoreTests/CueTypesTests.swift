@@ -21,7 +21,6 @@ final class CueTypesTests: XCTestCase {
         try roundTrip(LoudnessMeasurement(integratedLUFS: nil, truePeakDBTP: nil, rangeLU: 0))
         try roundTrip(TrimSettings(inPoint: 2.5, outPoint: 60, fadeIn: 0.5, fadeOut: 2, preRoll: 5))
         try roundTrip(SafeZones(preset: .custom, custom: .init(top: 12, bottom: 25, left: 3, right: 0)))
-        for value in ClockPosition.allCases { try roundTrip(value) }
         for value in CountdownTarget.allCases { try roundTrip(value) }
         for value in SafeZonePreset.allCases { try roundTrip(value) }
         try roundTrip(PresetID("avci100-1080i50"))
@@ -125,7 +124,6 @@ final class CueTypesTests: XCTestCase {
         saved.remaining.size = .large
         saved.remaining.color = CueColor(0, 1, 1)
         saved.safeZones = SafeZones(preset: .custom, custom: .init(top: 11, bottom: 16, left: 3, right: 5))
-        saved.clockPosition = .above
         saved.countdownTarget = .musicEnd
         saved.showGuides = true
         saved.titleFontName = "Georgia"

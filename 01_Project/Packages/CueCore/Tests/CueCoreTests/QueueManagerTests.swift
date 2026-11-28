@@ -619,6 +619,10 @@ final class QueueManagerTests: XCTestCase {
         look.showElapsed = false
         look.titleFontName = "Georgia"
         look.endZoom = .three
+        look.paneOrder = [.closeUp, .clocks, .title, .fullTrack]
+        look.offsets = PaneOffsets(title: 7, fullTrack: -3, closeUp: 11, clocks: -2)
+        look.titleAlignment = .center
+        look.leftClock = .remaining
         manager.update(source.id) {
             $0.appearance = look
             $0.presetID = "avci100-1080i50"
@@ -627,8 +631,6 @@ final class QueueManagerTests: XCTestCase {
             $0.startTimecode = "10:00:00:00"
             $0.filenameTemplate = "{name} {preset}"
             $0.labelText = "Only on the source"
-            $0.labelX = 0.25
-            $0.labelY = 0.75
             $0.trim = TrimSettings(inPoint: 1, outPoint: 9, fadeIn: 0.5, fadeOut: 2, preRoll: 5)
             $0.markers.editedMusicEnd = 7
         }
@@ -641,8 +643,6 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertTrue(updated.normalise)
         XCTAssertEqual(updated.startTimecode, "10:00:00:00")
         XCTAssertEqual(updated.filenameTemplate, "{name} {preset}")
-        XCTAssertEqual(updated.labelX, 0.25)
-        XCTAssertEqual(updated.labelY, 0.75)
         XCTAssertEqual(updated.trim, TrimSettings(inPoint: 3, outPoint: 20, fadeIn: 0.5, fadeOut: 2, preRoll: 5),
                        "fades and pre-roll are copied, in and out stay per track")
         XCTAssertEqual(updated.labelText, "Pending", "the title text is not copied")
@@ -670,9 +670,6 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertTrue(a.sharesSettings(with: b))
         b.normalise = true
         XCTAssertFalse(a.sharesSettings(with: b))
-        b.normalise = false
-        b.labelY = 0.1
-        XCTAssertFalse(a.sharesSettings(with: b), "title position is shared")
     }
 
     func testSettingsSummary() {

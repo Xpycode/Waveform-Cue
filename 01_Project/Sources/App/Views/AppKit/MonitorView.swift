@@ -244,7 +244,7 @@ final class MonitorView: NSView {
     /// the music.
     private func hitTarget(_ p: CGPoint) -> CuePicture.HitTarget {
         guard let timeline else { return .none }
-        return CuePicture.hitTarget(at: p, label: label, layout: layout, timeline: timeline, closeUp: closeUpWindow(timeline),
+        return CuePicture.hitTarget(at: p, layout: layout, timeline: timeline, closeUp: closeUpWindow(timeline),
                                     trimHandles: onTrimChanged != nil)
     }
 

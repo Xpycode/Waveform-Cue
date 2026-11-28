@@ -220,7 +220,7 @@ final class TrimPreRollTests: XCTestCase {
         let plain = ClipTimeline(duration: track.seconds)
         let window = CuePicture.closeUp(timeline: plain, position: 0, appearance: CueAppearance())
         func hit(_ point: CGPoint, _ timeline: ClipTimeline = plain, handles: Bool = true) -> CuePicture.HitTarget {
-            CuePicture.hitTarget(at: point, label: CueLabel(), layout: layout, timeline: timeline,
+            CuePicture.hitTarget(at: point, layout: layout, timeline: timeline,
                                  closeUp: window, trimHandles: handles)
         }
         XCTAssertEqual(hit(CGPoint(x: overview.minX - 20, y: overview.midY)), .trim(.inPoint))
@@ -237,7 +237,7 @@ final class TrimPreRollTests: XCTestCase {
         // The title band behaves like the background, including when trim handles are enabled.
         let label = CueLabel(text: "Title")
         let box = CuePicture.caption(label, layout: layout).1
-        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), label: label, layout: layout,
+        XCTAssertEqual(CuePicture.hitTarget(at: CGPoint(x: box.midX, y: box.midY), layout: layout,
                                             timeline: plain, closeUp: window, trimHandles: true), .none)
     }
 
