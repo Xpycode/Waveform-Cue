@@ -297,9 +297,9 @@ public struct CueLayout: Sendable, Equatable {
             } else if shrink <= plan.waveformCapacity {
                 plan.shrinkWaveforms(by: shrink)
             } else if shrink <= plan.waveformCapacity + plan.gapCapacity {
-                plan.shrinkWaveforms(by: plan.waveformCapacity)
-                // Build 17 applies the full shortage to the gaps once waveforms reach their floors.
-                plan.shrinkGaps(by: shrink)
+                let waveformReduction = plan.waveformCapacity
+                plan.shrinkWaveforms(by: waveformReduction)
+                plan.shrinkGaps(by: shrink - waveformReduction)
             } else {
                 // A different clock or title size needs a fresh measurement of rounding.
                 available = highY - lowY

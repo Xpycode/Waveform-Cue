@@ -450,6 +450,42 @@ final class CueLayoutTests: XCTestCase {
 
     // MARK: Give-way order
 
+    func testBottomReserveMovesPanesContinuouslyAsWaveformsReachTheirFloors() throws {
+        var look = CueAppearance()
+        look.zoom = .five
+        look.elapsed.size = .small
+        look.remaining.size = .large
+        look.paneOrder = [.title, .clocks, .fullTrack, .closeUp]
+        let layouts = (0...30).map { bottom in
+            look.safeZones = zones(top: 5, bottom: bottom)
+            return look.layout
+        }
+        let initialGaps = gaps(layouts[0]).reduce(0, +)
+        let transition = try XCTUnwrap(layouts.indices.first {
+            waveformsAtMinimum(layouts[$0]) && gaps(layouts[$0]).reduce(0, +) < initialGaps - 1
+        })
+
+        for bottom in 1...30 {
+            let previous = layouts[bottom - 1], current = layouts[bottom]
+            let label = "Bottom \(bottom - 1)% to \(bottom)% (gap compression starts at \(transition)%)"
+            let sameSizes = previous.elapsedSize == current.elapsedSize && previous.remainingSize == current.remainingSize
+                && previous.titleSize == current.titleSize
+            if bottom == transition { XCTAssertTrue(previous.fits && current.fits && sameSizes, label) }
+            guard previous.fits, current.fits, sameSizes else { continue }
+            // Each of the three inter-pane placements can round to a whole pixel.
+            let limit = current.usable.minY - previous.usable.minY + 3
+            for (before, after) in zip(stack(previous), stack(current)) {
+                XCTAssertLessThanOrEqual(abs(after.maxY - before.maxY), limit, label)
+                XCTAssertLessThanOrEqual(abs(after.minY - before.minY), limit, label)
+            }
+            XCTAssertLessThanOrEqual(abs(gaps(current).reduce(0, +) - gaps(previous).reduce(0, +)), limit, label)
+        }
+        for bottom in layouts.indices.reversed() {
+            look.safeZones = zones(top: 5, bottom: bottom)
+            XCTAssertEqual(look.layout, layouts[bottom], "Restoring Bottom \(bottom)%")
+        }
+    }
+
     func testGiveWayOrderAcrossShrinkingArea() {
         var seen = Set<String>()
         for zoom in [ZoomWindow.off, .auto] {
@@ -471,11 +507,16 @@ final class CueLayoutTests: XCTestCase {
 
                     // 1 before 2: gaps only shrink once the waveforms are at their floors.
                     if shrunkGaps { XCTAssertTrue(waveformsAtMinimum(layout), label) }
-                    // 2 before 3: clocks only step down once waveforms and gaps are at their floors.
+                    // 2 before 3: the larger clocks must have run out of space even at minimum gaps.
+                    // The smaller clocks can then give some of that space back to the gaps.
                     if steppedClocks {
                         XCTAssertTrue(waveformsAtMinimum(layout), label)
-                        if layout.elapsedSize == .small {
-                            for gap in gaps(layout) { XCTAssertLessThanOrEqual(gap, M.minimumGap + 1.5, label) }
+                        if let previous, previous.elapsedSize != layout.elapsedSize {
+                            XCTAssertTrue(waveformsAtMinimum(previous), label)
+                            let panes = stack(previous)
+                            let tightSpan = panes.reduce(0) { $0 + $1.height } + CGFloat(panes.count - 1) * M.minimumGap
+                            // Allow a pixel per pane for the fit allowance and anchor rounding.
+                            XCTAssertGreaterThan(tightSpan + CGFloat(panes.count), layout.safeFrame.height, label)
                         }
                     }
                     // 3 before 4: the title only shrinks once both clocks are Small.
@@ -489,6 +530,7 @@ final class CueLayoutTests: XCTestCase {
                         XCTAssertEqual(layout.titleSize, 34, label)
                         XCTAssertEqual(layout.elapsedSize, .small, label)
                         XCTAssertTrue(waveformsAtMinimum(layout), label)
+                        for gap in gaps(layout) { XCTAssertLessThanOrEqual(gap, M.minimumGap + 1.5, label) }
                     }
                     // Monotonic: a larger reserve never grows anything back.
                     if let previous {
