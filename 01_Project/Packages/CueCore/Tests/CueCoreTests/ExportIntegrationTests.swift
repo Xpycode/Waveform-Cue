@@ -321,6 +321,78 @@ final class ExportIntegrationTests: XCTestCase {
         }
     }
 
+    func testReorderedOffsetRemainingLeftMXFMatchesViewer() throws {
+        let ffmpeg = try TestAudio.ffmpeg()
+        let dir = try TestAudio.temporaryDirectory("export-pane-order")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let wav = dir.appendingPathComponent("Pane order.wav")
+        try TestAudio.generate("0.5*sin(2*PI*440*t)", seconds: 2, to: wav, ffmpeg: ffmpeg)
+        let pcm = try PreparedAudio.decode(wav, encoder: ffmpeg, into: dir)
+        let track = try AudioTrack.analyse(wav, audio: pcm)
+        let preset = ExportPreset.avcIntra1080p25
+        var job = CueJob(source: wav, presetID: preset.id)
+        job.appearance.paneOrder = [.title, .clocks, .fullTrack, .closeUp]
+        job.appearance.leftClock = .remaining
+        job.appearance.offsets.clocks = -10
+        job.appearance.warning = .five
+        job.appearance.solidRedAt = .oneSecond
+        job.appearance.elapsed.color = CueColor(0, 0, 1)
+        job.appearance.remaining.color = job.appearance.elapsed.color
+        job.appearance.fadeCloseUp = false
+        job.appearance.markersEnabled = false
+        let look = job.effectiveAppearance
+        let markers = job.effectiveMarkers(detected: track.markers)
+
+        // Enter at the package calls made by MXFJobExporter and MonitorView. Inspector controls
+        // and monitor-only guides and handles are covered separately in the app.
+        let export = MXFExport.timeline(for: track, preset: preset, trim: job.effectiveTrim,
+                                        markers: markers, target: look.countdownTarget)
+        let file = dir.appendingPathComponent("pane-order.mxf")
+        try MXFExport.run(snapshot: .init(track: track, label: job.label, appearance: look), preset: preset,
+                          timeline: export, encoder: ffmpeg, destination: file, progress: { _ in })
+        let frame = 35  // 1.4 s at 25 fps, inside the solid-red warning
+        let decoded = try FFmpegRun.decodeFrame(file, index: frame, ffmpeg: ffmpeg)
+        let viewer = CuePicture.timeline(for: track, appearance: look, markers: markers, trim: job.effectiveTrim)
+        func preview(_ appearance: CueAppearance) -> [UInt8] {
+            Preview.render(track, timeline: viewer, position: frame, label: job.label, appearance: appearance)
+        }
+        let expected = preview(look)
+        let mean = Preview.meanError(decoded, expected)
+        let worst = Preview.maxBlockError(decoded, expected)
+        print(String(format: "[pane order] frame %d: mean RGB error %.3f, worst 16×16 block %.2f", frame, mean, worst))
+        XCTAssertLessThan(mean, 1)
+        XCTAssertLessThan(worst, 9)
+
+        // Measure the bottoms of the red Remaining and blue Elapsed digits independently of
+        // CueLayout's offset calculation. A run of ink excludes individual compression specks.
+        func digitBottom(_ pixels: [UInt8], left: Bool) throws -> Int {
+            let columns = left ? 0..<960 : 960..<1920
+            for y in 0..<1080 {
+                var ink = 0
+                for x in columns {
+                    let i = ((1079 - y) * 1920 + x) * 4
+                    let (b, g, r) = (pixels[i], pixels[i + 1], pixels[i + 2])
+                    if g < 100 && (left ? r > 180 && b < 100 : b > 180 && r < 100) {
+                        ink += 1
+                        if ink == 20 { return y }
+                    }
+                }
+            }
+            throw CueError(left ? "No red Remaining digits on the left" : "No blue Elapsed digits on the right")
+        }
+        var automatic = look
+        automatic.offsets.clocks = 0
+        let unshifted = preview(automatic)
+        for left in [true, false] {
+            let actualY = try digitBottom(decoded, left: left)
+            let automaticY = try digitBottom(unshifted, left: left)
+            XCTAssertGreaterThan(CGFloat(actualY), look.layout.overviewLabelBaseline)
+            XCTAssertLessThan(CGFloat(actualY), look.layout.titleBand.minY)
+            XCTAssertEqual(actualY - automaticY, -10, accuracy: 1)
+            print("[pane order] \(left ? "Remaining left" : "Elapsed right") digit bottom: \(actualY) px, automatic \(automaticY) px")
+        }
+    }
+
     private func check(_ c: Case, track: AudioTrack, ffmpeg: URL, dir: URL) throws {
         let name = c.preset.id.rawValue
         let label = CueLabel(text: "Integration " + name)
