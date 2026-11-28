@@ -172,17 +172,26 @@ final class JobWorkspaceTests: XCTestCase {
             if let owner { try JobWorkspace.claimSessionDirectory(url, pid: owner) }
             return url
         }
-        let current = try folder("WaveformCue-current")
-        let crashed = try folder("WaveformCue-crashed")
-        let deadOwner = try folder("WaveformCue-dead", owner: 111)
-        let liveOwner = try folder("WaveformCue-live", owner: 222)
+        let current = try folder("WaveformCue-" + UUID().uuidString)
+        let crashed = try folder("WaveformCue-" + UUID().uuidString)
+        try fm.setAttributes([.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: crashed.path)
+        let claiming = try folder("WaveformCue-" + UUID().uuidString)
+        let deadOwner = try folder("WaveformCue-" + UUID().uuidString, owner: 111)
+        let liveOwner = try folder("WaveformCue-" + UUID().uuidString, owner: 222)
+        let invalidOwner = try folder("WaveformCue-" + UUID().uuidString)
+        try "incomplete".write(to: invalidOwner.appendingPathComponent("owner.pid"), atomically: true, encoding: .utf8)
+        try fm.setAttributes([.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: invalidOwner.path)
         let unrelated = try folder("SomethingElse-1")
-        let file = root.appendingPathComponent("WaveformCue-file")
+        let project = try folder("WaveformCue-project", owner: 111)
+        let backup = try folder("WaveformCue-" + UUID().uuidString + ".backup", owner: 111)
+        let file = root.appendingPathComponent("WaveformCue-" + UUID().uuidString)
         try Data([1]).write(to: file)
 
         let removed = JobWorkspace.removeStaleSessionDirectories(in: root, keeping: current, isRunning: { $0 == 222 })
         XCTAssertEqual(Set(removed.map(\.lastPathComponent)), [crashed.lastPathComponent, deadOwner.lastPathComponent])
-        for kept in [current, liveOwner, unrelated, file] { XCTAssertTrue(fm.fileExists(atPath: kept.path), kept.lastPathComponent) }
+        for kept in [current, liveOwner, invalidOwner, claiming, unrelated, project, backup, file] {
+            XCTAssertTrue(fm.fileExists(atPath: kept.path), kept.lastPathComponent)
+        }
         for gone in [crashed, deadOwner] { XCTAssertFalse(fm.fileExists(atPath: gone.path), gone.lastPathComponent) }
         XCTAssertEqual(JobWorkspace.removeStaleSessionDirectories(in: root.appendingPathComponent("missing"), keeping: current), [])
     }
@@ -192,13 +201,13 @@ final class JobWorkspaceTests: XCTestCase {
     /// left over from an earlier launch whose PID was reused, and goes.
     func testSessionFolderOfARunningProcessIsKept() throws {
         let root = directory.appendingPathComponent("tmp2", isDirectory: true)
-        let other = root.appendingPathComponent("WaveformCue-other", isDirectory: true)
-        let reused = root.appendingPathComponent("WaveformCue-reused", isDirectory: true)
+        let other = root.appendingPathComponent("WaveformCue-" + UUID().uuidString, isDirectory: true)
+        let reused = root.appendingPathComponent("WaveformCue-" + UUID().uuidString, isDirectory: true)
         try JobWorkspace.claimSessionDirectory(other, pid: getppid())
         try JobWorkspace.claimSessionDirectory(reused)
         XCTAssertTrue(JobWorkspace.processIsRunning(getppid()))
         XCTAssertFalse(JobWorkspace.processIsRunning(0))
-        let removed = JobWorkspace.removeStaleSessionDirectories(in: root, keeping: root.appendingPathComponent("WaveformCue-current"))
+        let removed = JobWorkspace.removeStaleSessionDirectories(in: root, keeping: root.appendingPathComponent("WaveformCue-" + UUID().uuidString))
         XCTAssertEqual(removed.map(\.lastPathComponent), [reused.lastPathComponent])
         XCTAssertTrue(FileManager.default.fileExists(atPath: other.path))
     }
@@ -219,9 +228,17 @@ final class JobWorkspaceTests: XCTestCase {
         let fresh = try file(a, ".waveform-cue-\(UUID().uuidString).mxf", age: 60)
         let finished = try file(a, "Cue.mxf", age: 3600)
         let oldB = try file(b, ".waveform-cue-\(UUID().uuidString).mxf", age: 601)
+        let probe = try file(b, ".waveform-cue-probe-\(UUID().uuidString)", age: 601)
+        let id = UUID().uuidString
+        let unrelated = try [
+            ".waveform-cue-client-notes", ".waveform-cue-client.mxf", ".waveform-cue-\(id).txt",
+            ".waveform-cue-\(id).mxf.bak", ".waveform-cue-\(id)", ".waveform-cue-probe-settings",
+            ".waveform-cue-probe-\(id).mxf"
+        ].map { try file(a, $0, age: 3600) }
         let removed = JobWorkspace.removeStaleExportTemps(in: [a, b, a, directory.appendingPathComponent("missing")],
                                                           now: now)
-        XCTAssertEqual(Set(removed.map(\.lastPathComponent)), [oldA.lastPathComponent, oldB.lastPathComponent])
+        XCTAssertEqual(Set(removed.map(\.lastPathComponent)), [oldA.lastPathComponent, oldB.lastPathComponent, probe.lastPathComponent])
+        for kept in unrelated { XCTAssertTrue(fm.fileExists(atPath: kept.path), kept.lastPathComponent) }
         XCTAssertTrue(fm.fileExists(atPath: fresh.path), "an export still writing is left alone")
         XCTAssertTrue(fm.fileExists(atPath: finished.path), "finished files are never touched")
         XCTAssertFalse(fm.fileExists(atPath: oldA.path))

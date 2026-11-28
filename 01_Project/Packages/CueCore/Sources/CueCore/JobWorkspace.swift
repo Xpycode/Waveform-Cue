@@ -130,6 +130,13 @@ extension JobWorkspace {
     /// The file in a session folder naming the process that owns it.
     nonisolated static let ownerFileName = "owner.pid"
 
+    /// Matches the spelling of UUID().uuidString between the writer's literal prefix and suffix.
+    private nonisolated static func hasGeneratedName(_ name: String, prefix: String, suffix: String = "") -> Bool {
+        guard name.hasPrefix(prefix), name.hasSuffix(suffix) else { return false }
+        let id = String(name.dropFirst(prefix.count).dropLast(suffix.count))
+        return UUID(uuidString: id)?.uuidString == id
+    }
+
     /// Marks `directory` (the current session folder, created if needed) as owned by this
     /// process, so another instance's launch cleanup leaves it alone.
     public nonisolated static func claimSessionDirectory(_ directory: URL = PreparedAudio.sessionDirectory,
@@ -138,31 +145,37 @@ extension JobWorkspace {
         try String(pid).write(to: directory.appendingPathComponent(ownerFileName), atomically: true, encoding: .utf8)
     }
 
-    /// Deletes session folders of decoded CAFs (`WaveformCue-*`) in `root` left by earlier
-    /// launches that crashed or were killed. Keeps `current` and any folder whose owner process
-    /// is still running (a second instance). Returns the folders deleted.
+    /// Deletes session folders of decoded CAFs left by earlier launches. Keeps the current folder,
+    /// live owners and recently created ownerless folders that another instance may be claiming.
     @discardableResult
     public nonisolated static func removeStaleSessionDirectories(
         in root: URL = FileManager.default.temporaryDirectory,
         keeping current: URL = PreparedAudio.sessionDirectory,
         isRunning: (Int32) -> Bool = JobWorkspace.processIsRunning) -> [URL] {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .contentModificationDateKey]
+        guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys)) else { return [] }
         let keep = current.standardizedFileURL.path
+        let unclaimedCutoff = Date().addingTimeInterval(-600)
         var removed: [URL] = []
-        for entry in entries where entry.lastPathComponent.hasPrefix(sessionDirectoryPrefix) {
-            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true,
+        for entry in entries where hasGeneratedName(entry.lastPathComponent, prefix: sessionDirectoryPrefix) {
+            guard let values = try? entry.resourceValues(forKeys: keys), values.isDirectory == true,
                   entry.standardizedFileURL.path != keep else { continue }
-            let owner = (try? String(contentsOf: entry.appendingPathComponent(ownerFileName), encoding: .utf8))
-                .flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            if let owner, owner != getpid(), isRunning(owner) { continue }
+            do {
+                let marker = try String(contentsOf: entry.appendingPathComponent(ownerFileName), encoding: .utf8)
+                guard let owner = Int32(marker.trimmingCharacters(in: .whitespacesAndNewlines)), owner > 0 else { continue }
+                if owner != getpid(), isRunning(owner) { continue }
+            } catch CocoaError.fileReadNoSuchFile {
+                guard let modified = values.contentModificationDate, modified < unclaimedCutoff else { continue }
+            } catch {
+                continue
+            }
             if (try? fm.removeItem(at: entry)) != nil { removed.append(entry) }
         }
         return removed
     }
 
-    /// Deletes hidden partial exports (`.waveform-cue-*`) older than `age` in `folders`: an
-    /// export that is still writing keeps touching its file, so only a crashed one is removed.
+    /// Deletes hidden partial MXFs and writability probes with generated names older than `age` in `folders`.
     /// Missing or unreadable folders are skipped. Returns the files deleted.
     @discardableResult
     public nonisolated static func removeStaleExportTemps(in folders: [URL], olderThan age: TimeInterval = 600,
@@ -173,7 +186,10 @@ extension JobWorkspace {
         for folder in folders where seen.insert(folder.standardizedFileURL.path).inserted {
             guard let entries = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [
                 .contentModificationDateKey, .isRegularFileKey]) else { continue }
-            for entry in entries where entry.lastPathComponent.hasPrefix(exportTempPrefix) {
+            for entry in entries {
+                let name = entry.lastPathComponent
+                guard hasGeneratedName(name, prefix: exportTempPrefix, suffix: ".mxf")
+                        || hasGeneratedName(name, prefix: exportTempPrefix + "probe-") else { continue }
                 guard let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
                       values.isRegularFile == true,
                       let modified = values.contentModificationDate, now.timeIntervalSince(modified) > age else { continue }

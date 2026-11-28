@@ -246,8 +246,12 @@ final class AudioTrackTests: XCTestCase {
             try fm.createDirectory(at: url, withIntermediateDirectories: true)
             return url
         }
-        let stale = try directory("WaveformCue-AAAA")
-        let current = try directory("WaveformCue-CURRENT")
+        let stale = try directory("WaveformCue-" + UUID().uuidString)
+        try fm.setAttributes([.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: stale.path)
+        let current = try directory("WaveformCue-" + UUID().uuidString)
+        let live = try directory("WaveformCue-" + UUID().uuidString)
+        try JobWorkspace.claimSessionDirectory(live, pid: getppid())
+        let samePrefix = try directory("WaveformCue-recordings")
         let other = try directory("OtherApp-AAAA")
         let nearMiss = try directory("WaveformCue")
         let file = base.appendingPathComponent("WaveformCue-file")
@@ -256,6 +260,8 @@ final class AudioTrackTests: XCTestCase {
         PreparedAudio.removeStaleSessionDirectories(in: base, keeping: current)
 
         XCTAssertFalse(fm.fileExists(atPath: stale.path))
-        for kept in [current, other, nearMiss, file] { XCTAssertTrue(fm.fileExists(atPath: kept.path), kept.lastPathComponent) }
+        for kept in [current, live, samePrefix, other, nearMiss, file] {
+            XCTAssertTrue(fm.fileExists(atPath: kept.path), kept.lastPathComponent)
+        }
     }
 }
