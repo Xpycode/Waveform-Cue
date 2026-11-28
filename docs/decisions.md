@@ -126,3 +126,10 @@ The title face also supplies the section labels. The clock face supplies the tim
 On the appearance/playhead branch, the operator chose build 17’s Apply to All and last-edited import default. Apply to All copies shared settings to every other eligible job, including failed, cancelled and paused jobs. Done and exporting jobs keep their settings. Each import captures the default when added. The inspector’s dots and individual resets use the factory appearance. This supersedes Wave 4’s explicit Save as Default and pending-only copy.
 
 The two centering controls remain independent. Saved Wave 4 playhead and shading values migrate to their build 17 equivalents. The starting zoom is limited by the clip length, and safe zones compress waveforms before gaps. Fonts, visibility, feature switches and dynamic end zoom remain available. The approved Appearance panes plan is a separate round.
+
+
+## 2026-11-28 · Minimum spacing in blocked cue previews
+
+Build 17 rounded waveform and clock positions to the nearest picture pixel. In the 64 reference layouts with 30% top and bottom safe zones, export was already disabled, and rounding could leave only 11.5 pixels between neighbours.
+
+The operator chose the new 12-pixel minimum for those previews. The layout rounds an element farther down when rounding up would close the gap. All 256 exportable reference layouts keep their recorded geometry. The tests retain the original fixture and specify the small vertical changes allowed in the blocked previews. [Appearance panes plan](IMPLEMENTATION_PLAN-appearance-panes.md)

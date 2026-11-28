@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 2/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
+**Progress:** 5/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -137,7 +137,7 @@ The spike (P1.3) prototypes the header on a branch that is not merged as it stan
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** Wave 0 requested on 2026-11-28. PU1 approved. Later waves need a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
+- **Execution scope/limits:** Waves 0 and 1 requested on 2026-11-28. PU1 approved. Wave 2 and later require a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
 - **Branch:** `feature/appearance-panes`, created locally from the reconciled build 17 branch in P0.1. Publishing the branch to the other Mac needs separate authorization. The work changes saved-job handling and the picture, so `main` stays at build 17 until P4.4. Merge to `main` is a fast-forward at the build 18 handoff.
 - **Paths:** code paths are relative to `01_Project/`; docs are in `docs/`.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` when files are added), Git and merges, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
@@ -182,15 +182,16 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 ### Wave 1 (parallel — three tasks; file sets are disjoint)
 
-- [ ] **P1.1**: Layout by pane order, pair gaps and the title band (spec B, D, F)
+- [x] **P1.1**: Layout by pane order, pair gaps and the title band (spec B, D, F)
   - Depends on / external gates: P0.2
-  - Owns: `CueLayout.swift`; `CuePicture.swift` (`caption`, both `hitTarget` functions); the one-line `layout` property in `CueAppearance.swift`; `CueLayoutTests.swift`, `RenderTests.swift`, `TrimPreRollTests.swift`, `BaselineTests.swift`, `Build17LayoutTests.swift`
+  - Owns: `CueLayout.swift`; `CuePicture.swift` (`caption`, both `hitTarget` functions); the `layout` entry point in `CueAppearance.swift`; `CueLayoutTests.swift`, `RenderTests.swift`, `TrimPreRollTests.swift`, `BaselineTests.swift`, `Build17LayoutTests.swift`
   - Detail: `Stack` takes its segments from `appearance.paneOrder` (the close-up is skipped with zoom Off). Gaps come from the pair rule in the planning findings; give-way keeps today's order (waveform heights, gaps, clock sizes, title size). The layout returns a title band rectangle at the Title pane's place: `titleArea` and `extent(of: .title)` become that band, so `fits` sees the title. An empty title keeps the band. `caption` places the box in the band by `titleAlignment` and ignores `CueLabel.position`; width fitting and the ellipsis at 34 points stay. `hitTarget` no longer returns `.title`, so a press on the title acts like a press on the background (the app's drag code goes quiet without being edited). The slate is untouched.
   - Interface: `CueLayout.init(appearance:)` reads order, alignment and safe zones from the appearance; `CueLayout.titleBand: CGRect`; `CueLayout.paneOrder`. The `clockPosition:` initialiser parameter is removed; tests build an order instead.
   - Success: `Build17LayoutTests` passes for both old clock positions through the migration; the 15 default, zoom-Off and warning hashes and `testNoSafeZonesClocksBelowEqualsBuild10Constants` are unchanged; the `clocksAbove` hashes from P0.1 are unchanged; the five `customTitle` hashes are re-recorded on purpose for the macOS in use and the other table's five entries are marked pending for PX3 (skipped with a message, not failed); the tests of free title travel and title drag are replaced by band and alignment tests; the `stack` and `gaps` helpers, the give-way sequence and the reserved-band sweeps run across all 24 orders; a new test shows all 24 orders fit at every clock-size pair and zoom setting with safe zones None; every pair of neighbouring extents is at least 12 pixels apart in every swept case.
+  - Operator decision (2026-11-28): enforce the 12-pixel gap in blocked previews too. Keep all 256 exportable fixture rows exact and compare the other 64 against explicit placement differences. The original build 17 fixture remains the reference.
   - Backpressure: `swift test --package-path 01_Project/Packages/CueCore --scratch-path <scratch> --filter 'CueLayoutTests|RenderTests|TrimPreRollTests|BaselineTests|Build17LayoutTests'`, then the full suite at merge
 
-- [ ] **P1.2**: Offset resolution as a pure function (spec C, arithmetic only)
+- [x] **P1.2**: Offset resolution as a pure function (spec C, arithmetic only)
   - Depends on / external gates: P0.2
   - Owns: new `Packages/CueCore/Sources/CueCore/OffsetResolver.swift`, `OffsetText.swift`; new `OffsetResolverTests.swift`, `OffsetTextTests.swift`
   - Detail: `OffsetResolver.resolve` turns stored offsets into offsets in use for elements given as vertical spans from top to bottom, a frame and a minimum gap of 12. `OffsetResolver.limits` gives the range one element may take while the others hold their offsets in use. A two-pass clamp over the stack is the starting point; the spec fixes the properties, not the algorithm. `OffsetText.format` and `parse` implement the Offset field's text (see planning findings).
@@ -198,7 +199,7 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
   - Success: property tests over generated stacks: stored offsets that fit are returned unchanged; every result keeps all neighbours at least 12 apart and inside the frame whenever the automatic positions do; each offset in use has the sign of its stored value and is no larger in size; the result is the same for the same inputs and whole pixels throughout, including with half-pixel spans; relaxing the frame returns the earlier result; two neighbours stored toward each other resolve by a documented rule; `limits` never allows a step that `resolve` would undo; a stack with no free space gives all zeros. Text tests: "+12 px", "0 px", "−8 px" out; `12`, `+12`, `-8`, `−8`, `12 px`, `12px` in; `abc`, `12.5` and the empty string rejected.
   - Backpressure: `swift test … --filter 'OffsetResolverTests|OffsetTextTests'`
 
-- [ ] **P1.3**: Feasibility spike: grip drag in the real sidebar (spec B; the spec's Feasibility check)
+- [x] **P1.3**: Feasibility spike: grip drag in the real sidebar (spec B; the spec's Feasibility check)
   - Depends on / external gates: P0.2. The sidebar edit stays on the task's branch.
   - Owns: new `Packages/CueCore/Sources/CueCore/PaneReorder.swift` and `PaneReorderTests.swift`; new `Sources/App/Views/AppKit/SidebarPaneView.swift` and `PaneDragController.swift`; a temporary edit of `CueAppearanceSidebar.swift` on the spike branch only; evidence in the session log
   - Detail: build the pane container (header with disclosure triangle, grip and name; body) and the drag controller as new files, following the planning findings: tracking loop with watchdog, 4-point threshold, insertion line in an overlay, move on mouse-up through `insertArrangedSubview`, Escape cancels, a plain click opens the Move Up / Move Down menu, edge scrolling by hand, `isTracking` deferral in the host. Wire two panes of the real sidebar (Clocks and the waveform rows) on the branch. Also try collapsing (hidden body against height constraint) and `recalculateKeyViewLoop()` in the SwiftUI-hosted window, and note which works.
@@ -304,7 +305,7 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 ## Operational Learnings
 
-- None yet.
+- The neighbour-gap check uses rounded picture positions. Build 17’s nearest-pixel rounding sometimes left 11.5 pixels in blocked previews. A hidden title can also leave a fitting automatic extent half a pixel past the safe frame. The offset resolver preserves zero there and permits inward movement.
 
 ## Blocked Tasks
 
@@ -318,6 +319,9 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 |---|---|---|---|---|
 | 0 / P0.1 | Coordinator, first prerequisite | Original build 17 produced 320 geometry cases and five clocks-above hashes on macOS 15. Reconciled branch matched all of them. Full suite passed 304/304 with FFmpeg, benchmarks and EVS samples enabled. | `a2b58e6` | P0.2 follows. PX3 still requires macOS 27. |
 | 0 / P0.2 | Coordinator after P0.1. A fresh independent reviewer checked the migration and its fix. | A job emitted by build 17 migrates and round-trips. Corrupt entries preserve their valid neighbours. Legacy title edits update the job and editor copy. All 309 tests passed with zero skips. Debug app built, signature verified and helper launch checked. [Session evidence](sessions/2026-11-28.md#appearance-panes-wave-0) | `0b9c441` | Selected Wave 0 complete. Wave 1 (P1.1–P1.3) ready. PX1–PX3 open. |
+| 1 / P1.1 | Fresh picture-layout agent, coordinator integrated; independent review checked the corrections | 64 focused tests, 256 exact exportable references, 64 explicit blocked-preview deltas, 3,072 fitting combinations. Full suite 327/327, no skips. Integrated viewer and title click verified. [Wave 1 validation](sessions/2026-11-28.md#appearance-panes-wave-1) | `7e68cfa`, countdown assertion `1eea36a` | P2.1 and P2.2 ready. PX3 still needs macOS 27. |
+| 1 / P1.2 | Fresh offset agent plus independent review | 10 focused tests, including generated stacks and fractional automatic edges. Full suite passed. | `101c33a`, `dd5f1cb` | P2.1 integrates offsets. |
+| 1 / P1.3 | Fresh sidebar agent, coordinator built and drove the Atlas helper, independent reviewer checked job identity and lock | 3 pure tests; 10/10 releases in the real sidebar. Control values and title focus held. Click menus, collapse and reopen checked. [Wave 1 validation](sessions/2026-11-28.md#appearance-panes-wave-1) | Feature `ede37a5`, `591f60d`. Prototype wiring on `wave1/sidebar-trial` at `adecd01`. | Keep dragging for P2.2. Physical Escape and stationary edge scrolling remain in PX1. |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution

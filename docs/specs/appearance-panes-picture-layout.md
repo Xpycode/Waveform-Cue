@@ -87,7 +87,7 @@ The control labels are a proposal. The exact placement is confirmed under `36_ui
 - **Observable result:** a pane lands where the insertion line showed it, ten times out of ten, including when the list is scrolled and when the pointer leaves the sidebar. The contrary result is a pane that lands elsewhere, a drag that sticks, or controls that lose their values.
 - **Agreed limit:** half a session, sidebar code only, no layout engine work.
 - **Stop/replan:** if the drag is unreliable within the limit, ship Move Up and Move Down from the grip's menu alone and record drag as a follow-up. The layout engine (sections B to E) does not depend on the result.
-- **Result:** not run.
+- **Result (2026-11-28, macOS 15):** retain grip dragging for Wave 2. All ten releases produced the expected order in the real sidebar, including five with the list scrolled and two released outside it. Both menu directions worked, and the active title field kept its text and keyboard focus. Escape during a drag and scrolling while holding still at the edge remain in PX1. [Trial evidence](../sessions/2026-11-28.md#appearance-panes-wave-1)
 
 ---
 
