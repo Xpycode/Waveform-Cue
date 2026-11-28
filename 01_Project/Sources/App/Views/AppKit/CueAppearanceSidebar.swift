@@ -96,7 +96,8 @@ final class CueAppearanceSidebar: NSView {
     private let roomMessage = NSTextField(wrappingLabelWithString: "Safe zones leave too little room")
     private var customZoneRows: [NSGridRow] = []
     private var roomMessageRow: NSGridRow?
-    private var offsetRows: [PicturePane: NSGridRow] = [:]
+    private var offsetControls: [PicturePane: PaneOffsetControl] = [:]
+    private var offsetsEditable = true
     private static let collapsedKey = "WaveformCue.collapsedPanes"
     private var settings: CueAppearance
     private let factory = CueAppearance()
@@ -108,15 +109,16 @@ final class CueAppearanceSidebar: NSView {
     private var overrideRows: [(label: NSControl, title: String, settings: [CueAppearance.Setting])] = []
     typealias ReorderTarget = (jobID: UUID?, appearance: CueAppearance, isEditable: Bool)
     private let reorderTarget: () -> ReorderTarget?
-    private let changed: (CueAppearance) -> Void
+    private let changed: (CueAppearance, Bool) -> Void
 
     init(settings: CueAppearance, clockFrames: Int?, labelField: NSTextField,
          reorderTarget: @escaping () -> ReorderTarget?, reportLocked: @escaping () -> Void,
-         changed: @escaping (CueAppearance) -> Void) {
+         changed: @escaping (CueAppearance, Bool) -> Void) {
         self.settings = settings
         self.clockFrames = clockFrames
         self.reorderTarget = reorderTarget
         self.changed = changed
+        offsetsEditable = reorderTarget()?.isEditable == true
         super.init(frame: .zero)
 
         if #available(macOS 26.0, *) { prefersCompactControlSizeMetrics = true }
@@ -295,9 +297,12 @@ final class CueAppearanceSidebar: NSView {
         let bodies: [PicturePane: NSGridView] = [.title: title, .fullTrack: fullTrack, .closeUp: closeUp, .clocks: clocks]
         for id in settings.paneOrder {
             guard let body = bodies[id] else { continue }
-            let offsetRow = body.addRow(with: [])
-            offsetRow.isHidden = true
-            offsetRows[id] = offsetRow
+            let offset = PaneOffsetControl(pane: id)
+            offset.onEdit = { [weak self] value, deferringSave in
+                self?.setOffset(value, for: id, deferringSave: deferringSave)
+            }
+            offsetControls[id] = offset
+            body.addRow(with: [label("Offset"), offset])
             let pane = SidebarPaneView(title: id.displayName, movable: true, body: body)
             paneViews[id] = pane
             addPane(pane, key: id.rawValue)
@@ -386,7 +391,7 @@ final class CueAppearanceSidebar: NSView {
         let id = context.order[from]
         var proposed = target.appearance
         proposed.paneOrder = order
-        changed(proposed)
+        changed(proposed, false)
         // The model synchronously feeds the accepted appearance back through sync(to:).
         guard settings.paneOrder == order, let to = order.firstIndex(of: id) else { return false }
         let message = "\(id.displayName), \(to + 1) of \(order.count)"
@@ -400,6 +405,12 @@ final class CueAppearanceSidebar: NSView {
 
     func jobDidLock(_ id: UUID) {
         dragController?.jobDidLock(id)
+        if reorderTarget()?.jobID == id { invalidateOffsetEditing() }
+    }
+
+    func invalidateOffsetEditing() {
+        offsetsEditable = false
+        for control in offsetControls.values { control.invalidateEditing() }
     }
 
     func closeColorPicker() {
@@ -429,7 +440,7 @@ final class CueAppearanceSidebar: NSView {
         guard let target = reorderTarget() else { return }
         settings = target.appearance.resetting(setting, to: factory)
         refresh()
-        changed(settings)
+        changed(settings, false)
     }
 
     func sync(to settings: CueAppearance, clockFrames: Int?) {
@@ -437,10 +448,25 @@ final class CueAppearanceSidebar: NSView {
             pendingDisplay = (settings, clockFrames)
             return
         }
-        guard self.settings != settings || self.clockFrames != clockFrames else { return }
+        let editable = reorderTarget()?.isEditable == true
+        guard self.settings != settings || self.clockFrames != clockFrames || offsetsEditable != editable else { return }
+        offsetsEditable = editable
         self.settings = settings
         self.clockFrames = clockFrames
         refresh()
+    }
+
+    private func setOffset(_ value: Int, for pane: PicturePane, deferringSave: Bool) {
+        guard let target = reorderTarget() else { return }
+        let layout = target.appearance.layout
+        let limits = layout.offsetLimits(for: pane)
+        var offsets = layout.offsetsInUse
+        let clamped = min(max(value, limits.lowerBound), limits.upperBound)
+        offsets[pane] = clamped
+        guard offsets != target.appearance.offsets else { return }
+        var proposed = target.appearance
+        proposed.offsets = offsets
+        changed(proposed, deferringSave)
     }
 
     @objc private func edit(_ sender: NSControl) {
@@ -489,13 +515,13 @@ final class CueAppearanceSidebar: NSView {
         default: return
         }
         refresh()
-        changed(settings)
+        changed(settings, false)
     }
 
     @objc private func reset() {
         settings = factory
         refresh()
-        changed(settings)
+        changed(settings, false)
     }
 
     private func refresh() {
@@ -554,7 +580,13 @@ final class CueAppearanceSidebar: NSView {
         leftClock.selectedSegment = LeftClock.allCases.firstIndex(of: settings.leftClock)!
         safeZonePreset.selectItem(withTitle: settings.safeZones.preset.title)
         showGuides.state = settings.showGuides ? .on : .off
-        updateSafeZoneControls()
+        let layout = settings.layout
+        updateSafeZoneControls(layout: layout)
+        for (pane, control) in offsetControls {
+            let limits = layout.offsetLimits(for: pane)
+            control.display(layout.offsetsInUse[pane], limits: limits,
+                            editable: offsetsEditable && limits.lowerBound < limits.upperBound)
+        }
         zoom.selectItem(withTitle: settings.zoom.title)
         elapsedColor.color = settings.elapsed.color.nsColor
         remainingColor.color = settings.remaining.color.nsColor
@@ -566,7 +598,7 @@ final class CueAppearanceSidebar: NSView {
         fadeFullTrack.isEnabled = settings.warning != .off
     }
 
-    private func updateSafeZoneControls() {
+    private func updateSafeZoneControls(layout: CueLayout) {
         let custom = settings.safeZones.custom
         let values = [custom.top, custom.bottom, custom.left, custom.right]
         safeZonePreset.isEnabled = settings.safeZonesEnabled
@@ -579,6 +611,6 @@ final class CueAppearanceSidebar: NSView {
             zoneValues[index].textColor = editable ? .labelColor : .disabledControlTextColor
         }
         for row in customZoneRows { row.isHidden = !editable }
-        roomMessageRow?.isHidden = settings.layout.fits
+        roomMessageRow?.isHidden = layout.fits
     }
 }

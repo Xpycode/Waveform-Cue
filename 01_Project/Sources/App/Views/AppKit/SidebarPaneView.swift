@@ -1,4 +1,5 @@
 import AppKit
+import CueCore
 
 /// A persistent arranged view. Its controls and field editor stay attached when the
 /// containing stack moves the pane with insertArrangedSubview(_:at:).
@@ -143,4 +144,114 @@ private final class PaneGrip: NSView {
     override func mouseDown(with event: NSEvent) { pressed?(event) }
     override func accessibilityPerformPress() -> Bool { showMenu?(); return true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+}
+
+/// The field commits on Return, Tab or loss of focus. The stepper sends every repeat.
+final class PaneOffsetControl: NSStackView, NSTextFieldDelegate {
+    private let pane: PicturePane
+    private let field = NSTextField()
+    private var stepper = NSStepper()
+    private var fieldWasEdited = false
+    private let formatter = OffsetFormatter()
+    var onEdit: ((_ value: Int, _ deferringSave: Bool) -> Void)?
+
+    init(pane: PicturePane) {
+        self.pane = pane
+        super.init(frame: .zero)
+        orientation = .horizontal
+        alignment = .centerY
+        spacing = 4
+        field.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        field.alignment = .right
+        field.delegate = self
+        field.formatter = formatter
+        field.objectValue = NSNumber(value: 0)
+        field.cell?.sendsActionOnEndEditing = true
+        field.action = #selector(commitField)
+        addControl(field)
+        installStepper()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func addControl(_ control: NSControl) {
+        control.target = self
+        control.controlSize = .small
+        control.toolTip = "Moves only this element. Positive is up."
+        control.setAccessibilityLabel(pane.displayName + " vertical offset")
+        addArrangedSubview(control)
+    }
+
+    private func installStepper() {
+        stepper.valueWraps = false
+        stepper.increment = 1
+        stepper.autorepeat = true
+        stepper.isContinuous = true
+        stepper.action = #selector(step(_:))
+        addControl(stepper)
+    }
+
+    /// Retire the native sender synchronously. A held stepper can keep dispatching repeat
+    /// actions across a selection change or even a rapid export lock and unlock.
+    func invalidateEditing() {
+        stepper.action = nil
+        stepper.isEnabled = false
+        fieldWasEdited = false
+        field.abortEditing()
+        field.isEnabled = false
+    }
+
+    func controlTextDidBeginEditing(_ notification: Notification) { fieldWasEdited = false }
+    func controlTextDidChange(_ notification: Notification) { fieldWasEdited = true }
+
+    func display(_ value: Int, limits: ClosedRange<Int>, editable: Bool) {
+        if editable, stepper.action == nil {
+            stepper.removeFromSuperview()
+            stepper = NSStepper()
+            installStepper()
+            window?.recalculateKeyViewLoop()
+        }
+        if !editable, field.currentEditor() != nil {
+            field.isEnabled = false
+            fieldWasEdited = false
+            field.abortEditing()
+        }
+        if formatter.valueInUse != value {
+            formatter.valueInUse = value
+            showFieldValue()
+        }
+        if stepper.minValue != Double(limits.lowerBound) { stepper.minValue = Double(limits.lowerBound) }
+        if stepper.maxValue != Double(limits.upperBound) { stepper.maxValue = Double(limits.upperBound) }
+        if stepper.integerValue != value { stepper.integerValue = value }
+        field.isEnabled = editable
+        stepper.isEnabled = editable
+        let sign = value < 0 ? "minus " : (value > 0 ? "plus " : "")
+        let units = value.magnitude == 1 ? "pixel" : "pixels"
+        let spoken = "\(sign)\(value.magnitude) \(units)"
+        field.setAccessibilityValueDescription(spoken)
+        stepper.setAccessibilityValueDescription(spoken)
+    }
+
+    @objc private func commitField() {
+        guard field.isEnabled, stepper.action != nil else { return }
+        if let value = (field.objectValue as? NSNumber)?.intValue,
+           fieldWasEdited || value != formatter.valueInUse {
+            onEdit?(value, false)
+        }
+        showFieldValue()
+    }
+
+    @objc private func step(_ sender: NSStepper) {
+        guard sender === stepper, sender.isEnabled else { return }
+        onEdit?(stepper.integerValue, true)
+        if stepper.integerValue != formatter.valueInUse { stepper.integerValue = formatter.valueInUse }
+        showFieldValue()
+    }
+
+    /// Also canonicalise a rejected or clamped entry when the appearance didn't change.
+    private func showFieldValue() {
+        fieldWasEdited = false
+        field.objectValue = NSNumber(value: formatter.valueInUse)
+        if let editor = field.currentEditor() { editor.string = OffsetText.format(formatter.valueInUse) }
+    }
 }

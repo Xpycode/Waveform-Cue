@@ -160,8 +160,9 @@ public final class QueueManager {
     @ObservationIgnored private var saveFailed = false
     /// A save deferred by `update(_:deferringSave:_:)`, written by the next save or `flushPendingSave()`.
     @ObservationIgnored private var pendingSave: Task<Void, Never>?
-    /// How long a deferred save waits for further edits (label keystrokes) before writing.
-    @ObservationIgnored public var deferredSaveDelay: TimeInterval = 0.5
+    /// Wait past the native stepper’s half-second pause before the first repeat. Title typing
+    /// and Offset steps both use this quiet interval before writing the whole queue.
+    @ObservationIgnored public var deferredSaveDelay: TimeInterval = 0.75
     /// Jobs the current run may export; `nil` means every pending job.
     @ObservationIgnored private var runScope: Set<UUID>?
     /// Jobs counted in the overall progress of the current run.

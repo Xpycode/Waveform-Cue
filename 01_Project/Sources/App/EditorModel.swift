@@ -509,6 +509,7 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
         guard force || !unchanged else { return }
         isSelecting = true
         defer { isSelecting = false }
+        if force || id != queue.selectedJobID { appearanceSidebar?.invalidateOffsetEditing() }
         queue.select(id)
         appearanceSidebar?.closeColorPicker()
         // A load in flight is abandoned, not cancelled: its job may still be entitled (it is also
@@ -805,12 +806,12 @@ final class EditorModel: NSObject, @preconcurrency AVAudioPlayerDelegate {
     }
 
     /// An accepted edit becomes the look used by subsequent imports.
-    func updateAppearance(_ appearance: CueAppearance) {
+    func updateAppearance(_ appearance: CueAppearance, deferringSave: Bool = false) {
         let previous = self.appearance
         let trimChanged = previous.trimAndFadesEnabled != appearance.trimAndFadesEnabled
             || previous.preRollEnabled != appearance.preRollEnabled
         let oldTimeline = trimChanged ? previewTimeline : nil
-        if let id = selectedJobID, !queue.update(id, { $0.appearance = appearance }) {
+        if let id = selectedJobID, !queue.update(id, deferringSave: deferringSave, { $0.appearance = appearance }) {
             reportLockedSettings()
             return
         }

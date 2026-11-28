@@ -10,6 +10,7 @@
 		042366648BEC760C42CE00A3 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6FB5801C154716BA548ED36 /* MainWindow.swift */; };
 		13E785A5E98173768F0A12A6 /* QueueSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4858B105B71A20A7F42C05B /* QueueSupport.swift */; };
 		14FB64AED59ED6ED3DA4F4D6 /* PaneDragController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4A0C3928714D869336EA99 /* PaneDragController.swift */; };
+		19F1EDE1EEAC1B740069C4AB /* OffsetFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADC1BF88541331F3141EEB3 /* OffsetFormatter.swift */; };
 		2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97526CE5DCEF8E419CCD701 /* QueueSidebar.swift */; };
 		417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */; };
 		468EA86D1F55238A4ABD5720 /* WaveformCueApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */; };
@@ -41,6 +42,7 @@
 		07C304118E2DE850C5C9C4C3 /* MXFJobExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MXFJobExporter.swift; sourceTree = "<group>"; };
 		2DF670FE79893C490F0C8939 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
 		373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueTableRepresentable.swift; sourceTree = "<group>"; };
+		3ADC1BF88541331F3141EEB3 /* OffsetFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffsetFormatter.swift; sourceTree = "<group>"; };
 		3F59DF60304D0AB83FCF1105 /* zPackages */ = {isa = PBXFileReference; lastKnownFileType = folder; name = zPackages; path = ../../zPackages; sourceTree = SOURCE_ROOT; };
 		432B9F05919250B0355A4D2E /* AppKitButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitButton.swift; sourceTree = "<group>"; };
 		4F503EF1DCD8B47F6602C448 /* WaveformCueApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformCueApp.swift; sourceTree = "<group>"; };
@@ -142,6 +144,7 @@
 				6227EE370806CF454169A8A1 /* InspectorControls.swift */,
 				8F99B5913384DB903BD286E9 /* MonitorRepresentable.swift */,
 				2DF670FE79893C490F0C8939 /* MonitorView.swift */,
+				3ADC1BF88541331F3141EEB3 /* OffsetFormatter.swift */,
 				7A4A0C3928714D869336EA99 /* PaneDragController.swift */,
 				966D328B8646ABD49F343407 /* ProgressBarRepresentable.swift */,
 				373ED918BD0418F3291D3B74 /* QueueTableRepresentable.swift */,
@@ -292,6 +295,7 @@
 				6770E54608C1151EF1E50C0A /* MonitorPane.swift in Sources */,
 				72284B3F02D321E8846024C7 /* MonitorRepresentable.swift in Sources */,
 				E7110E1C3EFC4E6138B63988 /* MonitorView.swift in Sources */,
+				19F1EDE1EEAC1B740069C4AB /* OffsetFormatter.swift in Sources */,
 				14FB64AED59ED6ED3DA4F4D6 /* PaneDragController.swift in Sources */,
 				417ED278F19B5F239647B60B /* ProgressBarRepresentable.swift in Sources */,
 				2AF4A88633C49E8CD194E0CC /* QueueSidebar.swift in Sources */,

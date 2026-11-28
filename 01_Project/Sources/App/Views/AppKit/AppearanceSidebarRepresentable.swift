@@ -29,9 +29,11 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
                                             reorderTarget: { [weak model, weak coordinator] in
             guard let model, let coordinator, model.selectedJobID == coordinator.jobID else { return nil }
             return (model.selectedJobID, model.appearance, model.canEdit)
-        }, reportLocked: { [weak model] in model?.reportLockedSettings() }) { [weak model, weak coordinator] appearance in
+        }, reportLocked: { [weak model] in model?.reportLockedSettings() }) { [weak model, weak coordinator] appearance, deferringSave in
             guard let model else { return }
-            if let coordinator, coordinator.jobID == model.selectedJobID { model.updateAppearance(appearance) }
+            if let coordinator, coordinator.jobID == model.selectedJobID {
+                model.updateAppearance(appearance, deferringSave: deferringSave)
+            }
             coordinator?.sidebar?.sync(to: model.appearance, clockFrames: model.inspectorClockFrames)
         }
         let container = InspectorContainerView()
@@ -51,11 +53,12 @@ struct AppearanceSidebarRepresentable: NSViewRepresentable {
 
     func updateNSView(_ container: InspectorContainerView, context: Context) {
         let coordinator = context.coordinator
-        coordinator.sidebar?.sync(to: appearance, clockFrames: clockFrames)
         if coordinator.jobID != jobID {
+            coordinator.sidebar?.invalidateOffsetEditing()
             coordinator.labelField.abortEditing()
             coordinator.jobID = jobID
         }
+        coordinator.sidebar?.sync(to: appearance, clockFrames: clockFrames)
         if coordinator.labelField.currentEditor() == nil, coordinator.labelField.stringValue != labelText {
             coordinator.labelField.stringValue = labelText
         }
