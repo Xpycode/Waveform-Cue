@@ -5,7 +5,7 @@
 > Task state/evidence is authoritative here; TASKS links here and holds backlog/inbox.
 > Follow the master's `reference/task-state.md` for legacy reconciliation and archival.
 
-**Progress:** 5/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
+**Progress:** 7/13; external acceptance: PU1 approved 2026-11-28; PX1, PX2 and PX3 open.
 **Task states:** unchecked = pending / implemented-unverified / blocked (name gate);
 checked = complete with required evidence. Task identity includes this plan path plus ID.
 
@@ -137,7 +137,7 @@ The spike (P1.3) prototypes the header on a branch that is not merged as it stan
 
 ## Execution schedule and ownership
 
-- **Execution scope/limits:** Waves 0 and 1 requested on 2026-11-28. PU1 approved. Wave 2 and later require a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
+- **Execution scope/limits:** Waves 0, 1 and 2 requested on 2026-11-28. PU1 approved. Wave 3 and later require a further execution request. Pushes and app control keep their own authorization; Atlas helper runs are covered by the standing authorization in `34_testing.md`.
 - **Branch:** `feature/appearance-panes`, created locally from the reconciled build 17 branch in P0.1. Publishing the branch to the other Mac needs separate authorization. The work changes saved-job handling and the picture, so `main` stays at build 17 until P4.4. Merge to `main` is a fast-forward at the build 18 handoff.
 - **Paths:** code paths are relative to `01_Project/`; docs are in `docs/`.
 - **Coordinator-owned files/resources:** `project.yml`, `WaveformCue.xcodeproj` (regenerated with `xcodegen generate` when files are added), Git and merges, this plan, `PROJECT_STATE.md`, `TASKS.md`, `decisions.md`, `README.md`, `04_Exports/`, and the Atlas helper (one session at a time).
@@ -211,7 +211,7 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 
 ### Wave 2 (parallel — two tasks; one in the package, one in the app)
 
-- [ ] **P2.1**: Offsets, clock sides and hit zones in the picture (spec C, E, edge cases)
+- [x] **P2.1**: Offsets, clock sides and hit zones in the picture (spec C, E, edge cases)
   - Depends on / external gates: P1.1, P1.2
   - Owns: `CueLayout.swift`, `CuePicture.swift` (`drawClock`, hit zones), `CueLayoutTests.swift`, `RenderTests.swift`, new `ClockSideTests.swift`
   - Detail: after give-way the layout resolves `appearance.offsets` with `OffsetResolver` and shifts each element's rectangles (the clocks move as a pair on one baseline). Offsets never change `fits`; a layout that does not fit uses zeros. Clock sides: `extent(of:)` and the two `drawClock` calls take their side from `leftClock`; the warning colour keeps following the Remaining value; the 24-pixel pair gap holds. Waveform hit zones are inflated by 12 pixels and can overlap when two waveforms are 12 apart: the nearer rectangle wins.
@@ -219,7 +219,7 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
   - Success: with all offsets 0 and Elapsed left, every P1.1 result is unchanged (fixture and hashes); a one-pixel step moves only that element's extent; offsets in use are equal for the same appearance however the layout is created (viewer and export share `appearance.layout`); the reserved-band and 12-pixel sweeps of P1.1 pass again with random stored offsets across the 24 orders; a safe-zone change and its reversal returns the earlier layout; Remaining left puts its extent and label at the left edge on the shared baseline; a point between two waveforms 12 apart hits the one it is nearer to.
   - Backpressure: `swift test … --filter 'CueLayoutTests|RenderTests|ClockSideTests|Build17LayoutTests|BaselineTests'`
 
-- [ ] **P2.2**: The Appearance tab as panes (spec A, B, D, E controls, edge cases, error states)
+- [x] **P2.2**: The Appearance tab as panes (spec A, B, D, E controls, edge cases, error states)
   - Depends on / external gates: P0.2, P1.1, P1.3; **PU1**
   - Owns: `Sources/App/Views/AppKit/CueAppearanceSidebar.swift`, `AppearanceSidebarRepresentable.swift`, `SidebarPaneView.swift`, `PaneDragController.swift`, `MonitorView.swift`, `MonitorRepresentable.swift`; `Sources/App/Views/InspectorPane.swift`; in `EditorModel.swift` the label and appearance section only
   - Detail: regroup every control into the six panes of the confirmed placement; the title field moves into the Title pane. New Alignment and Left clock segmented controls write `titleAlignment` and `leftClock`. The Position and Clock position pop-ups go, with `EditorModel.anchors`, `positionIndex`, `selectPosition`, `placeLabel`, the Custom status line, and the title drag in `MonitorView` (`labelOrigin`, `onPlace`). One `setOrder` path serves the drag, the menu and the VoiceOver actions: it writes `paneOrder`, moves the pane views, lays out (animated unless Reduce Motion is on), recalculates the key-view loop, posts the layout change and announces "Clocks, 2 of 4". `sync(to:)` reorders the pane views when the job's order differs (another job selected, Apply to All, Restore Defaults, a refused edit) and is deferred while a drag is tracking. Collapse state lives in `UserDefaults` and is untouched by Apply to All and Restore Defaults. With zoom Off the Close-up pane keeps its place with only Zoom window enabled. Moving or collapsing a pane closes the colour panel. `updateAppearance` sets the "settings locked" status when the job refuses the edit, and a drag that ends after the job locked changes nothing. Restore Defaults keeps resetting the whole appearance and leaves the title text alone.
@@ -322,6 +322,8 @@ Ownership check: within each wave no two tasks write the same file. `CueLayout.s
 | 1 / P1.1 | Fresh picture-layout agent, coordinator integrated; independent review checked the corrections | 64 focused tests, 256 exact exportable references, 64 explicit blocked-preview deltas, 3,072 fitting combinations. Full suite 327/327, no skips. Integrated viewer and title click verified. [Wave 1 validation](sessions/2026-11-28.md#appearance-panes-wave-1) | `7e68cfa`, countdown assertion `1eea36a` | P2.1 and P2.2 ready. PX3 still needs macOS 27. |
 | 1 / P1.2 | Fresh offset agent plus independent review | 10 focused tests, including generated stacks and fractional automatic edges. Full suite passed. | `101c33a`, `dd5f1cb` | P2.1 integrates offsets. |
 | 1 / P1.3 | Fresh sidebar agent, coordinator built and drove the Atlas helper, independent reviewer checked job identity and lock | 3 pure tests; 10/10 releases in the real sidebar. Control values and title focus held. Click menus, collapse and reopen checked. [Wave 1 validation](sessions/2026-11-28.md#appearance-panes-wave-1) | Feature `ede37a5`, `591f60d`. Prototype wiring on `wave1/sidebar-trial` at `adecd01`. | Keep dragging for P2.2. Physical Escape and stationary edge scrolling remain in PX1. |
+| 2 / P2.1 | Fresh package worktree, reviewed independently and integrated by coordinator | 61 focused tests passed. All 320 geometry fixtures and protected macOS 15 hashes passed, including 9,408 additional offset cases and ink checks of both clock sides. [Picture checks](sessions/evidence/appearance-panes-wave2/README.md#picture) | `d140edd` | P3.1 and P3.2 ready with P2.2. PX3 needs macOS 27. |
+| 2 / P2.2 | Fresh sidebar worktree, independent review, coordinator handled queue integration and Atlas | Full suite 336/336. All 48 queue tests reran after the synchronous lock correction. Atlas verified pane order, menu and grip moves, job selection, alignment, clock sides, export locking, restored defaults and collapse after relaunch. [Inspector checks](sessions/evidence/appearance-panes-wave2/README.md#inspector) | `ec1c3d2` | Selected Wave 2 complete. Wave 3 is ready. PX1–PX3 remain open. |
 
 ---
 *Keep active while required work or acceptance is incomplete. On completion, archive with execution
